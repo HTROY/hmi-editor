@@ -40,7 +40,10 @@ export function AuthPanel() {
   };
 
   const roleLabel: Record<string, string> = {
-    admin: "管理员", engineer: "工程师", operator: "值班员", viewer: "参观者",
+    admin: "管理员",
+    engineer: "工程师",
+    operator: "值班员",
+    viewer: "参观者",
   };
 
   return (
@@ -48,10 +51,16 @@ export function AuthPanel() {
       <div className="panel-title">权限与审计</div>
 
       <div className="alarm-tabs">
-        <button className={"alarm-tab" + (activeTab === "login" ? " active" : "")} onClick={() => setActiveTab("login")}>
+        <button
+          className={"alarm-tab" + (activeTab === "login" ? " active" : "")}
+          onClick={() => setActiveTab("login")}
+        >
           登录
         </button>
-        <button className={"alarm-tab" + (activeTab === "audit" ? " active" : "")} onClick={() => setActiveTab("audit")}>
+        <button
+          className={"alarm-tab" + (activeTab === "audit" ? " active" : "")}
+          onClick={() => setActiveTab("audit")}
+        >
           审计日志 ({auditLog.length})
         </button>
       </div>
@@ -63,7 +72,13 @@ export function AuthPanel() {
               <div className="auth-login-label">选择用户登录</div>
               <div className="auth-user-list">
                 {users.map((u) => (
-                  <label key={u.id} className={"auth-user-item" + (selectedUser === u.username ? " active" : "")}>
+                  <label
+                    key={u.id}
+                    className={
+                      "auth-user-item" +
+                      (selectedUser === u.username ? " active" : "")
+                    }
+                  >
                     <input
                       type="radio"
                       name="user"
@@ -72,12 +87,17 @@ export function AuthPanel() {
                     />
                     <div className="auth-user-info">
                       <div className="auth-user-name">{u.displayName}</div>
-                      <div className="auth-user-role">{roleLabel[u.role] ?? u.role}</div>
+                      <div className="auth-user-role">
+                        {roleLabel[u.role] ?? u.role}
+                      </div>
                     </div>
                   </label>
                 ))}
               </div>
-              <button className="btn btn-primary btn-full" onClick={handleLogin}>
+              <button
+                className="btn btn-primary btn-full"
+                onClick={handleLogin}
+              >
                 登录
               </button>
               {showSuccess && <div className="auth-success-msg">登录成功</div>}
@@ -87,12 +107,20 @@ export function AuthPanel() {
               <div className="auth-user-card">
                 <div className="auth-user-avatar">{user.displayName[0]}</div>
                 <div className="auth-user-detail">
-                  <div className="auth-user-detail-name">{user.displayName}</div>
-                  <div className="auth-user-detail-role">{roleLabel[user.role] ?? user.role}</div>
-                  <div className="auth-user-detail-time">上次登录: {formatTime(user.lastLogin)}</div>
+                  <div className="auth-user-detail-name">
+                    {user.displayName}
+                  </div>
+                  <div className="auth-user-detail-role">
+                    {roleLabel[user.role] ?? user.role}
+                  </div>
+                  <div className="auth-user-detail-time">
+                    上次登录: {formatTime(user.lastLogin)}
+                  </div>
                 </div>
               </div>
-              <button className="btn btn-full" onClick={handleLogout}>登出</button>
+              <button className="btn btn-full" onClick={handleLogout}>
+                登出
+              </button>
             </div>
           )}
         </div>
@@ -114,7 +142,9 @@ export function AuthPanel() {
                 </div>
                 <div className="audit-row-detail">
                   <span>{entry.detail}</span>
-                  <span className="audit-time">{formatTime(entry.timestamp)}</span>
+                  <span className="audit-time">
+                    {formatTime(entry.timestamp)}
+                  </span>
                 </div>
               </div>
             ))}

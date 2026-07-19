@@ -1,5 +1,5 @@
-﻿import { ShapeBase } from './ShapeBase';
-import type { ShapeProps, Point } from '../types';
+﻿import { ShapeBase } from "./ShapeBase";
+import type { ShapeProps, Point } from "../types";
 
 // ============================================================
 // RectShape — 矩形
@@ -9,7 +9,7 @@ export class RectShape extends ShapeBase {
   cornerRadius: number;
 
   constructor(props?: Partial<ShapeProps>) {
-    super('rect', props);
+    super("rect", props);
     this.cornerRadius = props?.cornerRadius ?? 0;
   }
 

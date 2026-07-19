@@ -16,8 +16,14 @@ export function EditorCanvas() {
   const shapeStartPos = useRef({ x: 0, y: 0 });
 
   const {
-    scene, setRenderer, mode, selectedId,
-    selectShape, addShape, updateShape, renderScene,
+    scene,
+    setRenderer,
+    mode,
+    selectedId,
+    selectShape,
+    addShape,
+    updateShape,
+    renderScene,
   } = useEditorStore();
 
   // 初始化渲染器
@@ -44,13 +50,10 @@ export function EditorCanvas() {
   }, [scene, setRenderer]);
 
   // 鼠标事件
-  const getCanvasPos = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      const rect = canvasRef.current!.getBoundingClientRect();
-      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    },
-    []
-  );
+  const getCanvasPos = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = canvasRef.current!.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }, []);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -83,7 +86,7 @@ export function EditorCanvas() {
         }
       }
     },
-    [mode, scene, selectShape, addShape, getCanvasPos]
+    [mode, scene, selectShape, addShape, getCanvasPos],
   );
 
   const handleMouseMove = useCallback(
@@ -97,7 +100,7 @@ export function EditorCanvas() {
         y: shapeStartPos.current.y + dy,
       });
     },
-    [selectedId, updateShape, getCanvasPos]
+    [selectedId, updateShape, getCanvasPos],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -125,7 +128,10 @@ export function EditorCanvas() {
     <div ref={containerRef} style={{ width: "100%", height: "100%" }}>
       <canvas
         ref={canvasRef}
-        style={{ display: "block", cursor: mode === "select" ? "default" : "crosshair" }}
+        style={{
+          display: "block",
+          cursor: mode === "select" ? "default" : "crosshair",
+        }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}

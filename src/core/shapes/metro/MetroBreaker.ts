@@ -18,9 +18,12 @@ export class MetroBreaker extends ShapeBase {
   showLabel: boolean;
 
   // 状态颜色映射
-  static STATUS_COLORS: Record<string, { fill: string; crossColor: string; label: string }> = {
-    closed:  { fill: "#00FF00", crossColor: "#000000", label: "合" },
-    open:    { fill: "#808080", crossColor: "#FFFFFF", label: "分" },
+  static STATUS_COLORS: Record<
+    string,
+    { fill: string; crossColor: string; label: string }
+  > = {
+    closed: { fill: "#00FF00", crossColor: "#000000", label: "合" },
+    open: { fill: "#808080", crossColor: "#FFFFFF", label: "分" },
     tripped: { fill: "#FF0000", crossColor: "#FFFFFF", label: "跳" },
   };
 
@@ -30,7 +33,8 @@ export class MetroBreaker extends ShapeBase {
     this.height = props?.height ?? 60;
     this.breakerStatus = props?.breakerStatus ?? "open";
     this.showLabel = props?.showLabel ?? true;
-    this.fill = MetroBreaker.STATUS_COLORS[this.breakerStatus]?.fill ?? "#808080";
+    this.fill =
+      MetroBreaker.STATUS_COLORS[this.breakerStatus]?.fill ?? "#808080";
   }
 
   hitTest(point: Point): boolean {
@@ -41,7 +45,12 @@ export class MetroBreaker extends ShapeBase {
     const sin = Math.sin(rad);
     const localX = dx * cos - dy * sin + this.width / 2;
     const localY = dx * sin + dy * cos + this.height / 2;
-    return localX >= 0 && localX <= this.width && localY >= 0 && localY <= this.height;
+    return (
+      localX >= 0 &&
+      localX <= this.width &&
+      localY >= 0 &&
+      localY <= this.height
+    );
   }
 
   setStatus(status: string): void {
@@ -58,7 +67,9 @@ export class MetroBreaker extends ShapeBase {
     ctx.translate(-this.width / 2, -this.height / 2);
     ctx.globalAlpha = this.opacity;
 
-    const colors = MetroBreaker.STATUS_COLORS[this.breakerStatus] ?? MetroBreaker.STATUS_COLORS.open!;
+    const colors =
+      MetroBreaker.STATUS_COLORS[this.breakerStatus] ??
+      MetroBreaker.STATUS_COLORS.open!;
     const w = this.width;
     const h = this.height;
 

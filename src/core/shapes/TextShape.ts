@@ -1,5 +1,5 @@
-﻿import { ShapeBase } from './ShapeBase';
-import type { ShapeProps, Point } from '../types';
+﻿import { ShapeBase } from "./ShapeBase";
+import type { ShapeProps, Point } from "../types";
 
 // ============================================================
 // TextShape — 文本
@@ -13,14 +13,14 @@ export class TextShape extends ShapeBase {
   textBaseline: CanvasTextBaseline;
 
   constructor(props?: Partial<ShapeProps>) {
-    super('text', props);
-    this.text = props?.text ?? '文本';
+    super("text", props);
+    this.text = props?.text ?? "文本";
     this.fontSize = props?.fontSize ?? 20;
-    this.fontFamily = props?.fontFamily ?? 'Microsoft YaHei, sans-serif';
-    this.textAlign = 'center';
-    this.textBaseline = 'middle';
-    this.fill = '#000000';
-    this.stroke = 'transparent';
+    this.fontFamily = props?.fontFamily ?? "Microsoft YaHei, sans-serif";
+    this.textAlign = "center";
+    this.textBaseline = "middle";
+    this.fill = "#000000";
+    this.stroke = "transparent";
   }
 
   hitTest(point: Point): boolean {
@@ -46,14 +46,14 @@ export class TextShape extends ShapeBase {
     ctx.rotate(this.rotation * (Math.PI / 180));
     ctx.globalAlpha = this.opacity;
 
-    ctx.font = this.fontSize + 'px ' + this.fontFamily;
+    ctx.font = this.fontSize + "px " + this.fontFamily;
     ctx.textAlign = this.textAlign;
     ctx.textBaseline = this.textBaseline;
     ctx.fillStyle = this.fill;
     ctx.fillText(this.text, 0, 0);
     ctx.strokeStyle = this.stroke;
     ctx.lineWidth = this.strokeWidth;
-    if (this.stroke !== 'transparent') {
+    if (this.stroke !== "transparent") {
       ctx.strokeText(this.text, 0, 0);
     }
 

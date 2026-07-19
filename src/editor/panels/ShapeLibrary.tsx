@@ -17,18 +17,18 @@ interface ShapeLibItem {
 
 const shapeItems: ShapeLibItem[] = [
   // ---- 基本图元 ----
-  { type: "rect",    label: "矩形",    icon: "▬",    category: "基本" },
-  { type: "circle",  label: "圆形",    icon: "●",    category: "基本" },
-  { type: "line",    label: "直线",    icon: "╱",    category: "基本" },
-  { type: "text",    label: "文本",    icon: "T",    category: "基本" },
+  { type: "rect", label: "矩形", icon: "▬", category: "基本" },
+  { type: "circle", label: "圆形", icon: "●", category: "基本" },
+  { type: "line", label: "直线", icon: "╱", category: "基本" },
+  { type: "text", label: "文本", icon: "T", category: "基本" },
 
   // ---- 轨道交通专用图元 ----
-  { type: "metro-breaker",    label: "断路器",     icon: "⨯",  category: "供电" },
-  { type: "metro-busbar",     label: "母线",       icon: "≡",  category: "供电" },
-  { type: "metro-transformer", label: "变压器",    icon: "⏀",  category: "供电" },
-  { type: "metro-fan",        label: "风机",       icon: "◉",  category: "BAS" },
-  { type: "metro-signal",     label: "信号灯",     icon: "◍",  category: "通用" },
-  { type: "metro-gauge",      label: "仪表",       icon: "◠",  category: "通用" },
+  { type: "metro-breaker", label: "断路器", icon: "⨯", category: "供电" },
+  { type: "metro-busbar", label: "母线", icon: "≡", category: "供电" },
+  { type: "metro-transformer", label: "变压器", icon: "⏀", category: "供电" },
+  { type: "metro-fan", label: "风机", icon: "◉", category: "BAS" },
+  { type: "metro-signal", label: "信号灯", icon: "◍", category: "通用" },
+  { type: "metro-gauge", label: "仪表", icon: "◠", category: "通用" },
 ];
 
 export function ShapeLibrary() {
@@ -41,8 +41,8 @@ export function ShapeLibrary() {
   const handleAdd = (item: ShapeLibItem) => {
     // 在画布中央添加（取 200, 200 作为默认位置）
     const canvasEl = document.querySelector("canvas");
-    const x = canvasEl ? (canvasEl.width / 2 - 50) : 200;
-    const y = canvasEl ? (canvasEl.height / 2 - 40) : 200;
+    const x = canvasEl ? canvasEl.width / 2 - 50 : 200;
+    const y = canvasEl ? canvasEl.height / 2 - 40 : 200;
     addShape(item.type, x, y);
     setMode("select");
   };

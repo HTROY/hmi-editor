@@ -1,5 +1,5 @@
-﻿import { ShapeBase } from '../shapes/ShapeBase';
-import type { BoundingBox } from '../types';
+﻿import { ShapeBase } from "../shapes/ShapeBase";
+import type { BoundingBox } from "../types";
 
 // ============================================================
 // SceneGraph — 场景图：管理所有图元、zIndex 排序、增删改查
@@ -32,7 +32,7 @@ export class SceneGraph {
   getAll(): ShapeBase[] {
     if (this.dirty) {
       this.sortedCache = Array.from(this.shapes.values()).sort(
-        (a, b) => a.zIndex - b.zIndex
+        (a, b) => a.zIndex - b.zIndex,
       );
       this.dirty = false;
     }

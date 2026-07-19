@@ -7,9 +7,9 @@ import type { DataSourceConfig, DataPoint } from "./types";
 // ============================================================
 
 interface IEC104Point {
-  address: number;         // IOA (Information Object Address)
+  address: number; // IOA (Information Object Address)
   type: "DI" | "AI" | "DO" | "AO";
-  variableId: string;      // 对应的变量 ID
+  variableId: string; // 对应的变量 ID
   min?: number;
   max?: number;
   /** 模拟生成函数 */
@@ -24,7 +24,8 @@ function createMetroPoints(): IEC104Point[] {
   // 辅助：正弦波发生器
   const sineWave = (center: number, amp: number, period: number) => {
     const phase = Math.random() * Math.PI * 2;
-    return () => center + amp * Math.sin((Date.now() / period + phase) * Math.PI * 2);
+    return () =>
+      center + amp * Math.sin((Date.now() / period + phase) * Math.PI * 2);
   };
 
   // 辅助：随机跳变（DI）
@@ -42,44 +43,154 @@ function createMetroPoints(): IEC104Point[] {
 
   return [
     // ---- 车站1 供电系统 ----
-    { address: 1001, type: "DI", variableId: "STA1_211_ACB_STATUS", generator: randomDI(0.7) },
-    { address: 1002, type: "DI", variableId: "STA1_212_ACB_STATUS", generator: randomDI(0.6) },
-    { address: 1003, type: "AI", variableId: "STA1_211_IA", min: 0, max: 2000,
-      generator: sineWave(800, 400, 8) },
-    { address: 1004, type: "AI", variableId: "STA1_211_IB", min: 0, max: 2000,
-      generator: sineWave(780, 380, 8.5) },
-    { address: 1005, type: "AI", variableId: "STA1_BUS_VOLTAGE", min: 0, max: 500,
-      generator: sineWave(400, 15, 30) },
-    { address: 1006, type: "DI", variableId: "STA1_211_ACB_CTRL", generator: randomDI(0.5) },
+    {
+      address: 1001,
+      type: "DI",
+      variableId: "STA1_211_ACB_STATUS",
+      generator: randomDI(0.7),
+    },
+    {
+      address: 1002,
+      type: "DI",
+      variableId: "STA1_212_ACB_STATUS",
+      generator: randomDI(0.6),
+    },
+    {
+      address: 1003,
+      type: "AI",
+      variableId: "STA1_211_IA",
+      min: 0,
+      max: 2000,
+      generator: sineWave(800, 400, 8),
+    },
+    {
+      address: 1004,
+      type: "AI",
+      variableId: "STA1_211_IB",
+      min: 0,
+      max: 2000,
+      generator: sineWave(780, 380, 8.5),
+    },
+    {
+      address: 1005,
+      type: "AI",
+      variableId: "STA1_BUS_VOLTAGE",
+      min: 0,
+      max: 500,
+      generator: sineWave(400, 15, 30),
+    },
+    {
+      address: 1006,
+      type: "DI",
+      variableId: "STA1_211_ACB_CTRL",
+      generator: randomDI(0.5),
+    },
 
     // ---- 车站2 供电 ----
-    { address: 2001, type: "DI", variableId: "STA2_221_ACB_STATUS", generator: randomDI(0.8) },
-    { address: 2002, type: "AI", variableId: "STA2_221_IA", min: 0, max: 2000,
-      generator: sineWave(600, 300, 7) },
-    { address: 2003, type: "AI", variableId: "STA2_BUS_VOLTAGE", min: 0, max: 500,
-      generator: sineWave(395, 20, 25) },
+    {
+      address: 2001,
+      type: "DI",
+      variableId: "STA2_221_ACB_STATUS",
+      generator: randomDI(0.8),
+    },
+    {
+      address: 2002,
+      type: "AI",
+      variableId: "STA2_221_IA",
+      min: 0,
+      max: 2000,
+      generator: sineWave(600, 300, 7),
+    },
+    {
+      address: 2003,
+      type: "AI",
+      variableId: "STA2_BUS_VOLTAGE",
+      min: 0,
+      max: 500,
+      generator: sineWave(395, 20, 25),
+    },
 
     // ---- BAS 环境控制 ----
-    { address: 3001, type: "DI", variableId: "STA1_FAN_1_STATUS", generator: randomDI(0.9) },
-    { address: 3002, type: "AI", variableId: "STA1_FAN_1_SPEED", min: 0, max: 3000,
-      generator: sineWave(2400, 600, 12) },
-    { address: 3003, type: "AI", variableId: "STA1_TEMP_ZONE1", min: 0, max: 50,
-      generator: sineWave(26, 3, 60) },
-    { address: 3004, type: "AI", variableId: "STA1_TEMP_ZONE2", min: 0, max: 50,
-      generator: sineWave(24, 2, 55) },
-    { address: 3005, type: "DI", variableId: "STA1_FAN_2_STATUS", generator: randomDI(0.3) },
+    {
+      address: 3001,
+      type: "DI",
+      variableId: "STA1_FAN_1_STATUS",
+      generator: randomDI(0.9),
+    },
+    {
+      address: 3002,
+      type: "AI",
+      variableId: "STA1_FAN_1_SPEED",
+      min: 0,
+      max: 3000,
+      generator: sineWave(2400, 600, 12),
+    },
+    {
+      address: 3003,
+      type: "AI",
+      variableId: "STA1_TEMP_ZONE1",
+      min: 0,
+      max: 50,
+      generator: sineWave(26, 3, 60),
+    },
+    {
+      address: 3004,
+      type: "AI",
+      variableId: "STA1_TEMP_ZONE2",
+      min: 0,
+      max: 50,
+      generator: sineWave(24, 2, 55),
+    },
+    {
+      address: 3005,
+      type: "DI",
+      variableId: "STA1_FAN_2_STATUS",
+      generator: randomDI(0.3),
+    },
 
     // ---- 信号系统 ----
-    { address: 4001, type: "DI", variableId: "SIG_TRAIN_1_OCCUPY", generator: randomDI(0.2) },
-    { address: 4002, type: "DI", variableId: "SIG_TRAIN_2_OCCUPY", generator: randomDI(0.15) },
-    { address: 4003, type: "AI", variableId: "SIG_TRACK_VOLTAGE", min: 0, max: 100,
-      generator: sineWave(90, 10, 40) },
+    {
+      address: 4001,
+      type: "DI",
+      variableId: "SIG_TRAIN_1_OCCUPY",
+      generator: randomDI(0.2),
+    },
+    {
+      address: 4002,
+      type: "DI",
+      variableId: "SIG_TRAIN_2_OCCUPY",
+      generator: randomDI(0.15),
+    },
+    {
+      address: 4003,
+      type: "AI",
+      variableId: "SIG_TRACK_VOLTAGE",
+      min: 0,
+      max: 100,
+      generator: sineWave(90, 10, 40),
+    },
 
     // ---- FAS 消防 ----
-    { address: 5001, type: "DI", variableId: "FAS_SMOKE_DETECT_1", generator: () => 0 },
-    { address: 5002, type: "DI", variableId: "FAS_FIRE_ALARM", generator: () => 0 },
-    { address: 5003, type: "AI", variableId: "FAS_TEMP_ZONE3", min: 0, max: 100,
-      generator: sineWave(28, 2, 50) },
+    {
+      address: 5001,
+      type: "DI",
+      variableId: "FAS_SMOKE_DETECT_1",
+      generator: () => 0,
+    },
+    {
+      address: 5002,
+      type: "DI",
+      variableId: "FAS_FIRE_ALARM",
+      generator: () => 0,
+    },
+    {
+      address: 5003,
+      type: "AI",
+      variableId: "FAS_TEMP_ZONE3",
+      min: 0,
+      max: 100,
+      generator: sineWave(28, 2, 50),
+    },
   ];
 }
 
@@ -89,7 +200,7 @@ export class IEC104Simulator extends DataSource {
   private scanInterval = 800; // 800ms 扫描周期（IEC 104 典型值）
 
   // 连接模拟参数
-  private simulatedLatency = 50;   // ms
+  private simulatedLatency = 50; // ms
   private simulatedPacketLoss = 0; // 0-1
 
   constructor(config: Partial<DataSourceConfig> = {}) {
@@ -179,9 +290,12 @@ export class IEC104Simulator extends DataSource {
       if (Math.random() < this.simulatedPacketLoss) continue;
 
       const rawValue = point.generator();
-      const value = point.type === "DI" || point.type === "DO"
-        ? (rawValue ? 1 : 0)
-        : Math.round(rawValue * 100) / 100;
+      const value =
+        point.type === "DI" || point.type === "DO"
+          ? rawValue
+            ? 1
+            : 0
+          : Math.round(rawValue * 100) / 100;
 
       // 模拟延迟发送
       if (this.simulatedLatency > 0 && Math.random() < 0.3) {

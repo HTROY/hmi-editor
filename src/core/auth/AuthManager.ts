@@ -29,10 +29,38 @@ export class AuthManager {
   // ---- 用户管理 ----
 
   private loadDefaults(): void {
-    this.addUser({ id: "admin", username: "admin", displayName: "管理员", role: "admin", enabled: true, lastLogin: null });
-    this.addUser({ id: "eng1", username: "engineer", displayName: "工程师", role: "engineer", enabled: true, lastLogin: null });
-    this.addUser({ id: "op1", username: "operator", displayName: "值班员", role: "operator", enabled: true, lastLogin: null });
-    this.addUser({ id: "view1", username: "viewer", displayName: "参观者", role: "viewer", enabled: true, lastLogin: null });
+    this.addUser({
+      id: "admin",
+      username: "admin",
+      displayName: "管理员",
+      role: "admin",
+      enabled: true,
+      lastLogin: null,
+    });
+    this.addUser({
+      id: "eng1",
+      username: "engineer",
+      displayName: "工程师",
+      role: "engineer",
+      enabled: true,
+      lastLogin: null,
+    });
+    this.addUser({
+      id: "op1",
+      username: "operator",
+      displayName: "值班员",
+      role: "operator",
+      enabled: true,
+      lastLogin: null,
+    });
+    this.addUser({
+      id: "view1",
+      username: "viewer",
+      displayName: "参观者",
+      role: "viewer",
+      enabled: true,
+      lastLogin: null,
+    });
   }
 
   addUser(user: User): void {
@@ -55,22 +83,43 @@ export class AuthManager {
 
   login(username: string): User | null {
     const user = this.getAllUsers().find(
-      (u) => u.username === username && u.enabled
+      (u) => u.username === username && u.enabled,
     );
     if (user) {
       user.lastLogin = Date.now();
       this.currentUser = user;
-      this.addAudit(user.id, user.username, "login", "系统", "登录成功", "success");
+      this.addAudit(
+        user.id,
+        user.username,
+        "login",
+        "系统",
+        "登录成功",
+        "success",
+      );
       this.notify();
       return user;
     }
-    this.addAudit("", username, "login", "系统", "登录失败: 用户不存在或已禁用", "failure");
+    this.addAudit(
+      "",
+      username,
+      "login",
+      "系统",
+      "登录失败: 用户不存在或已禁用",
+      "failure",
+    );
     return null;
   }
 
   logout(): void {
     if (this.currentUser) {
-      this.addAudit(this.currentUser.id, this.currentUser.username, "logout", "系统", "登出", "success");
+      this.addAudit(
+        this.currentUser.id,
+        this.currentUser.username,
+        "logout",
+        "系统",
+        "登出",
+        "success",
+      );
       this.currentUser = null;
       this.notify();
     }
@@ -102,7 +151,7 @@ export class AuthManager {
         "denied",
         permission,
         "权限不足",
-        "failure"
+        "failure",
       );
     }
     return ok;
@@ -110,7 +159,14 @@ export class AuthManager {
 
   // ---- 审计日志 ----
 
-  addAudit(userId: string, username: string, action: string, target: string, detail: string, result: "success" | "failure"): void {
+  addAudit(
+    userId: string,
+    username: string,
+    action: string,
+    target: string,
+    detail: string,
+    result: "success" | "failure",
+  ): void {
     this.auditLog.unshift({
       id: "audit_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
       userId,
@@ -126,14 +182,19 @@ export class AuthManager {
   }
 
   /** 记录操作审计 */
-  audit(action: string, target: string, detail: string, result: "success" | "failure" = "success"): void {
+  audit(
+    action: string,
+    target: string,
+    detail: string,
+    result: "success" | "failure" = "success",
+  ): void {
     this.addAudit(
       this.currentUser?.id ?? "",
       this.currentUser?.username ?? "system",
       action,
       target,
       detail,
-      result
+      result,
     );
   }
 

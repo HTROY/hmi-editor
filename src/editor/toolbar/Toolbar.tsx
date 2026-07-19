@@ -13,8 +13,15 @@ const tools: { mode: ToolMode; label: string; icon: string }[] = [
 
 export function Toolbar() {
   const {
-    mode, setMode, deleteSelected, copySelected, pasteClipboard,
-    simRunning, toggleSimulation, projectManager, setRightPanel,
+    mode,
+    setMode,
+    deleteSelected,
+    copySelected,
+    pasteClipboard,
+    simRunning,
+    toggleSimulation,
+    projectManager,
+    setRightPanel,
   } = useEditorStore();
 
   return (
@@ -41,15 +48,27 @@ export function Toolbar() {
       <div className="toolbar-divider" />
 
       <div className="toolbar-group">
-        <button className="tool-btn" title="复制 (Ctrl+C)" onClick={copySelected}>
+        <button
+          className="tool-btn"
+          title="复制 (Ctrl+C)"
+          onClick={copySelected}
+        >
           <span className="tool-icon">📋</span>
           <span className="tool-label">复制</span>
         </button>
-        <button className="tool-btn" title="粘贴 (Ctrl+V)" onClick={pasteClipboard}>
+        <button
+          className="tool-btn"
+          title="粘贴 (Ctrl+V)"
+          onClick={pasteClipboard}
+        >
           <span className="tool-icon">📌</span>
           <span className="tool-label">粘贴</span>
         </button>
-        <button className="tool-btn" title="删除 (Delete)" onClick={deleteSelected}>
+        <button
+          className="tool-btn"
+          title="删除 (Delete)"
+          onClick={deleteSelected}
+        >
           <span className="tool-icon">🗑</span>
           <span className="tool-label">删除</span>
         </button>
@@ -58,7 +77,10 @@ export function Toolbar() {
       <div className="toolbar-divider" />
 
       {/* 工程名与修改状态 */}
-      <div className="toolbar-project-name" onClick={() => setRightPanel("pages")}>
+      <div
+        className="toolbar-project-name"
+        onClick={() => setRightPanel("pages")}
+      >
         <span className="toolbar-project-icon">🏗</span>
         <span>{projectManager?.meta?.name ?? "未命名"}</span>
         {projectManager?.dirty && <span className="toolbar-dirty">*</span>}

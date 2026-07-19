@@ -1,4 +1,13 @@
-﻿import type { ShapeId, ShapeType, ShapeProps, Point, BoundingBox, Binding, AnimationDef, EventHandler } from '../types';
+﻿import type {
+  ShapeId,
+  ShapeType,
+  ShapeProps,
+  Point,
+  BoundingBox,
+  Binding,
+  AnimationDef,
+  EventHandler,
+} from "../types";
 
 // ============================================================
 // ShapeBase — 所有图元的基类
@@ -6,7 +15,7 @@
 
 let _nextId = 1000;
 export function generateId(): string {
-  return 'shape_' + (++_nextId);
+  return "shape_" + ++_nextId;
 }
 
 export abstract class ShapeBase {
@@ -43,8 +52,8 @@ export abstract class ShapeBase {
     this.visible = props?.visible ?? true;
     this.locked = props?.locked ?? false;
     this.zIndex = props?.zIndex ?? 0;
-    this.fill = props?.fill ?? '#CCCCCC';
-    this.stroke = props?.stroke ?? '#000000';
+    this.fill = props?.fill ?? "#CCCCCC";
+    this.stroke = props?.stroke ?? "#000000";
     this.strokeWidth = props?.strokeWidth ?? 1;
     this.dashArray = props?.dashArray ?? [];
     this.name = props?.name ?? type;

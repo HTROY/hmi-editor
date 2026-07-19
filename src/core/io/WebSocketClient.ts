@@ -51,13 +51,19 @@ export class WebSocketClient extends DataSource {
             for (const line of lines) {
               try {
                 this.handleMessage(JSON.parse(line));
-              } catch (_e) { /* skip malformed */ }
+              } catch (_e) {
+                /* skip malformed */
+              }
             }
           }
         };
 
         ws.onerror = (err) => {
-          this.emitError(new Error("WebSocket 连接错误: " + ((err as any)?.message ?? "未知")));
+          this.emitError(
+            new Error(
+              "WebSocket 连接错误: " + ((err as any)?.message ?? "未知"),
+            ),
+          );
           reject(err);
         };
 

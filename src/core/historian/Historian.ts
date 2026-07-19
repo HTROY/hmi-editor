@@ -9,7 +9,7 @@ import type { HistoryPoint, TrendConfig } from "./types";
 export class Historian {
   private data: HistoryPoint[] = [];
   private maxPoints = 50000;
-  private sampleInterval = 2000;  // 2秒采样
+  private sampleInterval = 2000; // 2秒采样
   private timer: ReturnType<typeof setInterval> | null = null;
   private varManager: VariableManager;
   private variableIds: string[] = [];
@@ -80,9 +80,15 @@ export class Historian {
   }
 
   /** 查询历史数据 */
-  query(variableId: string, from: number, to: number, maxPoints = 500): HistoryPoint[] {
+  query(
+    variableId: string,
+    from: number,
+    to: number,
+    maxPoints = 500,
+  ): HistoryPoint[] {
     let points = this.data.filter(
-      (p) => p.variableId === variableId && p.timestamp >= from && p.timestamp <= to
+      (p) =>
+        p.variableId === variableId && p.timestamp >= from && p.timestamp <= to,
     );
     // 降采样
     if (points.length > maxPoints) {

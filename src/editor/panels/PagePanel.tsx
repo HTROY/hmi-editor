@@ -7,7 +7,14 @@ import { useEditorStore } from "../../store/editorStore";
 // ============================================================
 
 export function PagePanel() {
-  const { projectManager, activePageId, switchPage, addPage, deletePage, renamePage } = useEditorStore();
+  const {
+    projectManager,
+    activePageId,
+    switchPage,
+    addPage,
+    deletePage,
+    renamePage,
+  } = useEditorStore();
   const pages = projectManager?.getPages() ?? [];
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -40,7 +47,9 @@ export function PagePanel() {
     <div className="panel">
       <div className="panel-title">
         页面管理
-        <button className="btn btn-sm" onClick={addPage}>+ 新建</button>
+        <button className="btn btn-sm" onClick={addPage}>
+          + 新建
+        </button>
       </div>
 
       <div className="page-list">
@@ -52,9 +61,7 @@ export function PagePanel() {
               className={"page-item" + (isActive ? " active" : "")}
               onClick={() => switchPage(page.id)}
             >
-              <div className="page-item-icon">
-                {isActive ? "📄" : "📋"}
-              </div>
+              <div className="page-item-icon">{isActive ? "📄" : "📋"}</div>
 
               <div className="page-item-info">
                 {editingId === page.id ? (
@@ -78,25 +85,48 @@ export function PagePanel() {
                 </div>
               </div>
 
-              <div className="page-item-actions" onClick={(e) => e.stopPropagation()}>
+              <div
+                className="page-item-actions"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <button
                   className="btn-icon"
                   title="重命名"
-                  onClick={() => { setEditingId(page.id); setEditText(page.title); }}
-                >✎</button>
-                <button className="btn-icon" title="上移"
+                  onClick={() => {
+                    setEditingId(page.id);
+                    setEditText(page.title);
+                  }}
+                >
+                  ✎
+                </button>
+                <button
+                  className="btn-icon"
+                  title="上移"
                   onClick={() => handleMove(page.id, "up")}
-                  disabled={pages.indexOf(page) === 0}>↑</button>
-                <button className="btn-icon" title="下移"
+                  disabled={pages.indexOf(page) === 0}
+                >
+                  ↑
+                </button>
+                <button
+                  className="btn-icon"
+                  title="下移"
                   onClick={() => handleMove(page.id, "down")}
-                  disabled={pages.indexOf(page) === pages.length - 1}>↓</button>
+                  disabled={pages.indexOf(page) === pages.length - 1}
+                >
+                  ↓
+                </button>
                 <button
                   className="btn-icon"
                   title="删除"
                   onClick={() => handleDelete(page.id)}
                   disabled={pages.length <= 1}
-                  style={{ color: pages.length <= 1 ? "var(--border)" : "var(--danger)" }}
-                >✕</button>
+                  style={{
+                    color:
+                      pages.length <= 1 ? "var(--border)" : "var(--danger)",
+                  }}
+                >
+                  ✕
+                </button>
               </div>
             </div>
           );

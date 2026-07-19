@@ -130,7 +130,11 @@ export class MetroGauge extends ShapeBase {
       if (i % Math.max(1, Math.floor(this.tickCount / 5)) === 0) {
         ctx.fillStyle = "#AAAAAA";
         const labelR = R + 8;
-        ctx.fillText(String(tickVal), Math.cos(angle) * labelR, Math.sin(angle) * labelR);
+        ctx.fillText(
+          String(tickVal),
+          Math.cos(angle) * labelR,
+          Math.sin(angle) * labelR,
+        );
       }
     }
 
@@ -138,8 +142,12 @@ export class MetroGauge extends ShapeBase {
     const ptrAngle = this.getPointerAngle();
     const ptrRad = (ptrAngle * Math.PI) / 180;
     const ptrLen = R - 14;
-    const ptrColor = this.value > this.max * 0.9 ? "#E03030" :
-                     this.value > this.max * 0.7 ? "#E0C020" : "#4A90D9";
+    const ptrColor =
+      this.value > this.max * 0.9
+        ? "#E03030"
+        : this.value > this.max * 0.7
+          ? "#E0C020"
+          : "#4A90D9";
 
     // 指针线
     ctx.strokeStyle = ptrColor;
@@ -160,7 +168,8 @@ export class MetroGauge extends ShapeBase {
     ctx.stroke();
 
     // ---- 数值显示 ----
-    const displayVal = typeof this.value === "number" ? this.value.toFixed(1) : "0.0";
+    const displayVal =
+      typeof this.value === "number" ? this.value.toFixed(1) : "0.0";
     ctx.fillStyle = "#FFFFFF";
     ctx.font = "bold 16px Microsoft YaHei, sans-serif";
     ctx.textAlign = "center";

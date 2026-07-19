@@ -44,6 +44,6 @@ export interface SOERecord {
   variableId: string;
   value: number | boolean;
   quality: "good" | "bad" | "uncertain";
-  timestamp: number;       // 毫秒
-  source: string;          // 来源（IEC104/WebSocket/Operator）
+  timestamp: number; // 毫秒
+  source: string; // 来源（IEC104/WebSocket/Operator）
 }

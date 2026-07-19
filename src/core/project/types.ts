@@ -9,7 +9,7 @@ export interface PageMeta {
   width: number;
   height: number;
   background: string;
-  order: number;        // 显示顺序
+  order: number; // 显示顺序
   description: string;
   createdAt: string;
   updatedAt: string;
@@ -21,8 +21,8 @@ export interface ProjectMeta {
   version: string;
   description: string;
   author: string;
-  stationName: string;   // 所属车站
-  lineName: string;      // 所属线路
+  stationName: string; // 所属车站
+  lineName: string; // 所属线路
   createdAt: string;
   updatedAt: string;
 }

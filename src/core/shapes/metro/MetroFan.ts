@@ -43,7 +43,10 @@ export class MetroFan extends ShapeBase {
     const sin = Math.sin(rad);
     const localX = dx * cos - dy * sin;
     const localY = dx * sin + dy * cos;
-    return Math.sqrt(localX * localX + localY * localY) <= Math.max(this.width, this.height) / 2;
+    return (
+      Math.sqrt(localX * localX + localY * localY) <=
+      Math.max(this.width, this.height) / 2
+    );
   }
 
   render(ctx: CanvasRenderingContext2D): void {
@@ -53,10 +56,10 @@ export class MetroFan extends ShapeBase {
     ctx.rotate(this.rotation * (Math.PI / 180));
     ctx.globalAlpha = this.opacity;
 
-    const R = Math.min(this.width, this.height) / 2;  // 外半径
-    const innerR = R * 0.2;                            // 中心圆半径
-    const bladeLen = R * 0.75;                         // 叶片长度
-    const bladeW = R * 0.3;                            // 叶片宽度
+    const R = Math.min(this.width, this.height) / 2; // 外半径
+    const innerR = R * 0.2; // 中心圆半径
+    const bladeLen = R * 0.75; // 叶片长度
+    const bladeW = R * 0.3; // 叶片宽度
 
     // ---- 外圈 ----
     ctx.strokeStyle = this.stroke;
@@ -66,7 +69,7 @@ export class MetroFan extends ShapeBase {
     ctx.stroke();
 
     // ---- 叶片（4片，加上旋转角度） ----
-    const baseAngle = this.running ? (this.animAngle || 0) : 0;
+    const baseAngle = this.running ? this.animAngle || 0 : 0;
     ctx.fillStyle = this.running ? this.bladeColor : "#888888";
     ctx.strokeStyle = this.stroke;
     ctx.lineWidth = 1;
@@ -78,7 +81,15 @@ export class MetroFan extends ShapeBase {
 
       // 叶片路径（类似椭圆）
       ctx.beginPath();
-      ctx.ellipse(innerR + bladeLen / 2, 0, bladeLen / 2, bladeW / 2, 0, 0, Math.PI * 2);
+      ctx.ellipse(
+        innerR + bladeLen / 2,
+        0,
+        bladeLen / 2,
+        bladeW / 2,
+        0,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
       ctx.stroke();
 
@@ -92,7 +103,7 @@ export class MetroFan extends ShapeBase {
     ctx.fill();
 
     // ---- 运行状态文本 ----
-    const statusText = this.running ? (this.speedPercent + "%") : "停止";
+    const statusText = this.running ? this.speedPercent + "%" : "停止";
     ctx.fillStyle = this.running ? "#60E060" : "#888888";
     ctx.font = "10px Microsoft YaHei, sans-serif";
     ctx.textAlign = "center";
@@ -107,7 +118,7 @@ export class MetroFan extends ShapeBase {
     if (!this.running || this.speedPercent <= 0) return;
     // 转速百分比影响旋转速度
     const speedFactor = this.speedPercent / 100;
-    this.animAngle = (this.animAngle ?? 0) + (deltaMs * speedFactor * 0.003);
+    this.animAngle = (this.animAngle ?? 0) + deltaMs * speedFactor * 0.003;
   }
 
   clone(): MetroFan {

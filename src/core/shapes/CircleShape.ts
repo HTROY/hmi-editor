@@ -1,5 +1,5 @@
-﻿import { ShapeBase } from './ShapeBase';
-import type { ShapeProps, Point } from '../types';
+﻿import { ShapeBase } from "./ShapeBase";
+import type { ShapeProps, Point } from "../types";
 
 // ============================================================
 // CircleShape — 圆形/椭圆
@@ -7,7 +7,7 @@ import type { ShapeProps, Point } from '../types';
 
 export class CircleShape extends ShapeBase {
   constructor(props?: Partial<ShapeProps>) {
-    super('circle', props);
+    super("circle", props);
     // 保证宽高一致为正圆，但允许椭圆
   }
 

@@ -13,7 +13,13 @@ interface TrendChartProps {
   showGrid?: boolean;
 }
 
-export function TrendChart({ points, config, width = 260, height = 160, showGrid = true }: TrendChartProps) {
+export function TrendChart({
+  points,
+  config,
+  width = 260,
+  height = 160,
+  showGrid = true,
+}: TrendChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -75,14 +81,17 @@ export function TrendChart({ points, config, width = 260, height = 160, showGrid
 
     // 数据线
     const visible = points.slice(-200);
-    const timeRange = visible[visible.length - 1].timestamp - visible[0].timestamp || 1;
+    const timeRange =
+      visible[visible.length - 1].timestamp - visible[0].timestamp || 1;
 
     ctx.beginPath();
     ctx.strokeStyle = config.color;
     ctx.lineWidth = 1.5;
 
     for (let i = 0; i < visible.length; i++) {
-      const x = pad.left + ((visible[i].timestamp - visible[0].timestamp) / timeRange) * chartW;
+      const x =
+        pad.left +
+        ((visible[i].timestamp - visible[0].timestamp) / timeRange) * chartW;
       const y = pad.top + (1 - (visible[i].value - minVal) / valRange) * chartH;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
@@ -103,7 +112,8 @@ export function TrendChart({ points, config, width = 260, height = 160, showGrid
     const lastPoint = visible[visible.length - 1];
     if (lastPoint) {
       const lastX = pad.left + chartW;
-      const lastY = pad.top + (1 - (lastPoint.value - minVal) / valRange) * chartH;
+      const lastY =
+        pad.top + (1 - (lastPoint.value - minVal) / valRange) * chartH;
 
       // 当前值指示点
       ctx.fillStyle = config.color;
@@ -135,8 +145,11 @@ export function TrendChart({ points, config, width = 260, height = 160, showGrid
       ctx.textBaseline = "top";
       ctx.fillText(timeStr, pad.left + chartW, pad.top + chartH + 4);
       ctx.fillText(
-        new Date(visible[0].timestamp).toLocaleTimeString("zh-CN", { hour12: false }),
-        pad.left, pad.top + chartH + 4
+        new Date(visible[0].timestamp).toLocaleTimeString("zh-CN", {
+          hour12: false,
+        }),
+        pad.left,
+        pad.top + chartH + 4,
       );
     }
 
@@ -146,13 +159,9 @@ export function TrendChart({ points, config, width = 260, height = 160, showGrid
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.fillText(config.label, pad.left, 4);
-
   }, [points, config, width, height, showGrid]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{ borderRadius: 4, display: "block" }}
-    />
+    <canvas ref={canvasRef} style={{ borderRadius: 4, display: "block" }} />
   );
 }

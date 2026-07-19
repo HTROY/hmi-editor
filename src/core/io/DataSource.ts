@@ -1,4 +1,9 @@
-﻿import type { DataSourceConfig, DataSourceCallback, ConnectionStatus, DataPoint } from "./types";
+﻿import type {
+  DataSourceConfig,
+  DataSourceCallback,
+  ConnectionStatus,
+  DataPoint,
+} from "./types";
 
 // ============================================================
 // DataSource — 数据源抽象基类

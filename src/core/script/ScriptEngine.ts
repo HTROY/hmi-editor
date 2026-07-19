@@ -38,14 +38,19 @@ export class ScriptEngine {
   private scene: SceneGraph | null = null;
   private unsubVar: (() => void) | null = null;
 
-  private listeners: Set<(id: string, result: ExecutionResult) => void> = new Set();
+  private listeners: Set<(id: string, result: ExecutionResult) => void> =
+    new Set();
 
   constructor(varManager: VariableManager) {
     this.varManager = varManager;
   }
 
-  setAlarmManager(am: AlarmManager): void { this.alarmManager = am; }
-  setScene(scene: SceneGraph): void { this.scene = scene; }
+  setAlarmManager(am: AlarmManager): void {
+    this.alarmManager = am;
+  }
+  setScene(scene: SceneGraph): void {
+    this.scene = scene;
+  }
 
   onResult(cb: (id: string, result: ExecutionResult) => void): () => void {
     this.listeners.add(cb);
@@ -54,10 +59,19 @@ export class ScriptEngine {
 
   // ---- 脚本管理 ----
 
-  define(def: ScriptDef): void { this.scripts.set(def.id, def); }
-  remove(id: string): void { this.stopScript(id); this.scripts.delete(id); }
-  get(id: string): ScriptDef | undefined { return this.scripts.get(id); }
-  getAll(): ScriptDef[] { return Array.from(this.scripts.values()); }
+  define(def: ScriptDef): void {
+    this.scripts.set(def.id, def);
+  }
+  remove(id: string): void {
+    this.stopScript(id);
+    this.scripts.delete(id);
+  }
+  get(id: string): ScriptDef | undefined {
+    return this.scripts.get(id);
+  }
+  getAll(): ScriptDef[] {
+    return Array.from(this.scripts.values());
+  }
 
   // ---- 引擎控制 ----
 
@@ -80,7 +94,8 @@ export class ScriptEngine {
   /** 手动执行脚本 */
   async execute(id: string): Promise<ExecutionResult> {
     const def = this.scripts.get(id);
-    if (!def) return { success: false, output: "", duration: 0, error: "脚本不存在" };
+    if (!def)
+      return { success: false, output: "", duration: 0, error: "脚本不存在" };
     return this.runScript(def);
   }
 
@@ -131,14 +146,24 @@ export class ScriptEngine {
       const output = result !== undefined ? String(result) : "OK";
       def.lastRun = Date.now();
       def.lastError = null;
-      const execResult: ExecutionResult = { success: true, output, duration, error: null };
+      const execResult: ExecutionResult = {
+        success: true,
+        output,
+        duration,
+        error: null,
+      };
       this.emit(def.id, execResult);
       return execResult;
     } catch (err: any) {
       const duration = Date.now() - start;
       def.lastRun = Date.now();
       def.lastError = err.message;
-      const execResult: ExecutionResult = { success: false, output: "", duration, error: err.message };
+      const execResult: ExecutionResult = {
+        success: false,
+        output: "",
+        duration,
+        error: err.message,
+      };
       this.emit(def.id, execResult);
       return execResult;
     }
@@ -157,7 +182,10 @@ export class ScriptEngine {
         break;
       case "cycle":
         if (def.triggerConfig?.intervalMs) {
-          const timer = setInterval(() => this.runScriptAsync(def), def.triggerConfig.intervalMs);
+          const timer = setInterval(
+            () => this.runScriptAsync(def),
+            def.triggerConfig.intervalMs,
+          );
           this.timers.set(def.id, timer);
         }
         break;
@@ -169,7 +197,10 @@ export class ScriptEngine {
 
   private stopScript(id: string): void {
     const timer = this.timers.get(id);
-    if (timer) { clearInterval(timer); this.timers.delete(id); }
+    if (timer) {
+      clearInterval(timer);
+      this.timers.delete(id);
+    }
   }
 
   private emit(id: string, result: ExecutionResult): void {
@@ -180,16 +211,26 @@ export class ScriptEngine {
 
   loadPresets(): void {
     this.define({
-      id: "script_demo_cycle", name: "周期打印变量", description: "每5秒打印所有变量值",
-      trigger: "cycle", triggerConfig: { intervalMs: 5000 },
+      id: "script_demo_cycle",
+      name: "周期打印变量",
+      description: "每5秒打印所有变量值",
+      trigger: "cycle",
+      triggerConfig: { intervalMs: 5000 },
       code: "var vals = [];\nfor (var i = 0; i < 10; i++) {\n  var v = sandbox.getVar('STA1_211_IA');\n  if (v !== undefined) vals.push(v);\n}\nsandbox.log('当前值:', vals.slice(0, 3));\nreturn 'OK: ' + vals.length + ' vars';",
-      enabled: false, lastRun: null, lastError: null,
+      enabled: false,
+      lastRun: null,
+      lastError: null,
     });
     this.define({
-      id: "script_demo_control", name: "自动控制风机", description: "温度高于28℃时自动开启风机",
-      trigger: "cycle", triggerConfig: { intervalMs: 10000 },
+      id: "script_demo_control",
+      name: "自动控制风机",
+      description: "温度高于28℃时自动开启风机",
+      trigger: "cycle",
+      triggerConfig: { intervalMs: 10000 },
       code: "var temp = sandbox.getVar('STA1_TEMP_ZONE1');\nsandbox.log('当前温度:', temp);\nif (temp > 28) {\n  sandbox.setVar('STA1_FAN_1_STATUS', 1);\n  sandbox.log('温度过高，启动风机');\n  return '风机已启动';\n}\nreturn '温度正常: ' + temp;",
-      enabled: false, lastRun: null, lastError: null,
+      enabled: false,
+      lastRun: null,
+      lastError: null,
     });
   }
 }

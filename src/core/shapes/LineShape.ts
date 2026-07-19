@@ -1,5 +1,5 @@
-﻿import { ShapeBase } from './ShapeBase';
-import type { ShapeProps, Point, BoundingBox } from '../types';
+﻿import { ShapeBase } from "./ShapeBase";
+import type { ShapeProps, Point, BoundingBox } from "../types";
 
 // ============================================================
 // LineShape — 直线/折线
@@ -10,10 +10,10 @@ export class LineShape extends ShapeBase {
   endPoint: Point;
 
   constructor(props?: Partial<ShapeProps>) {
-    super('line', props);
+    super("line", props);
     this.startPoint = props?.startPoint ?? { x: 0, y: 0 };
     this.endPoint = props?.endPoint ?? { x: 100, y: 100 };
-    this.fill = 'transparent';
+    this.fill = "transparent";
   }
 
   get boundingBox(): BoundingBox {
@@ -21,7 +21,12 @@ export class LineShape extends ShapeBase {
     const minY = Math.min(this.startPoint.y, this.endPoint.y);
     const maxX = Math.max(this.startPoint.x, this.endPoint.x);
     const maxY = Math.max(this.startPoint.y, this.endPoint.y);
-    return { x: minX, y: minY, width: maxX - minX || 1, height: maxY - minY || 1 };
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX || 1,
+      height: maxY - minY || 1,
+    };
   }
 
   get center(): Point {
@@ -52,7 +57,7 @@ export class LineShape extends ShapeBase {
     const closestY = ay + t * aby;
     const dist = Math.hypot(px - closestX, py - closestY);
 
-    return dist < (this.strokeWidth / 2 + 4);
+    return dist < this.strokeWidth / 2 + 4;
   }
 
   render(ctx: CanvasRenderingContext2D): void {

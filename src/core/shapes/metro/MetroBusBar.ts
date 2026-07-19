@@ -14,13 +14,16 @@ export interface MetroBusBarProps extends ShapeProps {
 }
 
 /** 电压等级颜色配置 */
-const VOLTAGE_COLORS: Record<string, { stroke: string; fill: string; label: string }> = {
-  "35kV":  { stroke: "#FF6600", fill: "#FF6600", label: "35kV" },
-  "10kV":  { stroke: "#FF0000", fill: "#FF0000", label: "10kV" },
-  "400V":  { stroke: "#00AA00", fill: "#00AA00", label: "400V" },
-  "220V":  { stroke: "#0066FF", fill: "#0066FF", label: "220V" },
-  "DC1500V": { stroke: "#800080", fill: "#800080", label: "DC1500V" },
-  "DC750V":  { stroke: "#AA00AA", fill: "#AA00AA", label: "DC750V" },
+const VOLTAGE_COLORS: Record<
+  string,
+  { stroke: string; fill: string; label: string }
+> = {
+  "35kV": { stroke: "#FF6600", fill: "#FF6600", label: "35kV" },
+  "10kV": { stroke: "#FF0000", fill: "#FF0000", label: "10kV" },
+  "400V": { stroke: "#00AA00", fill: "#00AA00", label: "400V" },
+  "220V": { stroke: "#0066FF", fill: "#0066FF", label: "220V" },
+  DC1500V: { stroke: "#800080", fill: "#800080", label: "DC1500V" },
+  DC750V: { stroke: "#AA00AA", fill: "#AA00AA", label: "DC750V" },
 };
 
 export class MetroBusBar extends ShapeBase {
@@ -63,7 +66,9 @@ export class MetroBusBar extends ShapeBase {
     const sin = Math.sin(rad);
     const localX = Math.abs(dx * cos - dy * sin);
     const localY = Math.abs(dx * sin + dy * cos);
-    return localX <= this.width / 2 + 4 && localY <= Math.max(this.height / 2, 6);
+    return (
+      localX <= this.width / 2 + 4 && localY <= Math.max(this.height / 2, 6)
+    );
   }
 
   render(ctx: CanvasRenderingContext2D): void {
@@ -92,7 +97,11 @@ export class MetroBusBar extends ShapeBase {
       ctx.font = "bold 11px Microsoft YaHei, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
-      ctx.fillText(vc.label + (this.energized ? "" : " (失电)"), this.width / 2, this.height / 2 - 4);
+      ctx.fillText(
+        vc.label + (this.energized ? "" : " (失电)"),
+        this.width / 2,
+        this.height / 2 - 4,
+      );
     }
 
     ctx.restore();

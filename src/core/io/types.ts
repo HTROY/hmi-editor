@@ -6,7 +6,8 @@
 export type DataSourceType = "simulation" | "websocket" | "iec104" | "opcua";
 
 /** 连接状态 */
-export type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
+export type ConnectionStatus =
+  "disconnected" | "connecting" | "connected" | "error";
 
 /** 数据点更新 */
 export interface DataPoint {

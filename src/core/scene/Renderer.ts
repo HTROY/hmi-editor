@@ -1,5 +1,5 @@
-﻿import { SceneGraph } from './SceneGraph';
-import { ShapeBase } from '../shapes/ShapeBase';
+﻿import { SceneGraph } from "./SceneGraph";
+import { ShapeBase } from "../shapes/ShapeBase";
 
 // ============================================================
 // Renderer — Canvas 渲染器
@@ -16,7 +16,7 @@ export class Renderer {
 
   constructor(canvas: HTMLCanvasElement, scene: SceneGraph) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d')!;
+    this.ctx = canvas.getContext("2d")!;
     this.scene = scene;
   }
 
@@ -48,7 +48,7 @@ export class Renderer {
   /** 绘制网格 */
   private drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     ctx.save();
-    ctx.strokeStyle = '#E8E8E8';
+    ctx.strokeStyle = "#E8E8E8";
     ctx.lineWidth = 0.2;
     const gridSize = 20;
     for (let x = 0; x < w; x += gridSize) {
@@ -73,7 +73,7 @@ export class Renderer {
     ctx.save();
 
     // 蓝色选中边框
-    ctx.strokeStyle = '#1890FF';
+    ctx.strokeStyle = "#1890FF";
     ctx.lineWidth = 2;
     ctx.setLineDash([4, 4]);
     ctx.strokeRect(bb.x - 2, bb.y - 2, bb.width + 4, bb.height + 4);
@@ -94,21 +94,21 @@ export class Renderer {
       { x: bb.x, y: bb.y + bb.height / 2 },
     ];
 
-    ctx.fillStyle = '#FFFFFF';
-    ctx.strokeStyle = '#1890FF';
+    ctx.fillStyle = "#FFFFFF";
+    ctx.strokeStyle = "#1890FF";
     ctx.lineWidth = 1.5;
     for (const h of handles) {
       ctx.fillRect(
         h.x - handleSize / 2,
         h.y - handleSize / 2,
         handleSize,
-        handleSize
+        handleSize,
       );
       ctx.strokeRect(
         h.x - handleSize / 2,
         h.y - handleSize / 2,
         handleSize,
-        handleSize
+        handleSize,
       );
     }
 

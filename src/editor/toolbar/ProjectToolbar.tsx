@@ -8,8 +8,13 @@ import { useEditorStore } from "../../store/editorStore";
 export function ProjectToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
-    projectManager, newProject, saveProject, openProject,
-    exportScene, importScene, pageTitle,
+    projectManager,
+    newProject,
+    saveProject,
+    openProject,
+    exportScene,
+    importScene,
+    pageTitle,
   } = useEditorStore();
 
   const handleOpenClick = () => {
@@ -45,31 +50,43 @@ export function ProjectToolbar() {
         <span className="tool-label">打开</span>
       </button>
 
-      <button className="tool-btn" title={dirty ? "保存 (有未保存修改)" : "保存"} onClick={saveProject}>
+      <button
+        className="tool-btn"
+        title={dirty ? "保存 (有未保存修改)" : "保存"}
+        onClick={saveProject}
+      >
         <span className="tool-icon">💾</span>
         <span className="tool-label">保存</span>
         {dirty && <span className="tool-dot" />}
       </button>
 
-      <button className="tool-btn" title="导出画面为 JSON" onClick={exportScene}>
+      <button
+        className="tool-btn"
+        title="导出画面为 JSON"
+        onClick={exportScene}
+      >
         <span className="tool-icon">📥</span>
         <span className="tool-label">导出</span>
       </button>
 
-      <button className="tool-btn" title="导入画面 JSON" onClick={() => {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = ".hmi.json,.json";
-        input.onchange = (e: any) => {
-          const file = e.target?.files?.[0];
-          if (file) {
-            const reader = new FileReader();
-            reader.onload = () => importScene(reader.result as string);
-            reader.readAsText(file);
-          }
-        };
-        input.click();
-      }}>
+      <button
+        className="tool-btn"
+        title="导入画面 JSON"
+        onClick={() => {
+          const input = document.createElement("input");
+          input.type = "file";
+          input.accept = ".hmi.json,.json";
+          input.onchange = (e: any) => {
+            const file = e.target?.files?.[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = () => importScene(reader.result as string);
+              reader.readAsText(file);
+            }
+          };
+          input.click();
+        }}
+      >
         <span className="tool-icon">📤</span>
         <span className="tool-label">导入</span>
       </button>

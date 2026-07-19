@@ -1,4 +1,9 @@
-﻿import type { VariableDef, VariableValue, VariableType, VariableChangeCallback } from "./types";
+﻿import type {
+  VariableDef,
+  VariableValue,
+  VariableType,
+  VariableChangeCallback,
+} from "./types";
 
 // ============================================================
 // VariableManager — 变量/点表管理器
@@ -65,7 +70,11 @@ export class VariableManager {
   // ---- 运行时值管理 ----
 
   /** 设置变量值（核心方法 — 触发通知） */
-  setValue(id: string, value: number | boolean, quality: VariableValue["quality"] = "good"): void {
+  setValue(
+    id: string,
+    value: number | boolean,
+    quality: VariableValue["quality"] = "good",
+  ): void {
     const def = this.defs.get(id);
     if (!def) return;
 
@@ -88,12 +97,19 @@ export class VariableManager {
   }
 
   /** 批量设置（高效 — 一次性通知所有变更） */
-  setValues(updates: { id: string; value: number | boolean; quality?: VariableValue["quality"] }[]): void {
+  setValues(
+    updates: {
+      id: string;
+      value: number | boolean;
+      quality?: VariableValue["quality"];
+    }[],
+  ): void {
     const notified = new Set<string>();
     for (const u of updates) {
       const def = this.defs.get(u.id);
       if (!def) continue;
-      const normalizedValue = (def.type === "DI" || def.type === "DO") ? (u.value ? 1 : 0) : u.value;
+      const normalizedValue =
+        def.type === "DI" || def.type === "DO" ? (u.value ? 1 : 0) : u.value;
       const vv: VariableValue = {
         id: u.id,
         value: normalizedValue,
@@ -156,7 +172,10 @@ export class VariableManager {
         } else {
           const current = this.values.get(def.id)?.value ?? def.defaultValue;
           const delta = (Math.random() - 0.5) * (def.max - def.min) * 0.1;
-          const newVal = Math.max(def.min, Math.min(def.max, (current as number) + delta));
+          const newVal = Math.max(
+            def.min,
+            Math.min(def.max, (current as number) + delta),
+          );
           updates.push({ id: def.id, value: Math.round(newVal * 100) / 100 });
         }
       }

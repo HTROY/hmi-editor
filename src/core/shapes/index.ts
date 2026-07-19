@@ -4,8 +4,12 @@ export { CircleShape } from "./CircleShape";
 export { LineShape } from "./LineShape";
 export { TextShape } from "./TextShape";
 export {
-  MetroBreaker, MetroBusBar, MetroFan,
-  MetroSignal, MetroGauge, MetroTransformer,
+  MetroBreaker,
+  MetroBusBar,
+  MetroFan,
+  MetroSignal,
+  MetroGauge,
+  MetroTransformer,
 } from "./metro";
 
 import type { ShapeType } from "../types";
@@ -15,23 +19,37 @@ import { CircleShape } from "./CircleShape";
 import { LineShape } from "./LineShape";
 import { TextShape } from "./TextShape";
 import {
-  MetroBreaker, MetroBusBar, MetroFan,
-  MetroSignal, MetroGauge, MetroTransformer,
+  MetroBreaker,
+  MetroBusBar,
+  MetroFan,
+  MetroSignal,
+  MetroGauge,
+  MetroTransformer,
 } from "./metro";
 
 /** 图元工厂：根据 type 创建对应实例 */
 export function createShape(type: ShapeType, props?: any): ShapeBase {
   switch (type) {
-    case "rect":             return new RectShape(props);
-    case "circle":           return new CircleShape(props);
-    case "line":             return new LineShape(props);
-    case "text":             return new TextShape(props);
-    case "metro-breaker":    return new MetroBreaker(props);
-    case "metro-busbar":     return new MetroBusBar(props);
-    case "metro-fan":        return new MetroFan(props);
-    case "metro-signal":     return new MetroSignal(props);
-    case "metro-gauge":      return new MetroGauge(props);
-    case "metro-transformer": return new MetroTransformer(props);
+    case "rect":
+      return new RectShape(props);
+    case "circle":
+      return new CircleShape(props);
+    case "line":
+      return new LineShape(props);
+    case "text":
+      return new TextShape(props);
+    case "metro-breaker":
+      return new MetroBreaker(props);
+    case "metro-busbar":
+      return new MetroBusBar(props);
+    case "metro-fan":
+      return new MetroFan(props);
+    case "metro-signal":
+      return new MetroSignal(props);
+    case "metro-gauge":
+      return new MetroGauge(props);
+    case "metro-transformer":
+      return new MetroTransformer(props);
     default:
       console.warn("未知图元类型: " + type + "，使用矩形代替");
       return new RectShape(props);

@@ -12,7 +12,9 @@ export function TrendPanel() {
   const { historian, varManager, simRunning } = useEditorStore();
   const [, forceUpdate] = useState(0);
   const [selectedVars, setSelectedVars] = useState<string[]>([
-    "STA1_211_IA", "STA1_BUS_VOLTAGE", "STA1_TEMP_ZONE1",
+    "STA1_211_IA",
+    "STA1_BUS_VOLTAGE",
+    "STA1_TEMP_ZONE1",
   ]);
   const [editVar, setEditVar] = useState("");
 
@@ -48,12 +50,18 @@ export function TrendPanel() {
         <select value={editVar} onChange={(e) => setEditVar(e.target.value)}>
           <option value="">选择 AI 变量...</option>
           {aiVars.map((v) => (
-            <option key={v.id} value={v.id} disabled={selectedVars.includes(v.id)}>
+            <option
+              key={v.id}
+              value={v.id}
+              disabled={selectedVars.includes(v.id)}
+            >
               {v.id} ({v.name})
             </option>
           ))}
         </select>
-        <button className="btn btn-sm" onClick={handleAdd} disabled={!editVar}>添加</button>
+        <button className="btn btn-sm" onClick={handleAdd} disabled={!editVar}>
+          添加
+        </button>
       </div>
 
       <div className="trend-var-list">
@@ -73,8 +81,12 @@ export function TrendPanel() {
           return (
             <div key={vid} className="trend-item">
               <div className="trend-item-header">
-                <span className="trend-item-title" style={{ color: cfg.color }}>{vid}</span>
-                <button className="btn-icon" onClick={() => handleRemove(vid)}>✕</button>
+                <span className="trend-item-title" style={{ color: cfg.color }}>
+                  {vid}
+                </span>
+                <button className="btn-icon" onClick={() => handleRemove(vid)}>
+                  ✕
+                </button>
               </div>
               <TrendChart points={points} config={cfg} />
             </div>

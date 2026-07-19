@@ -1,13 +1,31 @@
 ﻿export type ShapeId = string;
 
 export type ShapeType =
-  | "rect" | "circle" | "line" | "text"
-  | "polyline" | "polygon" | "path" | "group"
-  | "metro-breaker" | "metro-busbar" | "metro-fan"
-  | "metro-signal" | "metro-gauge" | "metro-transformer";
+  | "rect"
+  | "circle"
+  | "line"
+  | "text"
+  | "polyline"
+  | "polygon"
+  | "path"
+  | "group"
+  | "metro-breaker"
+  | "metro-busbar"
+  | "metro-fan"
+  | "metro-signal"
+  | "metro-gauge"
+  | "metro-transformer";
 
-export interface Point { x: number; y: number; }
-export interface BoundingBox { x: number; y: number; width: number; height: number; }
+export interface Point {
+  x: number;
+  y: number;
+}
+export interface BoundingBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 export type ValueMapping =
   | { type: "direct" }
@@ -39,13 +57,19 @@ export interface AnimationDef {
 export interface ShapeProps {
   id: ShapeId;
   type: ShapeType;
-  x: number; y: number;
-  width: number; height: number;
-  rotation: number; opacity: number;
-  visible: boolean; locked: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  opacity: number;
+  visible: boolean;
+  locked: boolean;
   zIndex: number;
-  fill: string; stroke: string;
-  strokeWidth: number; dashArray: number[];
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+  dashArray: number[];
   name: string;
   bindings: Binding[];
   animations: AnimationDef[];

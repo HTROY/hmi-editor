@@ -2,7 +2,8 @@
 // 脚本引擎类型定义
 // ============================================================
 
-export type ScriptTrigger = "startup" | "cycle" | "variableChange" | "alarm" | "manual" | "schedule";
+export type ScriptTrigger =
+  "startup" | "cycle" | "variableChange" | "alarm" | "manual" | "schedule";
 
 export interface ScriptDef {
   id: string;

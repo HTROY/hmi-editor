@@ -17,12 +17,15 @@ export interface MetroSignalProps extends ShapeProps {
   labelPosition: string;
 }
 
-const SIGNAL_COLORS: Record<string, { active: string; dim: string; label: string }> = {
-  red:    { active: "#FF2020", dim: "#551515", label: "故障" },
-  green:  { active: "#20E020", dim: "#155515", label: "运行" },
+const SIGNAL_COLORS: Record<
+  string,
+  { active: string; dim: string; label: string }
+> = {
+  red: { active: "#FF2020", dim: "#551515", label: "故障" },
+  green: { active: "#20E020", dim: "#155515", label: "运行" },
   yellow: { active: "#E0C020", dim: "#554A15", label: "预警" },
-  blue:   { active: "#2080E0", dim: "#153055", label: "待机" },
-  gray:   { active: "#888888", dim: "#333333", label: "离线" },
+  blue: { active: "#2080E0", dim: "#153055", label: "待机" },
+  gray: { active: "#888888", dim: "#333333", label: "离线" },
 };
 
 export class MetroSignal extends ShapeBase {

@@ -25,8 +25,8 @@ export interface AuditEntry {
 }
 
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
-  admin:    ["*"],  // 全部
+  admin: ["*"], // 全部
   engineer: ["view", "edit", "export", "import", "configure", "acknowledge"],
   operator: ["view", "control", "acknowledge"],
-  viewer:   ["view"],
+  viewer: ["view"],
 };

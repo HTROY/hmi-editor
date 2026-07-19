@@ -15,7 +15,9 @@ export class DataBridge {
   private variableManager: VariableManager;
   private sources: Map<string, DataSource> = new Map();
   private activeSource: ActiveSource = "simulation";
-  private statusListeners: Set<(source: string, status: ConnectionStatus) => void> = new Set();
+  private statusListeners: Set<
+    (source: string, status: ConnectionStatus) => void
+  > = new Set();
 
   // IEC 104 模拟器内置
   iec104Simulator: IEC104Simulator;

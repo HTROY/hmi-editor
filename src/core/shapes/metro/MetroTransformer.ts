@@ -46,7 +46,10 @@ export class MetroTransformer extends ShapeBase {
     const sin = Math.sin(rad);
     const localX = dx * cos - dy * sin;
     const localY = dx * sin + dy * cos;
-    return Math.sqrt(localX * localX + localY * localY) <= Math.max(this.width, this.height) / 2;
+    return (
+      Math.sqrt(localX * localX + localY * localY) <=
+      Math.max(this.width, this.height) / 2
+    );
   }
 
   render(ctx: CanvasRenderingContext2D): void {

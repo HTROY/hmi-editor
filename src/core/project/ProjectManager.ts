@@ -55,7 +55,9 @@ export class ProjectManager {
 
   /** 获取所有页面元数据 */
   getPages(): PageMeta[] {
-    return Array.from(this.pageMetas.values()).sort((a, b) => a.order - b.order);
+    return Array.from(this.pageMetas.values()).sort(
+      (a, b) => a.order - b.order,
+    );
   }
 
   /** 获取页面元数据 */
@@ -70,9 +72,12 @@ export class ProjectManager {
 
   /** 创建新页面 */
   createPage(title?: string): { meta: PageMeta; scene: SceneGraph } {
-    const id = "page_" + (Date.now().toString(36));
+    const id = "page_" + Date.now().toString(36);
     const now = new Date().toISOString();
-    const maxOrder = Math.max(0, ...Array.from(this.pageMetas.values()).map((p) => p.order));
+    const maxOrder = Math.max(
+      0,
+      ...Array.from(this.pageMetas.values()).map((p) => p.order),
+    );
     const meta: PageMeta = {
       id,
       title: title ?? "新画面",
@@ -229,13 +234,20 @@ export class ProjectManager {
     try {
       const stored = localStorage.getItem("hmi_recent_files");
       if (stored) this.recentFiles = JSON.parse(stored);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   private saveRecentFiles(): void {
     try {
-      localStorage.setItem("hmi_recent_files", JSON.stringify(this.recentFiles.slice(0, 10)));
-    } catch { /* ignore */ }
+      localStorage.setItem(
+        "hmi_recent_files",
+        JSON.stringify(this.recentFiles.slice(0, 10)),
+      );
+    } catch {
+      /* ignore */
+    }
   }
 
   addRecentFile(filePath: string): void {
