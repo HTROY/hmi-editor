@@ -55,6 +55,13 @@ impl PointManager {
     }
 
     pub fn point_ids(&self) -> Vec<String> { self.points.keys().cloned().collect() }
+
+    pub fn get_all_values(&self) -> Vec<PointValue> {
+        self.points.values()
+            .filter_map(|cp| cp.last_value.clone())
+            .collect()
+    }
+
     pub fn count(&self) -> usize { self.points.len() }
 }
 
@@ -109,5 +116,17 @@ mod tests {
         mgr.insert_test_point("pt4", m);
         let r = mgr.update(PointValue::new("pt4", 100.0, "good", 1000)).unwrap();
         assert!((r.numeric_value().unwrap() - 60.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_get_all_values() {
+        let config = AppConfig::default_config();
+        let mut mgr = PointManager::from_config(&config);
+        mgr.insert_test_point("pt1", make_mapping("pt1"));
+        mgr.insert_test_point("pt2", make_mapping("pt2"));
+        mgr.update(PointValue::new("pt1", 10.0, "good", 1000));
+        mgr.update(PointValue::new("pt2", 20.0, "good", 2000));
+        let vals = mgr.get_all_values();
+        assert_eq!(vals.len(), 2);
     }
 }

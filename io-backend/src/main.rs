@@ -7,7 +7,7 @@ mod db;
 mod web;
 mod monitor;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use config::AppConfig;
 use db::repo::Repo;
 use plugin::registry::PluginRegistry;
@@ -32,15 +32,17 @@ fn main() -> anyhow::Result<()> {
 
     let ws_port: u16 = repo.get_config("ws_port").unwrap_or_else(|| "8080".into()).parse().unwrap_or(8080);
     let web_port: u16 = repo.get_config("web_port").unwrap_or_else(|| "8081".into()).parse().unwrap_or(8081);
+    let batch_interval_ms: u64 = repo.get_config("batch_interval_ms")
+        .unwrap_or_else(|| "100".into()).parse().unwrap_or(100);
 
     let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(4).enable_all().build()?;
 
     rt.block_on(async move {
-        let mut registry = PluginRegistry::new(monitor.clone())?;
+        let registry = PluginRegistry::new(monitor.clone())?;
         registry.init_from_config(&app_config).await?;
-        let point_manager = PointManager::from_config(&app_config);
+        let point_manager = Arc::new(Mutex::new(PointManager::from_config(&app_config)));
         let point_rx = registry.take_point_receiver().ok_or_else(|| anyhow::anyhow!("no point rx"))?;
-        let (bridge, broadcast_tx) = Bridge::new(point_rx, point_manager);
+        let (bridge, broadcast_tx) = Bridge::new(point_rx, point_manager.clone(), batch_interval_ms);
         let registry_arc = Arc::new(registry);
         tokio::spawn(async move { bridge.run().await; });
         let statuses = registry_arc.plugin_statuses().await;
@@ -51,12 +53,20 @@ fn main() -> anyhow::Result<()> {
             host: repo_arc.get_config("ws_host").unwrap_or_else(|| "0.0.0.0".into()),
             port: ws_port,
             path: "/iscs/data".into(),
+            batch_interval_ms,
         };
 
+        // Clone broadcast_tx for multiple consumers
+        let bc_ws = broadcast_tx.clone();
+        let bc_web = broadcast_tx.clone();
+
         // Spawn WebSocket server (critical - keep handle to await)
+        let reg_ws = registry_arc.clone();
+        let pm_ws = point_manager.clone();
+        let mon_ws = monitor.clone();
         let ws_h = tokio::spawn(async move {
             log::info!("WS data server on ws://{}:{}{}", ws_cfg.host, ws_cfg.port, ws_cfg.path);
-            if let Err(e) = crate::server::ws::run_server(&ws_cfg, broadcast_tx, registry_arc).await {
+            if let Err(e) = crate::server::ws::run_server(&ws_cfg, bc_ws, reg_ws, pm_ws, mon_ws).await {
                 log::error!("WS fatal: {}", e);
             }
         });
@@ -64,9 +74,10 @@ fn main() -> anyhow::Result<()> {
         // Spawn Web UI (non-critical - detach, errors are self-logged)
         let web_port_clone = web_port;
         let web_monitor = monitor.clone();
+        let reg_web = registry_arc.clone();
         tokio::spawn(async move {
             log::info!("Web UI starting on port {}...", web_port_clone);
-            match crate::web::server::run_web_server(repo_arc, web_monitor, web_port_clone).await {
+            match crate::web::server::run_web_server(repo_arc, web_monitor, reg_web, bc_web, web_port_clone).await {
                 Ok(()) => log::info!("Web UI stopped normally"),
                 Err(e) => log::error!("Web UI error: {:#}", e),
             }
@@ -87,6 +98,7 @@ fn main() -> anyhow::Result<()> {
                 log::info!("Shutting down...");
             }
         }
+        registry_arc.shutdown();
         log::info!("=== Shutdown complete ===");
         Ok::<(), anyhow::Error>(())
     })?;
@@ -117,6 +129,7 @@ fn build_config(repo: &Repo, yaml_path: &str) -> AppConfig {
 fn migrate_yaml_to_db(repo: &Repo, config: &AppConfig) {
     log::info!("Migrating YAML to DB...");
     let _ = repo.set_config("scan_interval_ms", &config.plugins.scan_interval_ms.to_string());
+    let _ = repo.set_config("batch_interval_ms", &config.server.batch_interval_ms.to_string());
     let _ = repo.set_config("plugin_dir", &config.plugins.directory);
     for inst in &config.plugins.instances {
         let cj = serde_json::to_string(&inst.config).unwrap_or_else(|_| "{}".into());

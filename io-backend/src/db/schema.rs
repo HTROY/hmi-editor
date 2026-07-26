@@ -36,6 +36,7 @@ pub fn init_db(conn: &Connection) -> anyhow::Result<()> {
         );
 
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('scan_interval_ms', '500');
+        INSERT OR IGNORE INTO server_config (key, value) VALUES ('batch_interval_ms', '100');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('ws_host', '0.0.0.0');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('ws_port', '8080');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('web_port', '8081');

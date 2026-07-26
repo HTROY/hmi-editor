@@ -78,7 +78,7 @@ impl PointValue {
 }
 
 /// WebSocket outgoing data message — compatible with frontend WebSocketClient
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WsDataMessage {
     #[serde(rename = "type")]
     pub msg_type: String,
@@ -90,6 +90,27 @@ impl WsDataMessage {
         Self {
             msg_type: "data".into(),
             data: points,
+        }
+    }
+}
+
+/// WebSocket config change notification — sent when points are modified via Web UI
+#[derive(Debug, Clone, Serialize)]
+pub struct WsConfigChangeMessage {
+    #[serde(rename = "type")]
+    pub msg_type: String,
+    pub action: String,
+    pub variable_id: String,
+    pub plugin_id: i64,
+}
+
+impl WsConfigChangeMessage {
+    pub fn new(action: &str, variable_id: &str, plugin_id: i64) -> Self {
+        Self {
+            msg_type: "config_change".into(),
+            action: action.to_string(),
+            variable_id: variable_id.to_string(),
+            plugin_id,
         }
     }
 }

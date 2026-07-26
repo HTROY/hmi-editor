@@ -1,4 +1,4 @@
-﻿//! MonitorCollector — thread-safe shared state for all plugin monitoring data
+//! MonitorCollector - thread-safe shared state for all plugin monitoring data
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -13,6 +13,8 @@ struct PluginMonitorState {
     points: HashMap<String, LivePointInfo>,
     packets: Vec<PacketLogEntry>,
     point_configs: HashMap<String, (String, String, String, f64, f64, String)>,
+    /// Reverse mapping: protocol address -> variable_id
+    addr_to_var: HashMap<String, String>,
 }
 
 pub struct MonitorCollector {
@@ -41,6 +43,7 @@ impl MonitorCollector {
         let now_ms = inner.server_start.elapsed().as_millis() as u64;
         let mut point_map = HashMap::new();
         let mut config_map = HashMap::new();
+        let mut addr_map = HashMap::new();
         for (var_id, addr, var_type, data_type, scale, offset, byte_order) in points {
             point_map.insert(var_id.clone(), LivePointInfo {
                 variable_id: var_id.clone(),
@@ -56,6 +59,9 @@ impl MonitorCollector {
                 offset_val: *offset,
             });
             config_map.insert(var_id.clone(), (addr.clone(), var_type.clone(), data_type.clone(), *scale, *offset, byte_order.clone()));
+            if !addr.is_empty() {
+                addr_map.insert(addr.clone(), var_id.clone());
+            }
         }
         inner.plugins.insert(name.to_string(), PluginMonitorState {
             status: PluginStatus {
@@ -74,6 +80,7 @@ impl MonitorCollector {
             points: point_map,
             packets: Vec::with_capacity(MAX_PACKETS_PER_PLUGIN),
             point_configs: config_map,
+            addr_to_var: addr_map,
         });
     }
 
@@ -112,28 +119,51 @@ impl MonitorCollector {
         }
     }
 
+    fn now_epoch_ms() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0)
+    }
+
     pub fn update_point_value(self: &Arc<Self>, plugin_name: &str, pv: &PointValue) {
         let mut inner = self.inner.lock().unwrap();
-        let now_ms = inner.server_start.elapsed().as_millis() as u64;
+        let now_epoch = Self::now_epoch_ms();
         if let Some(p) = inner.plugins.get_mut(plugin_name) {
-            if let Some(existing) = p.points.get_mut(&pv.id) {
+            // Resolve point identity: try variable_id first, then address reverse lookup
+            let var_id = if p.points.contains_key(&pv.id) {
+                pv.id.clone()
+            } else if let Some(mapped) = p.addr_to_var.get(&pv.id) {
+                mapped.clone()
+            } else {
+                pv.id.clone()
+            };
+
+            if let Some(existing) = p.points.get_mut(&var_id) {
                 existing.value = pv.value.clone();
                 existing.quality = pv.quality.clone();
                 existing.timestamp_ms = pv.timestamp;
-                existing.age_ms = now_ms.saturating_sub(pv.timestamp);
+                existing.age_ms = now_epoch.saturating_sub(pv.timestamp);
             } else {
+                // Point not pre-registered - add dynamically with config lookup
                 let (addr, vtype, dtype, scale, offset, border) = p.point_configs
-                    .get(&pv.id)
+                    .get(&var_id)
                     .cloned()
-                    .unwrap_or_else(|| (String::new(), "AI".into(), "uint16".into(), 1.0, 0.0, "big_endian".into()));
-                p.points.insert(pv.id.clone(), LivePointInfo {
-                    variable_id: pv.id.clone(),
+                    .unwrap_or_else(|| {
+                        // Try address-based config lookup as fallback
+                        p.addr_to_var.get(&pv.id)
+                            .and_then(|vid| p.point_configs.get(vid))
+                            .cloned()
+                            .unwrap_or_else(|| (String::new(), "AI".into(), "uint16".into(), 1.0, 0.0, "big_endian".into()))
+                    });
+                p.points.insert(var_id.clone(), LivePointInfo {
+                    variable_id: var_id,
                     address: addr,
                     var_type: vtype,
                     value: pv.value.clone(),
                     quality: pv.quality.clone(),
                     timestamp_ms: pv.timestamp,
-                    age_ms: now_ms.saturating_sub(pv.timestamp),
+                    age_ms: now_epoch.saturating_sub(pv.timestamp),
                     data_type: dtype,
                     byte_order: border,
                     scale,

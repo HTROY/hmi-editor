@@ -1,4 +1,4 @@
-﻿import { create } from "zustand";
+import { create } from "zustand";
 import {
   SceneGraph,
   Renderer,
@@ -88,6 +88,9 @@ export const useEditorStore = create<EditorState>((set, get) => {
   const bindingEngine = new BindingEngine(scene, varManager);
   const animEngine = new AnimationEngine(scene);
   const dataBridge = new DataBridge(varManager);
+  dataBridge.setOnVarsRefreshed(() => {
+    setTimeout(() => { const s = get(); s.bumpVarRevision(); }, 0);
+  });
   const projectManager = new ProjectManager();
   const alarmManager = new AlarmManager(varManager);
   const historian = new Historian(varManager);

@@ -1,6 +1,7 @@
 ﻿import React, { useState, useEffect } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import type { ActiveSource } from "../../core/io";
+import type { VariableDef } from "../../core/variables/types";
 
 // ============================================================
 // ConnectionPanel — 数据连接管理面板
@@ -10,6 +11,7 @@ import type { ActiveSource } from "../../core/io";
 export function ConnectionPanel() {
   const { dataBridge, simRunning, toggleSimulation, wsConfig, setWsConfig } =
     useEditorStore();
+  const varManager = useEditorStore((s) => s.varManager);
 
   const [activeSource, setActiveSource] = useState<ActiveSource>("simulation");
   const [statuses, setStatuses] = useState<Record<string, string>>({
@@ -28,6 +30,10 @@ export function ConnectionPanel() {
 
   // 跟踪是否已经为本次连接拉取过变量（防止重复拉取）
   const [hasFetched, setHasFetched] = useState(false);
+
+  const [showSubFilter, setShowSubFilter] = useState(false);
+  const [subFilterText, setSubFilterText] = useState("");
+  const [subscribedVarIds, setSubscribedVarIds] = useState<string[]>([]);
 
   // 用 ref 追踪状态，避免 useEffect 闭包过期
   const hasFetchedRef = React.useRef(hasFetched);
@@ -84,6 +90,17 @@ export function ConnectionPanel() {
     });
     return unsub;
   }, [dataBridge]);
+
+  const handleSubscribeFilter = (varIds: string[]) => {
+    setSubscribedVarIds(varIds);
+    dataBridge?.wsClient.subscribeVariables(varIds);
+  };
+
+  const handleSubscribeAll = () => {
+    setSubscribedVarIds([]);
+    setSubFilterText("");
+    dataBridge?.wsClient.subscribeVariables([]);
+  };
 
   const handleSourceChange = (source: ActiveSource) => {
     if (simRunning) toggleSimulation();
@@ -318,6 +335,89 @@ export function ConnectionPanel() {
           </div>
         </div>
       )}
+
+      {/* 变量订阅过滤（仅 IO Backend 连接时显示） */}
+      {activeSource === "io_backend" &&
+        dataBridge?.getStatus("websocket") === "connected" && (
+          <div className="conn-section">
+            <div className="conn-section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>订阅过滤</span>
+              <button
+                className="btn btn-sm"
+                onClick={() => setShowSubFilter(!showSubFilter)}
+                style={{ fontSize: 11 }}
+              >
+                {showSubFilter ? "折叠" : "展开"}
+              </button>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>
+              {subscribedVarIds.length > 0
+                ? "Subscribed " + subscribedVarIds.length + " of " + (varManager?.count ?? "?") + " variables"
+                : "All variables (no filter)"}
+            </div>
+            {subscribedVarIds.length > 0 && (
+              <button
+                className="btn btn-sm"
+                onClick={handleSubscribeAll}
+                style={{ marginBottom: 6 }}
+              >
+                订阅全部
+              </button>
+            )}
+            {showSubFilter && (
+              <>
+                <input
+                  placeholder="搜索变量 ID..."
+                  value={subFilterText}
+                  onChange={(e) => setSubFilterText(e.target.value)}
+                  style={{ width: "100%", marginBottom: 4, fontSize: 12 }}
+                />
+                <div style={{ maxHeight: 200, overflow: "auto", fontSize: 11 }}>
+                  {varManager
+                    ?.getAllDefs()
+                    ?.filter((d: VariableDef) =>
+                      subFilterText
+                        ? d.id.toLowerCase().includes(subFilterText.toLowerCase()) ||
+                          d.name.toLowerCase().includes(subFilterText.toLowerCase())
+                        : true
+                    )
+                    ?.map((d: VariableDef) => {
+                      const isSubbed = subscribedVarIds.length === 0 || subscribedVarIds.includes(d.id);
+                      return (
+                        <label
+                          key={d.id}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4,
+                            padding: "2px 4px",
+                            cursor: "pointer",
+                            color: isSubbed ? "inherit" : "var(--text-secondary)",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSubbed}
+                            onChange={() => {
+                              const newIds = isSubbed
+                                ? subscribedVarIds.filter((id) => id !== d.id)
+                                : [...subscribedVarIds, d.id];
+                              handleSubscribeFilter(newIds);
+                            }}
+                            style={{ margin: 0 }}
+                          />
+                          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {d.id}
+                          </span>
+                          <span style={{ color: "var(--text-secondary)", fontSize: 10 }}>{d.type}</span>
+                        </label>
+                      );
+                    })}
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
       {/* 状态 */}
       <div className="conn-section">

@@ -1,137 +1,48 @@
-﻿//! OPC UA Protocol Plugin (WASM)
-//!
-//! Simulates OPC UA read operations for SCADA points.
-//! In real deployment, this would use the OPC UA binary protocol
-//! over TCP (host-provided networking) to communicate with OPC UA servers.
+//! OPC UA Protocol Plugin (Extism PDK)
+use extism_pdk::*;
+use serde::{Deserialize, Serialize};
 
-use serde::Deserialize;
-use std::collections::HashMap;
-
-extern "C" {
-    fn host_on_point(
-        name_ptr: *const u8,
-        name_len: i32,
-        value: f64,
-        quality_ptr: *const u8,
-        quality_len: i32,
-        timestamp: i64,
-    );
-    fn host_log(level: i32, msg_ptr: *const u8, msg_len: i32);
+#[link(wasm_import_module = "hmi")] extern "C" {
     fn host_now_ms() -> i64;
+    fn host_log(level: i64, msg_off: i64);
+    fn host_on_point(no: i64, v: f64, qo: i64, ts: i64);
+    fn host_on_packet(do_: i64, po: i64, ho: i64, so: i64);
+    fn host_tcp_connect(ho: i64, port: i64) -> i32;
+    fn host_tcp_send(s: i64, do_: i64) -> i32;
+    fn host_tcp_recv(s: i64, to: i64) -> i64;
+    fn host_tcp_close(s: i64);
 }
 
-static mut STATE: Option<PluginState> = None;
+fn lm(l: i32, m: &str) { let x=Memory::from_bytes(m).expect("a"); unsafe{host_log(l as i64, x.offset() as i64);} }
+fn rp(n: &str, v: f64, q: &str, ts: i64) { let nm=Memory::from_bytes(n).expect("a");let qm=Memory::from_bytes(q).expect("a");unsafe{host_on_point(nm.offset() as i64,v,qm.offset() as i64,ts);} }
+fn rpt(dir: &str, p: &str, h: &str, s: &str) { let d=Memory::from_bytes(dir).expect("a");let pp=Memory::from_bytes(p).expect("a");let hh=Memory::from_bytes(h).expect("a");let ss=Memory::from_bytes(s).expect("a");unsafe{host_on_packet(d.offset() as i64,pp.offset() as i64,hh.offset() as i64,ss.offset() as i64);} }
+fn tc(h: &str, p: i32) -> i32 { let m=Memory::from_bytes(h).expect("a"); unsafe{host_tcp_connect(m.offset() as i64, p as i64)} }
+fn ts(s: i32, d: &[u8]) -> i32 { let m=Memory::from_bytes(d).expect("a"); unsafe{host_tcp_send(s as i64, m.offset() as i64)} }
+fn tr(s: i32, to: i32) -> Vec<u8> { let off = unsafe{host_tcp_recv(s as i64, to as i64)}; if off > 0 { Memory::from(off as u64).to_vec() } else { Vec::new() } }
+fn tcl(s: i32) { unsafe{host_tcp_close(s as i64);} }
 
-struct PluginState {
-    endpoint: String,
-    connected: bool,
-    scan_count: u64,
+#[derive(Debug,Clone,Serialize,Deserialize)] struct Pc { variable_id:String,address:String,var_type:String,#[serde(default)] data_type:String,#[serde(default)] byte_order:String,#[serde(default)] scale:f64,#[serde(default)] offset:f64 }
+#[derive(Debug,Clone,Serialize,Deserialize)] struct Cfg { endpoint:String,#[serde(default)] points:Vec<Pc> }
+#[derive(Debug,Clone,Serialize,Deserialize)] struct St { endpoint:String,connected:bool,scan_count:u64,socket:i32,points:Vec<Pc> }
+
+fn sv(s:&St)->FnResult<()>{var::set("state",&serde_json::to_string(s)?)?;Ok(())}
+fn ld() -> FnResult<Option<St>> {
+    let json: Option<String> = var::get("state")?;
+    Ok(json.and_then(|j| serde_json::from_str(&j).ok()))
 }
 
-#[derive(Deserialize)]
-struct PluginConfig {
-    endpoint: String,
-}
+#[plugin_fn] pub fn plugin_init(Json(mut c):Json<Cfg>)->FnResult<i32>{lm(2,&format!("OPC UA init: {}, {} pts",c.endpoint,c.points.len()));sv(&St{endpoint:c.endpoint,connected:false,scan_count:0,socket:-1,points:std::mem::take(&mut c.points)})?;Ok(0)}
+#[plugin_fn] pub fn plugin_connect()->FnResult<i32>{let mut s=ld()?.expect("ni");let h=s.endpoint.trim_start_matches("opc.tcp://").split(':').next().unwrap_or("127.0.0.1");let p=s.endpoint.split(':').last().and_then(|p|p.parse::<i32>().ok()).unwrap_or(4840);lm(2,&format!("OPC UA connecting {}:{}...",h,p));let sk=tc(h,p);if sk<0{lm(1,"connect failed");s.connected=false;sv(&s)?;return Ok(1);}let hello=build_hello(&s.endpoint);let hex: String = hello.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ");rpt("tx","opcua",&hex,"TX: Hello");ts(sk,&hello);tr(sk,3000);s.connected=true;s.socket=sk;sv(&s)?;Ok(0)}
+#[plugin_fn] pub fn plugin_disconnect()->FnResult<i32>{let mut s=ld()?.expect("ni");if s.socket>=0{tcl(s.socket);}s.connected=false;s.socket=-1;sv(&s)?;Ok(0)}
+#[plugin_fn] pub fn plugin_scan_points()->FnResult<i32>{let mut s=ld()?.expect("ni");if!s.connected||s.socket<0{return Ok(1);}s.scan_count+=1;let now=unsafe{host_now_ms()};for pt in &s.points{rp(&pt.variable_id,0.0,"good",now);}sv(&s)?;Ok(0)}
+#[plugin_fn] pub fn plugin_write_point(Json(i):Json<Wi>)->FnResult<i32>{let s=ld()?.expect("ni");if!s.connected||s.socket<0{return Ok(2);}lm(2,&format!("write {} = {}",i.name,i.value));Ok(0)}
+#[plugin_fn] pub fn plugin_get_name()->FnResult<String>{Ok("OPC UA".to_string())}
+#[plugin_fn] pub fn plugin_get_status()->FnResult<i32>{Ok(ld()?.map_or(0,|s|if s.connected{2}else{0}))}
+#[derive(Deserialize)] struct Wi{name:String,value:f64}
 
-#[no_mangle]
-pub extern "C" fn plugin_init(config_ptr: *const u8, config_len: i32) -> i32 {
-    let config_str = unsafe {
-        let slice = std::slice::from_raw_parts(config_ptr, config_len as usize);
-        match std::str::from_utf8(slice) {
-            Ok(s) => s,
-            Err(_) => return 1,
-        }
-    };
-    let config: PluginConfig = match serde_json::from_str(config_str) {
-        Ok(c) => c,
-        Err(_) => { log_host(0, "Failed to parse OPC UA config"); return 2; }
-    };
-    log_host(2, &format!("OPC UA plugin init: endpoint={}", config.endpoint));
-    unsafe { STATE = Some(PluginState { endpoint: config.endpoint, connected: false, scan_count: 0 }); }
-    0
-}
-
-#[no_mangle]
-pub extern "C" fn plugin_connect() -> i32 {
-    let state = unsafe { STATE.as_mut().expect("plugin not initialized") };
-    log_host(2, &format!("OPC UA connecting to {}...", state.endpoint));
-    state.connected = true;
-    log_host(2, "OPC UA connected (simulated)");
-    0
-}
-
-#[no_mangle]
-pub extern "C" fn plugin_disconnect() -> i32 {
-    let state = unsafe { STATE.as_mut().expect("plugin not initialized") };
-    state.connected = false;
-    log_host(2, "OPC UA disconnected");
-    0
-}
-
-#[no_mangle]
-pub extern "C" fn plugin_scan_points() -> i32 {
-    let state = unsafe { STATE.as_mut().expect("plugin not initialized") };
-    if !state.connected { return 1; }
-    state.scan_count += 1;
-    let now = unsafe { host_now_ms() };
-    let quality = b"good";
-
-    let points: Vec<(&str, f64)> = vec![
-        ("ns=2;s=Temperature.Zone1", 24.0 + ((state.scan_count as f64 * 0.05).sin() * 3.0)),
-        ("ns=2;s=Temperature.Zone2", 22.5 + ((state.scan_count as f64 * 0.04 + 1.0).sin() * 2.5)),
-        ("ns=2;s=Humidity.Zone1", 55.0 + ((state.scan_count as f64 * 0.03).cos() * 10.0)),
-        ("ns=2;s=Pressure.Zone1", 1013.0 + ((state.scan_count as f64 * 0.02).sin() * 5.0)),
-    ];
-
-    for (node_id, val) in &points {
-        let rounded = (val * 100.0).round() / 100.0;
-        unsafe {
-            host_on_point(node_id.as_ptr(), node_id.len() as i32, rounded, quality.as_ptr(), quality.len() as i32, now);
-        }
-    }
-    0
-}
-
-#[no_mangle]
-pub extern "C" fn plugin_write_point(
-    name_ptr: *const u8, name_len: i32, value_ptr: *const u8, value_len: i32,
-) -> i32 {
-    let name = unsafe { String::from_utf8_lossy(std::slice::from_raw_parts(name_ptr, name_len as usize)).to_string() };
-    let value_str = unsafe { String::from_utf8_lossy(std::slice::from_raw_parts(value_ptr, value_len as usize)).to_string() };
-    let value: f64 = match value_str.parse() { Ok(v) => v, Err(_) => return 1 };
-    log_host(2, &format!("OPC UA write: {} = {}", name, value));
-    let now = unsafe { host_now_ms() };
-    let quality = b"good";
-    unsafe { host_on_point(name.as_ptr(), name.len() as i32, value, quality.as_ptr(), quality.len() as i32, now); }
-    0
-}
-
-#[no_mangle]
-pub extern "C" fn plugin_get_name(ptr: *mut u8, max_len: i32) -> i32 {
-    let name = b"OPC UA";
-    let len = name.len().min(max_len as usize);
-    unsafe { std::ptr::copy_nonoverlapping(name.as_ptr(), ptr, len); }
-    len as i32
-}
-
-#[no_mangle]
-pub extern "C" fn plugin_get_status() -> i32 {
-    match unsafe { STATE.as_ref() } {
-        Some(s) if s.connected => 2,
-        Some(_) => 0, None => 0,
-    }
-}
-
-static mut ALLOC_BUF: Vec<u8> = Vec::new();
-
-#[no_mangle]
-pub extern "C" fn plugin_alloc(size: i32) -> *mut u8 {
-    unsafe { ALLOC_BUF = vec![0u8; size as usize]; ALLOC_BUF.as_mut_ptr() }
-}
-
-#[no_mangle]
-pub extern "C" fn plugin_free(_ptr: *mut u8, _size: i32) {}
-
-fn log_host(level: i32, msg: &str) {
-    unsafe { host_log(level, msg.as_ptr(), msg.len() as i32); }
+fn build_hello(ep: &str) -> Vec<u8> {
+    let eb=ep.as_bytes();let tl=32+eb.len() as u32;let mut m=Vec::with_capacity(tl as usize);
+    m.extend_from_slice(b"HEL");m.push(b'F');m.extend_from_slice(&tl.to_le_bytes());
+    m.extend_from_slice(&[0u8;4]);m.extend_from_slice(&65535u32.to_le_bytes());
+    m.extend_from_slice(&65535u32.to_le_bytes());m.extend_from_slice(&[0u8;8]);m.extend_from_slice(eb);m
 }

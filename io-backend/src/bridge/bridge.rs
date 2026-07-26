@@ -4,39 +4,44 @@
 //! Receives PointValues from plugins, filters them via PointManager,
 //! and publishes changed values to all connected WebSocket clients.
 
+use std::sync::{Arc, Mutex};
 use tokio::sync::{broadcast, mpsc};
 use crate::point::types::{PointValue, WsDataMessage};
 use crate::point::manager::PointManager;
 
 pub struct Bridge {
     point_rx: mpsc::UnboundedReceiver<PointValue>,
-    point_manager: PointManager,
+    point_manager: Arc<Mutex<PointManager>>,
     broadcast_tx: broadcast::Sender<String>,
+    batch_interval_ms: u64,
 }
 
 impl Bridge {
     pub fn new(
         point_rx: mpsc::UnboundedReceiver<PointValue>,
-        point_manager: PointManager,
+        point_manager: Arc<Mutex<PointManager>>,
+        batch_interval_ms: u64,
     ) -> (Self, broadcast::Sender<String>) {
         let (broadcast_tx, _) = broadcast::channel::<String>(256);
         let bridge = Self {
             point_rx,
             point_manager,
             broadcast_tx: broadcast_tx.clone(),
+            batch_interval_ms,
         };
         (bridge, broadcast_tx)
     }
 
     pub async fn run(mut self) {
-        log::info!("Bridge started, managing {} points", self.point_manager.count());
+        log::info!("Bridge started, managing {} points (batch every {}ms)",
+            self.point_manager.lock().unwrap().count(), self.batch_interval_ms);
         let mut batch: Vec<PointValue> = Vec::new();
-        let mut batch_timer = tokio::time::interval(tokio::time::Duration::from_millis(100));
+        let mut batch_timer = tokio::time::interval(tokio::time::Duration::from_millis(self.batch_interval_ms));
 
         loop {
             tokio::select! {
                 Some(raw_point) = self.point_rx.recv() => {
-                    if let Some(pv) = self.point_manager.update(raw_point) {
+                    if let Some(pv) = self.point_manager.lock().unwrap().update(raw_point) {
                         batch.push(pv);
                     }
                 }

@@ -66,6 +66,12 @@ impl Repo {
         let rows: Vec<PointRow> = s.query_map(params![plugin_id], |r| map_point(r))?.collect::<Result<Vec<_>,_>>()?;
         Ok(rows)
     }
+    pub fn get_point(&self, id: i64) -> anyhow::Result<Option<PointRow>> {
+        let c = self.conn.lock().unwrap();
+        let mut s = c.prepare("SELECT id,plugin_id,variable_id,address,data_type,byte_order,scale,offset_val,var_type,description FROM points WHERE id=?1")?;
+        let mut rows = s.query_map(params![id], |r| map_point(r))?;
+        match rows.next() { Some(Ok(r)) => Ok(Some(r)), Some(Err(e)) => Err(e.into()), None => Ok(None) }
+    }
     pub fn insert_point(&self, plugin_id: i64, var_id: &str, addr: &str, dtype: &str, border: &str, scale: f64, offset_val: f64, vtype: &str, description: &str) -> anyhow::Result<i64> {
         let c = self.conn.lock().unwrap();
         c.execute("INSERT OR REPLACE INTO points(plugin_id,variable_id,address,data_type,byte_order,scale,offset_val,var_type,description) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)", params![plugin_id, var_id, addr, dtype, border, scale, offset_val, vtype, description])?;

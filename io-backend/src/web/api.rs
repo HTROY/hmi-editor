@@ -1,4 +1,4 @@
-//! REST API handlers for plugin/point management
+﻿//! REST API handlers for plugin/point management
 
 use std::sync::Arc;
 use axum::{
@@ -7,10 +7,13 @@ use axum::{
     http::StatusCode,
 };
 use calamine::Reader;
+use tokio::sync::broadcast;
 use serde::{Deserialize, Serialize};
 use crate::db::repo::{Repo, PluginRow, PointRow};
 use crate::monitor::collector::MonitorCollector;
 use crate::monitor::types::*;
+use crate::point::types::WsConfigChangeMessage;
+
 
 pub type AppState = Arc<Repo>;
 
@@ -82,20 +85,59 @@ fn default_dtype() -> String { "uint16".into() }
 fn default_border() -> String { "big_endian".into() }
 fn default_vtype() -> String { "AI".into() }
 
-pub async fn create_point(State(repo): State<AppState>, Json(p): Json<UpsertPoint>) -> Result<Json<serde_json::Value>, StatusCode> {
-    repo.insert_point(p.plugin_id, &p.variable_id, &p.address, &p.data_type, &p.byte_order, p.scale, p.offset_val, &p.var_type, &p.description)
-        .map(|id| Json(serde_json::json!({"id": id})))
-        .map_err(|e| { log::error!("{}", e); StatusCode::INTERNAL_SERVER_ERROR })
+fn send_config_change(broadcast_tx: &broadcast::Sender<String>, action: &str, variable_id: &str, plugin_id: i64) {
+    let msg = WsConfigChangeMessage::new(action, variable_id, plugin_id);
+    if let Ok(json) = serde_json::to_string(&msg) {
+        let _ = broadcast_tx.send(json);
+        log::debug!("Broadcast config_change: {} {}", action, variable_id);
+    }
 }
 
-pub async fn update_point(State(repo): State<AppState>, Path(id): Path<i64>, Json(p): Json<UpsertPoint>) -> Result<StatusCode, StatusCode> {
+pub async fn create_point(
+    State(repo): State<AppState>,
+    Extension(broadcast_tx): Extension<broadcast::Sender<String>>,
+    Json(p): Json<UpsertPoint>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let plugin_id = p.plugin_id;
+    let var_id = p.variable_id.clone();
+    let result = repo.insert_point(p.plugin_id, &p.variable_id, &p.address, &p.data_type, &p.byte_order, p.scale, p.offset_val, &p.var_type, &p.description)
+        .map(|id| Json(serde_json::json!({"id": id})))
+        .map_err(|e| { log::error!("{}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    send_config_change(&broadcast_tx, "create", &var_id, plugin_id);
+    Ok(result)
+}
+
+pub async fn update_point(
+    State(repo): State<AppState>,
+    Extension(broadcast_tx): Extension<broadcast::Sender<String>>,
+    Path(id): Path<i64>,
+    Json(p): Json<UpsertPoint>,
+) -> Result<StatusCode, StatusCode> {
+    let plugin_id = p.plugin_id;
+    let var_id = p.variable_id.clone();
     repo.update_point(id, &p.variable_id, &p.address, &p.data_type, &p.byte_order, p.scale, p.offset_val, &p.var_type, &p.description)
         .map(|_| StatusCode::OK)
-        .map_err(|e| { log::error!("{}", e); StatusCode::INTERNAL_SERVER_ERROR })
+        .map_err(|e| { log::error!("{}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    send_config_change(&broadcast_tx, "update", &var_id, plugin_id);
+    Ok(StatusCode::OK)
 }
 
-pub async fn delete_point(State(repo): State<AppState>, Path(id): Path<i64>) -> StatusCode {
-    repo.delete_point(id).map(|_| StatusCode::OK).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+pub async fn delete_point(
+    State(repo): State<AppState>,
+    Extension(broadcast_tx): Extension<broadcast::Sender<String>>,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, StatusCode> {
+    // Get point info before deletion for the notification
+    let point_info = repo.get_point(id).map_err(|e| { log::error!("{}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    let (plugin_id, var_id) = match &point_info {
+        Some(p) => (p.plugin_id, p.variable_id.clone()),
+        None => (0, String::new()),
+    };
+    repo.delete_point(id).map_err(|e| { log::error!("{}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    if !var_id.is_empty() {
+        send_config_change(&broadcast_tx, "delete", &var_id, plugin_id);
+    }
+    Ok(StatusCode::OK)
 }
 
 pub async fn import_excel(
@@ -115,15 +157,15 @@ pub async fn import_excel(
                 for (i, row) in rows.enumerate() {
                     if i == 0 { continue; }
                     if row.len() < 7 { continue; }
-                    let var_id = row[0].to_string();
-                    let addr = row[1].to_string();
-                    if var_id.is_empty() || addr.is_empty() { continue; }
-                    let dtype = row.get(2).map(|c| c.to_string()).unwrap_or_else(|| "uint16".into());
-                    let border = row.get(3).map(|c| c.to_string()).unwrap_or_else(|| "big_endian".into());
-                    let scale = row.get(4).and_then(|c| c.to_string().parse().ok()).unwrap_or(1.0);
-                    let off = row.get(5).and_then(|c| c.to_string().parse().ok()).unwrap_or(0.0);
-                    let vtype = row.get(6).map(|c| c.to_string()).unwrap_or_else(|| "AI".into());
-                    let desc = row.get(7).map(|c| c.to_string()).unwrap_or_default();
+                    let var_id = row[0].to_string().trim().to_string();
+                    if var_id.is_empty() { continue; }
+                    let addr = row[1].to_string().trim().to_string();
+                    let dtype = if row.len() > 2 { row[2].to_string().trim().to_string() } else { "uint16".into() };
+                    let border = if row.len() > 3 { row[3].to_string().trim().to_string() } else { "big_endian".into() };
+                    let scale: f64 = if row.len() > 4 { row[4].to_string().trim().parse().unwrap_or(1.0) } else { 1.0 };
+                    let off: f64 = if row.len() > 5 { row[5].to_string().trim().parse().unwrap_or(0.0) } else { 0.0 };
+                    let vtype = if row.len() > 6 { row[6].to_string().trim().to_string() } else { "AI".into() };
+                    let desc = if row.len() > 7 { row[7].to_string().trim().to_string() } else { String::new() };
                     if let Err(e) = repo.insert_point(plugin_id, &var_id, &addr, &dtype, &border, scale, off, &vtype, &desc) {
                         log::error!("import row {}: {}", i, e);
                     } else { imported += 1; }
@@ -235,3 +277,5 @@ pub async fn monitor_plugin_packets(
     let limit = q.limit.unwrap_or(100).min(1000);
     Json(monitor.get_packets(&name, limit))
 }
+
+// ============================================================

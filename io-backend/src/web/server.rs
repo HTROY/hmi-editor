@@ -2,10 +2,18 @@
 use axum::{Router, routing::{get, post, put}, Extension};
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
+use tokio::sync::broadcast;
 use crate::db::repo::Repo;
 use crate::monitor::collector::MonitorCollector;
+use crate::plugin::registry::PluginRegistry;
 
-pub async fn run_web_server(repo: Arc<Repo>, monitor: Arc<MonitorCollector>, port: u16) -> anyhow::Result<()> {
+pub async fn run_web_server(
+    repo: Arc<Repo>,
+    monitor: Arc<MonitorCollector>,
+    _registry: Arc<PluginRegistry>,
+    broadcast_tx: broadcast::Sender<String>,
+    port: u16,
+) -> anyhow::Result<()> {
     let app = Router::new()
         // Plugin CRUD
         .route("/api/plugins", get(super::api::list_plugins).post(super::api::create_plugin))
@@ -27,6 +35,8 @@ pub async fn run_web_server(repo: Arc<Repo>, monitor: Arc<MonitorCollector>, por
         .fallback_service(ServeDir::new("web-ui"))
         .layer(CorsLayer::permissive())
         .layer(Extension(monitor))
+        .layer(Extension(_registry))
+        .layer(Extension(broadcast_tx))
         .with_state(repo);
 
     let addr = format!("0.0.0.0:{}", port);

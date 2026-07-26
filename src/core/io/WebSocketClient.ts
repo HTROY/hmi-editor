@@ -6,12 +6,19 @@ import type { WebSocketConfig, DataPoint } from "./types";
 // 连接后端实时数据服务，推送变量值变化
 // ============================================================
 
+export type ConfigChangeHandler = (event: {
+  action: string;
+  variableId: string;
+  pluginId: number;
+}) => void;
+
 export class WebSocketClient extends DataSource {
   declare config: WebSocketConfig;
   private ws: WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private shouldReconnect = false;
+  private configChangeHandlers: Set<ConfigChangeHandler> = new Set();
 
   constructor(config: Partial<WebSocketConfig> = {}) {
     super({
@@ -35,6 +42,7 @@ export class WebSocketClient extends DataSource {
       try {
         const ws = new WebSocket(this.config.url);
         ws.onopen = () => {
+          console.log("[WebSocket] Connected to", this.config.url);
           this.ws = ws;
           this.emitStatus("connected");
           this.startHeartbeat();
@@ -42,8 +50,10 @@ export class WebSocketClient extends DataSource {
         };
 
         ws.onmessage = (event) => {
+          console.log("[WebSocket] Raw message received, length:", typeof event.data === "string" ? event.data.length : "binary");
           try {
             const msg = JSON.parse(event.data);
+            console.log("[WebSocket] Parsed:", msg.type, "points:", msg.data?.length ?? "single");
             this.handleMessage(msg);
           } catch {
             // 尝试按行解析（多个 JSON 对象）
@@ -59,6 +69,7 @@ export class WebSocketClient extends DataSource {
         };
 
         ws.onerror = (err) => {
+          console.error("[WebSocket] Connection error:", err);
           this.emitError(
             new Error(
               "WebSocket 连接错误: " + ((err as any)?.message ?? "未知"),
@@ -67,7 +78,8 @@ export class WebSocketClient extends DataSource {
           reject(err);
         };
 
-        ws.onclose = () => {
+        ws.onclose = (ev) => {
+          console.log("[WebSocket] Closed, code:", ev.code, "reason:", ev.reason);
           this.ws = null;
           this.stopHeartbeat();
           this.emitStatus("disconnected");
@@ -105,15 +117,54 @@ export class WebSocketClient extends DataSource {
     this.send("subscribe", { variableId });
   }
 
+  /** 批量订阅变量列表 */
+  subscribeVariables(variableIds: string[]): void {
+    const msg = JSON.stringify({ command: "subscribe", variableIds });
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(msg);
+    }
+  }
+
   /** 控制命令 */
   sendControl(variableId: string, value: number | boolean): void {
     this.send("control", { variableId, value });
   }
 
+  /** 订阅配置变更通知 */
+  onConfigChange(handler: ConfigChangeHandler): () => void {
+    this.configChangeHandlers.add(handler);
+    return () => this.configChangeHandlers.delete(handler);
+  }
+
   // ---- 内部 ----
 
   private handleMessage(msg: any): void {
-    // 支持多种数据格式
+    // Handle config change notifications
+    if (msg.type === "config_change") {
+      for (const handler of this.configChangeHandlers) {
+        handler({
+          action: msg.action ?? "",
+          variableId: msg.variable_id ?? "",
+          pluginId: msg.plugin_id ?? 0,
+        });
+      }
+      return;
+    }
+
+    // Handle snapshot (initial bulk data on connect)
+    if (msg.type === "snapshot" && Array.isArray(msg.data)) {
+      for (const p of msg.data) {
+        this.emitData({
+          id: p.id ?? p.variableId ?? p.tag ?? "",
+          value: p.value ?? p.val ?? 0,
+          quality: p.quality ?? "good",
+          timestamp: p.timestamp ?? Date.now(),
+        });
+      }
+      return;
+    }
+
+    // Handle regular data messages
     if (msg.type === "data" || msg.data) {
       const points = Array.isArray(msg.data) ? msg.data : [msg.data ?? msg];
       for (const p of points) {

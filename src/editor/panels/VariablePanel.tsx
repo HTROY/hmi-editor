@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import type { VariableDef, VariableType } from "../../core/variables/types";
 
@@ -16,6 +16,7 @@ const defaultGroups = [
 
 export function VariablePanel() {
   const varManager = useEditorStore((s) => s.varManager);
+  useEditorStore((s) => s.varRevision); // re-render on var def changes
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -218,7 +219,7 @@ export function VariablePanel() {
           onClick={handleAddPreset}
           title="快速添加预设变量"
         >
-          📋 预设
+          ?? 预设
         </button>
       </div>
 
@@ -230,7 +231,7 @@ export function VariablePanel() {
               {editingId ? "编辑" : "新建"}变量
             </span>
             <button className="binding-remove" onClick={resetForm}>
-              ✕ 取消
+              取消
             </button>
           </div>
           <div className="prop-group">
@@ -410,14 +411,14 @@ export function VariablePanel() {
                     title="编辑"
                     onClick={() => handleEdit(def)}
                   >
-                    ✎
+                    编辑
                   </button>
                   <button
                     className="btn-icon"
                     title="删除"
                     onClick={() => handleDelete(def.id)}
                   >
-                    ✕
+                    删除
                   </button>
                 </div>
               </div>
