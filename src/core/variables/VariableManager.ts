@@ -196,6 +196,16 @@ export class VariableManager {
 
   // ---- 工具 ----
 
+  /** 替换所有变量定义（清除旧数据并批量导入） */
+  replaceAll(defs: VariableDef[]): void {
+    this.stopSimulation();
+    this.defs.clear();
+    this.values.clear();
+    this.listeners.clear();
+    this.globalListeners.clear();
+    for (const d of defs) this.define(d);
+  }
+
   clear(): void {
     this.stopSimulation();
     this.defs.clear();

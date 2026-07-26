@@ -1,0 +1,99 @@
+﻿# HMI I/O Backend Configuration
+# ================================
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  path: "/iscs/data"
+
+plugins:
+  directory: "./plugins"
+  scan_interval_ms: 500
+
+  instances:
+    - name: "modbus_tcp"
+      wasm_file: "modbus_tcp.wasm"
+      config:
+        host: "127.0.0.1"
+        port: 502
+        slave_id: 1
+      points:
+        - id: "STA1_211_ACB_STATUS"
+          address: "coil:0"
+          data_type: "bool"
+          var_type: "DI"
+        - id: "STA1_211_IA"
+          address: "holding_register:0"
+          data_type: "uint16"
+          scale: 0.1
+          var_type: "AI"
+        - id: "STA1_BUS_VOLTAGE"
+          address: "holding_register:2"
+          data_type: "uint16"
+          scale: 0.1
+          var_type: "AI"
+        - id: "STA1_FAN_1_STATUS"
+          address: "coil:1"
+          data_type: "bool"
+          var_type: "DI"
+        - id: "STA1_FAN_1_SPEED"
+          address: "holding_register:4"
+          data_type: "uint16"
+          var_type: "AI"
+        - id: "STA1_TEMP_ZONE1"
+          address: "holding_register:6"
+          data_type: "uint16"
+          scale: 0.1
+          var_type: "AI"
+        - id: "STA1_211_ACB_CTRL"
+          address: "coil:10"
+          data_type: "bool"
+          var_type: "DO"
+
+    - name: "opc_ua"
+      wasm_file: "opc_ua.wasm"
+      config:
+        endpoint: "opc.tcp://127.0.0.1:4840"
+      points:
+        - id: "STA1_TEMP_ZONE1"
+          address: "ns=2;s=Temperature.Zone1"
+          var_type: "AI"
+        - id: "STA1_TEMP_ZONE2"
+          address: "ns=2;s=Temperature.Zone2"
+          var_type: "AI"
+
+    - name: "iec104"
+      wasm_file: "iec104.wasm"
+      config:
+        host: "127.0.0.1"
+        port: 2404
+        common_address: 1
+      points:
+        - id: "STA1_211_ACB_STATUS"
+          address: "1001"
+          data_type: "bool"
+          var_type: "DI"
+        - id: "STA1_212_ACB_STATUS"
+          address: "1002"
+          data_type: "bool"
+          var_type: "DI"
+        - id: "STA1_211_IA"
+          address: "1003"
+          data_type: "float32"
+          var_type: "AI"
+        - id: "STA1_211_IB"
+          address: "1004"
+          data_type: "float32"
+          var_type: "AI"
+        - id: "STA1_BUS_VOLTAGE"
+          address: "1005"
+          data_type: "float32"
+          var_type: "AI"
+        - id: "STA1_FAN_1_STATUS"
+          address: "3001"
+          data_type: "bool"
+          var_type: "DI"
+        - id: "STA1_FAN_1_SPEED"
+          address: "3002"
+          data_type: "float32"
+          var_type: "AI"

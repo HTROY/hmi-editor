@@ -1,1 +1,7 @@
 node_modules/
+io-backend/target/
+io-backend/*.log
+tsconfig.tsbuildinfo
+io-backend/plugins-src/*/target/
+*.bak
+io-backend/hmi_io.db

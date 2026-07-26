@@ -21,12 +21,66 @@ export function ConnectionPanel() {
   );
   const [iec104Host, setIec104Host] = useState("192.168.1.100");
   const [iec104Port, setIec104Port] = useState(2404);
+  const [ioBackendUrl, setIoBackendUrl] = useState("ws://localhost:8080/iscs/data");
+  const [ioBackendApiUrl, setIoBackendApiUrl] = useState("http://localhost:8081");
+  const [fetchingVars, setFetchingVars] = useState(false);
+  const [varFetchMsg, setVarFetchMsg] = useState<string | null>(null);
+
+  // 跟踪是否已经为本次连接拉取过变量（防止重复拉取）
+  const [hasFetched, setHasFetched] = useState(false);
+
+  // 用 ref 追踪状态，避免 useEffect 闭包过期
+  const hasFetchedRef = React.useRef(hasFetched);
+  hasFetchedRef.current = hasFetched;
+  const ioBackendApiUrlRef = React.useRef(ioBackendApiUrl);
+  ioBackendApiUrlRef.current = ioBackendApiUrl;
 
   // 监听状态变化
   useEffect(() => {
     if (!dataBridge) return;
+
+    const doFetch = () => {
+      setHasFetched(true);
+      setFetchingVars(true);
+      setVarFetchMsg(null);
+      dataBridge
+        .fetchVariablesFromBackend(ioBackendApiUrlRef.current)
+        .then((count) => {
+          setFetchingVars(false);
+          setVarFetchMsg("已导入 " + count + " 个变量");
+        })
+        .catch((err) => {
+          setFetchingVars(false);
+          setVarFetchMsg("拉取失败: " + (err.message ?? "未知错误"));
+        });
+    };
+
+    // 面板挂载时检查是否已连接
+    if (
+      dataBridge.active === "io_backend" &&
+      dataBridge.getStatus("websocket") === "connected" &&
+      !hasFetchedRef.current
+    ) {
+      doFetch();
+    }
+
     const unsub = dataBridge.onStatus((source, status) => {
       setStatuses((prev) => ({ ...prev, [source]: status }));
+
+      // 当 io_backend WebSocket 连接成功时，自动拉取变量列表
+      if (
+        source === "websocket" &&
+        status === "connected" &&
+        dataBridge.active === "io_backend" &&
+        !hasFetchedRef.current
+      ) {
+        doFetch();
+      }
+
+      // 断开时重置拉取标记
+      if (source === "websocket" && status === "disconnected") {
+        setHasFetched(false);
+      }
     });
     return unsub;
   }, [dataBridge]);
@@ -34,11 +88,63 @@ export function ConnectionPanel() {
   const handleSourceChange = (source: ActiveSource) => {
     if (simRunning) toggleSimulation();
     setActiveSource(source);
-    dataBridge?.setActiveSource(source);
+
+    // 只停止当前数据源，不自动连接（等待用户点击「连接」按钮）
+    if (dataBridge?.active !== "simulation") {
+      dataBridge?.stop();
+    }
+
+    // 预配置 io_backend 的 WebSocket URL
+    if (source === "io_backend") {
+      dataBridge?.wsClient.updateConfig({ url: ioBackendUrl });
+    }
+
+    // 切换数据源时重置拉取状态
+    setHasFetched(false);
+    setFetchingVars(false);
+    setVarFetchMsg(null);
+  };
+
+
+  // 手动重新拉取变量列表（不重新连接）
+  const handleRefreshVariables = () => {
+    if (!dataBridge) return;
+    setHasFetched(false);
+    setFetchingVars(true);
+    setVarFetchMsg(null);
+    dataBridge
+      .fetchVariablesFromBackend(ioBackendApiUrlRef.current)
+      .then((count) => {
+        setFetchingVars(false);
+        setVarFetchMsg("已导入 " + count + " 个变量");
+      })
+      .catch((err) => {
+        setFetchingVars(false);
+        setVarFetchMsg("拉取失败: " + (err.message ?? "未知错误"));
+      });
   };
 
   const handleConnect = () => {
     if (simRunning) toggleSimulation();
+
+    // 断开旧连接
+    dataBridge?.stop();
+
+    // 配置 WebSocket URL
+    if (activeSource === "io_backend") {
+      dataBridge?.wsClient.updateConfig({ url: ioBackendUrl });
+      setWsConfig({ url: ioBackendUrl });
+    } else if (activeSource === "websocket") {
+      dataBridge?.wsClient.updateConfig({ url: wsUrl });
+      setWsConfig({ url: wsUrl });
+    }
+
+    // 重置拉取状态
+    setHasFetched(false);
+    setFetchingVars(false);
+    setVarFetchMsg(null);
+
+    // 建立连接
     dataBridge?.setActiveSource(activeSource);
   };
 
@@ -101,6 +207,11 @@ export function ConnectionPanel() {
               label: "WebSocket",
               desc: "连接后端实时服务",
             },
+            {
+              key: "io_backend" as ActiveSource,
+              label: "IO 后端",
+              desc: "连接 Rust WASM 协议后端（Modbus/OPC/IEC104）",
+            },
           ].map((src) => (
             <label
               key={src.key}
@@ -122,6 +233,54 @@ export function ConnectionPanel() {
           ))}
         </div>
       </div>
+
+      {/* IO 后端配置 */}
+      {activeSource === "io_backend" && (
+        <div className="conn-section">
+          <div className="conn-section-title">IO 后端配置</div>
+          <div className="prop-group">
+            <label>WebSocket 地址</label>
+            <input
+              value={ioBackendUrl}
+              onChange={(e) => setIoBackendUrl(e.target.value)}
+              placeholder="ws://localhost:8080/iscs/data"
+            />
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
+            Rust 后端服务默认监听 ws://localhost:8080/iscs/data
+          </div>
+          <div className="prop-group">
+            <label>REST API 地址</label>
+            <input
+              value={ioBackendApiUrl}
+              onChange={(e) => setIoBackendApiUrl(e.target.value)}
+              placeholder="http://localhost:8081"
+            />
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
+            连接成功后自动从此地址拉取变量列表（GET /api/points）
+          </div>
+          {fetchingVars && (
+            <div style={{ fontSize: 12, color: "var(--warning)", marginTop: 6 }}>
+              正在拉取变量列表...
+            </div>
+          )}
+          {varFetchMsg && (
+            <div style={{ fontSize: 12, color: varFetchMsg.startsWith("已导入") ? "var(--success)" : "var(--danger)", marginTop: 6 }}>
+              {varFetchMsg}
+            </div>
+          )}
+          {dataBridge?.getStatus("websocket") === "connected" && !fetchingVars && (
+            <button
+              className="btn btn-sm"
+              style={{ marginTop: 8 }}
+              onClick={handleRefreshVariables}
+            >
+              🔄 刷新变量列表
+            </button>
+          )}
+        </div>
+      )}
 
       {/* WebSocket 配置 */}
       {activeSource === "websocket" && (

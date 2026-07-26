@@ -28,14 +28,25 @@ export function VariablePanel() {
     unit: "",
   });
 
+  // 订阅值变化以实时刷新
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    if (!varManager) return;
+    const unsub = varManager.subscribeAll(() => forceUpdate((n) => n + 1));
+    return unsub;
+  }, [varManager]);
+
   const allDefs = varManager?.getAllDefs() ?? [];
-  const filteredDefs = allDefs.filter(
-    (d) =>
-      !filter ||
-      d.id.includes(filter) ||
-      d.name.includes(filter) ||
-      d.group.includes(filter),
-  );
+  const filteredDefs = allDefs.filter((d) => {
+    if (!filter) return true;
+    const q = filter.toLowerCase();
+    return (
+      d.id.toLowerCase().includes(q) ||
+      d.name.toLowerCase().includes(q) ||
+      (d.description && d.description.toLowerCase().includes(q)) ||
+      d.group.toLowerCase().includes(q)
+    );
+  });
 
   const resetForm = () => {
     setForm({
@@ -188,35 +199,47 @@ export function VariablePanel() {
     <div className="panel">
       <div className="panel-title">点表管理</div>
 
-      <div className="binding-actions">
+      {/* 工具栏 — 搜索 & 操作 */}
+      <div className="variable-toolbar">
         <input
           className="binding-filter"
-          placeholder="搜索变量ID/名称..."
+          placeholder="搜索 ID / 名称 / 描述…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
         <button
-          className="btn btn-sm"
-          onClick={() => {
-            resetForm();
-            setShowForm(true);
-          }}
+          className="variable-action-btn primary"
+          onClick={() => setShowForm(true)}
         >
-          新建
+          ＋ 添加
         </button>
-        <button className="btn btn-sm" onClick={handleAddPreset}>
-          预设
+        <button
+          className="variable-action-btn"
+          onClick={handleAddPreset}
+          title="快速添加预设变量"
+        >
+          📋 预设
         </button>
       </div>
 
+      {/* 添加 / 编辑表单 */}
       {showForm && (
-        <div className="binding-form">
+        <div className="binding-card fade-in">
+          <div className="binding-header">
+            <span className="binding-target">
+              {editingId ? "编辑" : "新建"}变量
+            </span>
+            <button className="binding-remove" onClick={resetForm}>
+              ✕ 取消
+            </button>
+          </div>
           <div className="prop-group">
-            <label>ID*</label>
+            <label>变量 ID</label>
             <input
+              disabled={!!editingId}
               value={form.id ?? ""}
               onChange={(e) => setForm({ ...form, id: e.target.value })}
-              placeholder="变量ID"
+              placeholder="如 STA1_211_ACB_STATUS"
             />
           </div>
           <div className="prop-group">
@@ -224,6 +247,7 @@ export function VariablePanel() {
             <input
               value={form.name ?? ""}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="如 211 断路器状态"
             />
           </div>
           <div className="prop-group">
@@ -234,10 +258,10 @@ export function VariablePanel() {
                 setForm({ ...form, type: e.target.value as VariableType })
               }
             >
-              <option value="DI">DI (数字输入)</option>
-              <option value="DO">DO (数字输出)</option>
-              <option value="AI">AI (模拟输入)</option>
-              <option value="AO">AO (模拟输出)</option>
+              <option value="DI">DI — 开关量输入</option>
+              <option value="DO">DO — 开关量输出</option>
+              <option value="AI">AI — 模拟量输入</option>
+              <option value="AO">AO — 模拟量输出</option>
             </select>
           </div>
           <div className="prop-group">
@@ -245,6 +269,7 @@ export function VariablePanel() {
             <input
               value={form.address ?? ""}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
+              placeholder="如 104.1.1.243.0"
             />
           </div>
           <div className="prop-group">
@@ -264,29 +289,32 @@ export function VariablePanel() {
             <>
               <div className="prop-group">
                 <label>量程</label>
-                <input
-                  type="number"
-                  style={{ width: "45%" }}
-                  value={form.min}
-                  onChange={(e) =>
-                    setForm({ ...form, min: Number(e.target.value) })
-                  }
-                />
-                <span>~</span>
-                <input
-                  type="number"
-                  style={{ width: "45%" }}
-                  value={form.max}
-                  onChange={(e) =>
-                    setForm({ ...form, max: Number(e.target.value) })
-                  }
-                />
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input
+                    type="number"
+                    style={{ flex: 1 }}
+                    value={form.min}
+                    onChange={(e) =>
+                      setForm({ ...form, min: Number(e.target.value) })
+                    }
+                  />
+                  <span style={{ color: "var(--text-muted)" }}>~</span>
+                  <input
+                    type="number"
+                    style={{ flex: 1 }}
+                    value={form.max}
+                    onChange={(e) =>
+                      setForm({ ...form, max: Number(e.target.value) })
+                    }
+                  />
+                </div>
               </div>
               <div className="prop-group">
                 <label>单位</label>
                 <input
                   value={form.unit ?? ""}
                   onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                  placeholder="如 A, V, ℃"
                 />
               </div>
             </>
@@ -298,43 +326,84 @@ export function VariablePanel() {
               onChange={(e) =>
                 setForm({ ...form, description: e.target.value })
               }
+              placeholder="如 合/分"
             />
           </div>
           <div className="binding-form-actions">
-            <button className="btn btn-primary" onClick={handleSave}>
+            <button className="btn btn-primary btn-sm" onClick={handleSave}>
               {editingId ? "更新" : "创建"}
             </button>
-            <button className="btn" onClick={resetForm}>
+            <button className="btn btn-sm" onClick={resetForm}>
               取消
             </button>
           </div>
         </div>
       )}
 
+      {/* 点位列表 */}
       <div className="variable-list">
         {filteredDefs.length === 0 && (
-          <div className="panel-hint">暂无变量，点击"预设"添加示例</div>
+          <div className="panel-hint">
+            {allDefs.length === 0
+              ? '暂无点位，点击「预设」添加示例'
+              : '无匹配点位'}
+          </div>
         )}
         {filteredDefs.map((def) => {
           const vv = varManager?.getValue(def.id);
+          const rawVal = vv?.value;
+          const isBool = def.type === "DI" || def.type === "DO";
+          const displayVal =
+            rawVal !== undefined
+              ? isBool
+                ? rawVal
+                  ? "合"
+                  : "分"
+                : typeof rawVal === "number"
+                  ? rawVal.toFixed(1)
+                  : String(rawVal)
+              : "-";
+
           return (
             <div key={def.id} className="variable-item">
-              <div className="variable-info">
-                <div className="variable-id">
-                  <span className={"var-type-badge " + def.type.toLowerCase()}>
+              {/* 左侧：类型 + ID + 名称 + 描述 */}
+              <div className="variable-item-main">
+                <div className="variable-item-header">
+                  <span
+                    title={
+                      def.type === "DI" ? "开关量输入" : def.type === "DO" ? "开关量输出" : def.type === "AI" ? "模拟量输入" : "模拟量输出"
+                    }
+                    className={"var-type-badge " + def.type.toLowerCase()}
+                  >
                     {def.type}
                   </span>
-                  {def.id}
+                  <span className="variable-id-text" title={def.id}>
+                    {def.id}
+                  </span>
                 </div>
-                <div className="variable-meta">
+                <div className="variable-name" title={def.name}>
                   {def.name}
-                  {def.unit ? " (" + def.unit + ")" : ""}
                 </div>
+                {def.description && (
+                  <div className="variable-desc" title={def.description}>
+                    {def.description}
+                  </div>
+                )}
               </div>
-              <div className="variable-value-area">
-                <span className="variable-value">
-                  {String(vv?.value ?? "-")}
-                </span>
+
+              {/* 右侧：当前值 + 状态 + 操作 */}
+              <div className="variable-item-right">
+                <div className="variable-value-wrap">
+                  <span className="variable-value">{displayVal}</span>
+                  {def.unit && (
+                    <span className="variable-unit">{def.unit}</span>
+                  )}
+                </div>
+                <span
+                  className={
+                    "variable-quality-dot " + (vv?.quality ?? "uncertain")
+                  }
+                />
                 <div className="variable-actions">
                   <button
                     className="btn-icon"
@@ -356,6 +425,20 @@ export function VariablePanel() {
           );
         })}
       </div>
+
+      {/* 底部统计 */}
+      {allDefs.length > 0 && (
+        <div
+          style={{
+            marginTop: "var(--space-2)",
+            fontSize: 10,
+            color: "var(--text-muted)",
+            textAlign: "center",
+          }}
+        >
+          共 {allDefs.length} 个点位
+        </div>
+      )}
     </div>
   );
 }
