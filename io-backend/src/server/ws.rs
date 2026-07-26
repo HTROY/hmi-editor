@@ -1,4 +1,4 @@
-﻿//! WebSocket Server
+//! WebSocket Server
 //!
 //! Provides a tokio-tungstenite WebSocket server that:
 //! - Broadcasts point value updates to connected clients
@@ -6,18 +6,18 @@
 //! - Supports per-client variable subscription filtering
 //! - Receives control commands from clients and routes to plugins
 
+use futures_util::{SinkExt, StreamExt};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use tokio::net::TcpStream;
 use tokio::sync::broadcast;
-use futures_util::{StreamExt, SinkExt};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
-use crate::plugin::registry::PluginRegistry;
 use crate::config::ServerConfig;
+use crate::monitor::collector::MonitorCollector;
+use crate::plugin::registry::PluginRegistry;
 use crate::point::manager::PointManager;
 use crate::point::types::{PointValue, WsDataMessage};
-use crate::monitor::collector::MonitorCollector;
 
 pub async fn run_server(
     config: &ServerConfig,
@@ -36,7 +36,10 @@ pub async fn run_server(
     loop {
         let (stream, peer) = match listener.accept().await {
             Ok(c) => c,
-            Err(e) => { log::error!("Accept error: {}", e); continue; }
+            Err(e) => {
+                log::error!("Accept error: {}", e);
+                continue;
+            }
         };
         log::info!("New connection from {}", peer);
         let bc_rx = broadcast_tx.subscribe();
@@ -95,17 +98,23 @@ async fn handle_connection(
             match bc_rx.recv().await {
                 Ok(msg) => {
                     // Quick check: is this a data message that needs filtering?
-                    let is_data_msg = msg.contains("\"type\":\"data\"") || msg.contains("\"type\": \"data\"");
+                    let is_data_msg =
+                        msg.contains("\"type\":\"data\"") || msg.contains("\"type\": \"data\"");
                     let should_filter: Option<Vec<String>> = if is_data_msg {
                         let sub = sub_ids.lock().unwrap();
-                        if sub.is_empty() { None } else { Some(sub.iter().cloned().collect()) }
+                        if sub.is_empty() {
+                            None
+                        } else {
+                            Some(sub.iter().cloned().collect())
+                        }
                     } else {
                         None // Non-data messages (config_change, etc.) always pass through
                     };
 
                     if let Some(filter_ids) = should_filter {
                         if let Ok(parsed) = serde_json::from_str::<WsDataMessage>(&msg) {
-                            let filtered: Vec<PointValue> = parsed.data
+                            let filtered: Vec<PointValue> = parsed
+                                .data
                                 .into_iter()
                                 .filter(|pv| filter_ids.contains(&pv.id))
                                 .collect();
@@ -115,16 +124,22 @@ async fn handle_connection(
                                     data: filtered,
                                 };
                                 if let Ok(json) = serde_json::to_string(&fmsg) {
-                                    if ws_tx.send(Message::Text(json.into())).await.is_err() { break; }
+                                    if ws_tx.send(Message::Text(json.into())).await.is_err() {
+                                        break;
+                                    }
                                 }
                             }
                         }
                     } else {
                         // No filter - forward everything
-                        if ws_tx.send(Message::Text(msg.into())).await.is_err() { break; }
+                        if ws_tx.send(Message::Text(msg.into())).await.is_err() {
+                            break;
+                        }
                     }
                 }
-                Err(broadcast::error::RecvError::Lagged(n)) => { log::warn!("Client lagged by {}", n); }
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    log::warn!("Client lagged by {}", n);
+                }
                 Err(broadcast::error::RecvError::Closed) => break,
             }
         }
@@ -168,9 +183,14 @@ async fn handle_client_message(
         }
         Some("subscribe") => {
             // Update per-connection subscription filter
-            let variable_ids: Vec<String> = msg.get("variableIds")
+            let variable_ids: Vec<String> = msg
+                .get("variableIds")
                 .and_then(|v| v.as_array())
-                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
                 .unwrap_or_default();
 
             let mut sub = subscribed_ids.lock().unwrap();

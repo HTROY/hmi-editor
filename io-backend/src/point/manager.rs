@@ -1,6 +1,6 @@
-﻿use std::collections::HashMap;
 use crate::config::{AppConfig, PointMapping};
 use crate::point::types::PointValue;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub(crate) struct CachedPoint {
@@ -19,7 +19,10 @@ impl PointManager {
             for pt in &inst.points {
                 points.insert(
                     pt.id.clone(),
-                    CachedPoint { mapping: pt.clone(), last_value: None },
+                    CachedPoint {
+                        mapping: pt.clone(),
+                        last_value: None,
+                    },
                 );
             }
         }
@@ -51,25 +54,45 @@ impl PointManager {
 
     #[cfg(test)]
     pub fn insert_test_point(&mut self, id: &str, mapping: PointMapping) {
-        self.points.insert(id.to_string(), CachedPoint { mapping, last_value: None });
+        self.points.insert(
+            id.to_string(),
+            CachedPoint {
+                mapping,
+                last_value: None,
+            },
+        );
     }
 
-    pub fn point_ids(&self) -> Vec<String> { self.points.keys().cloned().collect() }
+    pub fn point_ids(&self) -> Vec<String> {
+        self.points.keys().cloned().collect()
+    }
 
     pub fn get_all_values(&self) -> Vec<PointValue> {
-        self.points.values()
+        self.points
+            .values()
             .filter_map(|cp| cp.last_value.clone())
             .collect()
     }
 
-    pub fn count(&self) -> usize { self.points.len() }
+    /// 检查指定 variable_id 是否在管理范围内
+    pub fn has_point(&self, id: &str) -> bool {
+        self.points.contains_key(id)
+    }
+
+    pub fn count(&self) -> usize {
+        self.points.len()
+    }
 }
 
 fn apply_scaling(raw: PointValue, scale: f64, offset: f64) -> PointValue {
-    if (scale - 1.0).abs() < f64::EPSILON && offset.abs() < f64::EPSILON { return raw; }
+    if (scale - 1.0).abs() < f64::EPSILON && offset.abs() < f64::EPSILON {
+        return raw;
+    }
     if let Some(num) = raw.numeric_value() {
         PointValue::new(&raw.id, num * scale + offset, &raw.quality, raw.timestamp)
-    } else { raw }
+    } else {
+        raw
+    }
 }
 
 #[cfg(test)]
@@ -77,8 +100,15 @@ mod tests {
     use super::*;
 
     fn make_mapping(id: &str) -> PointMapping {
-        PointMapping { id: id.into(), address: "addr".into(), data_type: "uint16".into(),
-            byte_order: "big_endian".into(), scale: 1.0, offset: 0.0, var_type: "AI".into() }
+        PointMapping {
+            id: id.into(),
+            address: "addr".into(),
+            data_type: "uint16".into(),
+            byte_order: "big_endian".into(),
+            scale: 1.0,
+            offset: 0.0,
+            var_type: "AI".into(),
+        }
     }
 
     #[test]
@@ -86,7 +116,9 @@ mod tests {
         let config = AppConfig::default_config();
         let mut mgr = PointManager::from_config(&config);
         mgr.insert_test_point("pt1", make_mapping("pt1"));
-        assert!(mgr.update(PointValue::new("pt1", 42.0, "good", 1000)).is_some());
+        assert!(mgr
+            .update(PointValue::new("pt1", 42.0, "good", 1000))
+            .is_some());
     }
 
     #[test]
@@ -94,8 +126,12 @@ mod tests {
         let config = AppConfig::default_config();
         let mut mgr = PointManager::from_config(&config);
         mgr.insert_test_point("pt2", make_mapping("pt2"));
-        assert!(mgr.update(PointValue::new("pt2", 100.0, "good", 1000)).is_some());
-        assert!(mgr.update(PointValue::new("pt2", 100.0, "good", 2000)).is_none());
+        assert!(mgr
+            .update(PointValue::new("pt2", 100.0, "good", 1000))
+            .is_some());
+        assert!(mgr
+            .update(PointValue::new("pt2", 100.0, "good", 2000))
+            .is_none());
     }
 
     #[test]
@@ -103,8 +139,12 @@ mod tests {
         let config = AppConfig::default_config();
         let mut mgr = PointManager::from_config(&config);
         mgr.insert_test_point("pt3", make_mapping("pt3"));
-        assert!(mgr.update(PointValue::new("pt3", 50.0, "good", 1000)).is_some());
-        assert!(mgr.update(PointValue::new("pt3", 75.0, "good", 2000)).is_some());
+        assert!(mgr
+            .update(PointValue::new("pt3", 50.0, "good", 1000))
+            .is_some());
+        assert!(mgr
+            .update(PointValue::new("pt3", 75.0, "good", 2000))
+            .is_some());
     }
 
     #[test]
@@ -112,9 +152,12 @@ mod tests {
         let config = AppConfig::default_config();
         let mut mgr = PointManager::from_config(&config);
         let mut m = make_mapping("pt4");
-        m.scale = 0.5; m.offset = 10.0;
+        m.scale = 0.5;
+        m.offset = 10.0;
         mgr.insert_test_point("pt4", m);
-        let r = mgr.update(PointValue::new("pt4", 100.0, "good", 1000)).unwrap();
+        let r = mgr
+            .update(PointValue::new("pt4", 100.0, "good", 1000))
+            .unwrap();
         assert!((r.numeric_value().unwrap() - 60.0).abs() < 0.01);
     }
 

@@ -1,10 +1,10 @@
 //! MonitorCollector - thread-safe shared state for all plugin monitoring data
 
+use crate::monitor::types::*;
+use crate::point::types::PointValue;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use crate::monitor::types::*;
-use crate::point::types::PointValue;
 
 const MAX_PACKETS_PER_PLUGIN: usize = 500;
 
@@ -38,50 +38,71 @@ impl MonitorCollector {
         })
     }
 
-    pub fn register_plugin(self: &Arc<Self>, name: &str, wasm_file: &str, points: &[(String, String, String, String, f64, f64, String)]) {
+    pub fn register_plugin(
+        self: &Arc<Self>,
+        name: &str,
+        wasm_file: &str,
+        points: &[(String, String, String, String, f64, f64, String)],
+    ) {
         let mut inner = self.inner.lock().unwrap();
         let now_ms = inner.server_start.elapsed().as_millis() as u64;
         let mut point_map = HashMap::new();
         let mut config_map = HashMap::new();
         let mut addr_map = HashMap::new();
         for (var_id, addr, var_type, data_type, scale, offset, byte_order) in points {
-            point_map.insert(var_id.clone(), LivePointInfo {
-                variable_id: var_id.clone(),
-                address: addr.clone(),
-                var_type: var_type.clone(),
-                value: serde_json::Value::Null,
-                quality: "unknown".into(),
-                timestamp_ms: 0,
-                age_ms: 0,
-                data_type: data_type.clone(),
-                byte_order: byte_order.clone(),
-                scale: *scale,
-                offset_val: *offset,
-            });
-            config_map.insert(var_id.clone(), (addr.clone(), var_type.clone(), data_type.clone(), *scale, *offset, byte_order.clone()));
+            point_map.insert(
+                var_id.clone(),
+                LivePointInfo {
+                    variable_id: var_id.clone(),
+                    address: addr.clone(),
+                    var_type: var_type.clone(),
+                    value: serde_json::Value::Null,
+                    quality: "unknown".into(),
+                    timestamp_ms: 0,
+                    age_ms: 0,
+                    data_type: data_type.clone(),
+                    byte_order: byte_order.clone(),
+                    scale: *scale,
+                    offset_val: *offset,
+                },
+            );
+            config_map.insert(
+                var_id.clone(),
+                (
+                    addr.clone(),
+                    var_type.clone(),
+                    data_type.clone(),
+                    *scale,
+                    *offset,
+                    byte_order.clone(),
+                ),
+            );
             if !addr.is_empty() {
                 addr_map.insert(addr.clone(), var_id.clone());
             }
         }
-        inner.plugins.insert(name.to_string(), PluginMonitorState {
-            status: PluginStatus {
-                name: name.to_string(),
-                wasm_file: wasm_file.to_string(),
-                connection_state: 1,
-                connection_label: "connecting".into(),
-                scan_count: 0,
-                error_count: 0,
-                last_scan_time_ms: 0,
-                last_error: String::new(),
-                last_error_time_ms: 0,
-                uptime_ms: 0,
-                start_time_ms: now_ms,
+        inner.plugins.insert(
+            name.to_string(),
+            PluginMonitorState {
+                status: PluginStatus {
+                    name: name.to_string(),
+                    wasm_file: wasm_file.to_string(),
+                    connection_state: 1,
+                    connection_label: "connecting".into(),
+                    scan_count: 0,
+                    error_count: 0,
+                    last_scan_time_ms: 0,
+                    last_error: String::new(),
+                    last_error_time_ms: 0,
+                    uptime_ms: 0,
+                    start_time_ms: now_ms,
+                },
+                points: point_map,
+                packets: Vec::with_capacity(MAX_PACKETS_PER_PLUGIN),
+                point_configs: config_map,
+                addr_to_var: addr_map,
             },
-            points: point_map,
-            packets: Vec::with_capacity(MAX_PACKETS_PER_PLUGIN),
-            point_configs: config_map,
-            addr_to_var: addr_map,
-        });
+        );
     }
 
     pub fn set_connection_state(self: &Arc<Self>, plugin_name: &str, state: i32) {
@@ -146,34 +167,52 @@ impl MonitorCollector {
                 existing.age_ms = now_epoch.saturating_sub(pv.timestamp);
             } else {
                 // Point not pre-registered - add dynamically with config lookup
-                let (addr, vtype, dtype, scale, offset, border) = p.point_configs
-                    .get(&var_id)
-                    .cloned()
-                    .unwrap_or_else(|| {
+                let (addr, vtype, dtype, scale, offset, border) =
+                    p.point_configs.get(&var_id).cloned().unwrap_or_else(|| {
                         // Try address-based config lookup as fallback
-                        p.addr_to_var.get(&pv.id)
+                        p.addr_to_var
+                            .get(&pv.id)
                             .and_then(|vid| p.point_configs.get(vid))
                             .cloned()
-                            .unwrap_or_else(|| (String::new(), "AI".into(), "uint16".into(), 1.0, 0.0, "big_endian".into()))
+                            .unwrap_or_else(|| {
+                                (
+                                    String::new(),
+                                    "AI".into(),
+                                    "uint16".into(),
+                                    1.0,
+                                    0.0,
+                                    "big_endian".into(),
+                                )
+                            })
                     });
-                p.points.insert(var_id.clone(), LivePointInfo {
-                    variable_id: var_id,
-                    address: addr,
-                    var_type: vtype,
-                    value: pv.value.clone(),
-                    quality: pv.quality.clone(),
-                    timestamp_ms: pv.timestamp,
-                    age_ms: now_epoch.saturating_sub(pv.timestamp),
-                    data_type: dtype,
-                    byte_order: border,
-                    scale,
-                    offset_val: offset,
-                });
+                p.points.insert(
+                    var_id.clone(),
+                    LivePointInfo {
+                        variable_id: var_id,
+                        address: addr,
+                        var_type: vtype,
+                        value: pv.value.clone(),
+                        quality: pv.quality.clone(),
+                        timestamp_ms: pv.timestamp,
+                        age_ms: now_epoch.saturating_sub(pv.timestamp),
+                        data_type: dtype,
+                        byte_order: border,
+                        scale,
+                        offset_val: offset,
+                    },
+                );
             }
         }
     }
 
-    pub fn log_packet(self: &Arc<Self>, plugin_name: &str, direction: &str, protocol: &str, hex_dump: &str, summary: &str) {
+    pub fn log_packet(
+        self: &Arc<Self>,
+        plugin_name: &str,
+        direction: &str,
+        protocol: &str,
+        hex_dump: &str,
+        summary: &str,
+    ) {
         let mut inner = self.inner.lock().unwrap();
         let now_ms = inner.server_start.elapsed().as_millis() as u64;
         if let Some(p) = inner.plugins.get_mut(plugin_name) {
@@ -206,11 +245,15 @@ impl MonitorCollector {
     pub fn get_snapshot(self: &Arc<Self>) -> MonitorSnapshot {
         let inner = self.inner.lock().unwrap();
         let now_ms = inner.server_start.elapsed().as_millis() as u64;
-        let mut plugins: Vec<PluginStatus> = inner.plugins.values().map(|p| {
-            let mut s = p.status.clone();
-            s.uptime_ms = now_ms - s.start_time_ms;
-            s
-        }).collect();
+        let mut plugins: Vec<PluginStatus> = inner
+            .plugins
+            .values()
+            .map(|p| {
+                let mut s = p.status.clone();
+                s.uptime_ms = now_ms - s.start_time_ms;
+                s
+            })
+            .collect();
         plugins.sort_by(|a, b| a.name.cmp(&b.name));
         MonitorSnapshot {
             server_uptime_ms: now_ms,
@@ -236,11 +279,15 @@ impl MonitorCollector {
         let inner = self.inner.lock().unwrap();
         let now_ms = inner.server_start.elapsed().as_millis() as u64;
         if let Some(p) = inner.plugins.get(plugin_name) {
-            let mut points: Vec<LivePointInfo> = p.points.values().map(|pt| {
-                let mut pt = pt.clone();
-                pt.age_ms = now_ms.saturating_sub(pt.timestamp_ms);
-                pt
-            }).collect();
+            let mut points: Vec<LivePointInfo> = p
+                .points
+                .values()
+                .map(|pt| {
+                    let mut pt = pt.clone();
+                    pt.age_ms = now_ms.saturating_sub(pt.timestamp_ms);
+                    pt
+                })
+                .collect();
             points.sort_by(|a, b| a.variable_id.cmp(&b.variable_id));
             points
         } else {
@@ -251,7 +298,11 @@ impl MonitorCollector {
     pub fn get_packets(self: &Arc<Self>, plugin_name: &str, limit: usize) -> Vec<PacketLogEntry> {
         let inner = self.inner.lock().unwrap();
         if let Some(p) = inner.plugins.get(plugin_name) {
-            let start = if p.packets.len() > limit { p.packets.len() - limit } else { 0 };
+            let start = if p.packets.len() > limit {
+                p.packets.len() - limit
+            } else {
+                0
+            };
             p.packets[start..].to_vec()
         } else {
             Vec::new()

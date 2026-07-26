@@ -3,7 +3,8 @@
 use rusqlite::Connection;
 
 pub fn init_db(conn: &Connection) -> anyhow::Result<()> {
-    conn.execute_batch("
+    conn.execute_batch(
+        "
         CREATE TABLE IF NOT EXISTS server_config (
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
@@ -41,7 +42,8 @@ pub fn init_db(conn: &Connection) -> anyhow::Result<()> {
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('ws_port', '8080');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('web_port', '8081');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('plugin_dir', './plugins');
-    ")?;
+    ",
+    )?;
 
     // Migration: add description column if missing (backward compat)
     let has_col: bool = conn

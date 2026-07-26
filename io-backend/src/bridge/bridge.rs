@@ -1,13 +1,13 @@
-﻿//! Bridge Layer
+//! Bridge Layer
 //!
 //! Connects the plugin point stream to the WebSocket broadcast.
 //! Receives PointValues from plugins, filters them via PointManager,
 //! and publishes changed values to all connected WebSocket clients.
 
+use crate::point::manager::PointManager;
+use crate::point::types::{PointValue, WsDataMessage};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{broadcast, mpsc};
-use crate::point::types::{PointValue, WsDataMessage};
-use crate::point::manager::PointManager;
 
 pub struct Bridge {
     point_rx: mpsc::UnboundedReceiver<PointValue>,
@@ -33,10 +33,14 @@ impl Bridge {
     }
 
     pub async fn run(mut self) {
-        log::info!("Bridge started, managing {} points (batch every {}ms)",
-            self.point_manager.lock().unwrap().count(), self.batch_interval_ms);
+        log::info!(
+            "Bridge started, managing {} points (batch every {}ms)",
+            self.point_manager.lock().unwrap().count(),
+            self.batch_interval_ms
+        );
         let mut batch: Vec<PointValue> = Vec::new();
-        let mut batch_timer = tokio::time::interval(tokio::time::Duration::from_millis(self.batch_interval_ms));
+        let mut batch_timer =
+            tokio::time::interval(tokio::time::Duration::from_millis(self.batch_interval_ms));
 
         loop {
             tokio::select! {

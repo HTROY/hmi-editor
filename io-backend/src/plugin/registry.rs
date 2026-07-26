@@ -1,4 +1,4 @@
-﻿//! Plugin Registry
+//! Plugin Registry
 //!
 //! Manages plugin lifecycle: loading, starting actor loops,
 //! handling write commands, hot-reload, and monitoring.
@@ -65,10 +65,7 @@ impl PluginRegistry {
         })
     }
 
-    pub async fn init_from_config(
-        &self,
-        config: &AppConfig,
-    ) -> anyhow::Result<()> {
+    pub async fn init_from_config(&self, config: &AppConfig) -> anyhow::Result<()> {
         {
             let mut pdir = self.plugin_dir.lock().unwrap();
             *pdir = PathBuf::from(&config.plugins.directory);
@@ -133,31 +130,27 @@ impl PluginRegistry {
         let point_tx = self.point_tx.clone();
         let monitor = self.monitor.clone();
 
-        let point_configs: Vec<(String, String, String, String, f64, f64, String)> =
-            inst_cfg
-                .points
-                .iter()
-                .map(|pt| {
-                    (
-                        pt.id.clone(),
-                        pt.address.clone(),
-                        pt.var_type.clone(),
-                        pt.data_type.clone(),
-                        pt.scale,
-                        pt.offset,
-                        pt.byte_order.clone(),
-                    )
-                })
-                .collect();
+        let point_configs: Vec<(String, String, String, String, f64, f64, String)> = inst_cfg
+            .points
+            .iter()
+            .map(|pt| {
+                (
+                    pt.id.clone(),
+                    pt.address.clone(),
+                    pt.var_type.clone(),
+                    pt.data_type.clone(),
+                    pt.scale,
+                    pt.offset,
+                    pt.byte_order.clone(),
+                )
+            })
+            .collect();
         monitor.register_plugin(&plugin_name, &inst_cfg.wasm_file, &point_configs);
 
         let wasm_path_str = wasm_path.to_string_lossy().to_string();
-        let mut plugin = self.host.load_plugin(
-            &wasm_path_str,
-            point_tx,
-            monitor.clone(),
-            &plugin_name,
-        )?;
+        let mut plugin =
+            self.host
+                .load_plugin(&wasm_path_str, point_tx, monitor.clone(), &plugin_name)?;
 
         let init_ok = plugin.init(&config_json)?;
         if init_ok != 0 {
@@ -170,7 +163,11 @@ impl PluginRegistry {
         }
 
         let status_code = plugin.get_status()?;
-        log::info!("Plugin '{}' connected, status: {}", plugin_name, status_code);
+        log::info!(
+            "Plugin '{}' connected, status: {}",
+            plugin_name,
+            status_code
+        );
         monitor.set_connection_state(&plugin_name, status_code);
 
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
@@ -206,7 +203,8 @@ impl PluginRegistry {
         let config = self.config_cache.lock().unwrap();
         if let Some(ref cfg) = *config {
             if let Some(inst) = cfg.plugins.instances.iter().find(|i| i.name == plugin_name) {
-                self.load_and_start(inst, cfg.plugins.scan_interval_ms).await?;
+                self.load_and_start(inst, cfg.plugins.scan_interval_ms)
+                    .await?;
                 log::info!("Plugin '{}' reloaded successfully", plugin_name);
                 return Ok(());
             }
@@ -214,26 +212,28 @@ impl PluginRegistry {
         anyhow::bail!("Plugin '{}' not found in config", plugin_name)
     }
 
-    pub async fn write_point(
-        &self,
-        point_name: &str,
-        value: f64,
-    ) -> anyhow::Result<()> {
+    pub async fn write_point(&self, point_name: &str, value: f64) -> anyhow::Result<()> {
         // Collect sender + receiver pairs first, then await
         let pairs: Vec<(String, oneshot::Receiver<Result<(), String>>)> = {
             let plugins = self.plugins.lock().unwrap();
-            plugins.iter().filter_map(|(pn, h)| {
-                let (tx, rx) = oneshot::channel();
-                if h.cmd_tx.send(PluginCommand::WritePoint {
-                    name: point_name.to_string(),
-                    value,
-                    reply: tx,
-                }).is_ok() {
-                    Some((pn.clone(), rx))
-                } else {
-                    None
-                }
-            }).collect()
+            plugins
+                .iter()
+                .filter_map(|(pn, h)| {
+                    let (tx, rx) = oneshot::channel();
+                    if h.cmd_tx
+                        .send(PluginCommand::WritePoint {
+                            name: point_name.to_string(),
+                            value,
+                            reply: tx,
+                        })
+                        .is_ok()
+                    {
+                        Some((pn.clone(), rx))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
         };
 
         for (pn, rx) in pairs {
@@ -253,14 +253,20 @@ impl PluginRegistry {
     pub async fn plugin_statuses(&self) -> Vec<(String, String)> {
         let pairs: Vec<(String, oneshot::Receiver<i32>)> = {
             let plugins = self.plugins.lock().unwrap();
-            plugins.iter().filter_map(|(pn, h)| {
-                let (tx, rx) = oneshot::channel();
-                if h.cmd_tx.send(PluginCommand::GetStatus { reply: tx }).is_ok() {
-                    Some((pn.clone(), rx))
-                } else {
-                    None
-                }
-            }).collect()
+            plugins
+                .iter()
+                .filter_map(|(pn, h)| {
+                    let (tx, rx) = oneshot::channel();
+                    if h.cmd_tx
+                        .send(PluginCommand::GetStatus { reply: tx })
+                        .is_ok()
+                    {
+                        Some((pn.clone(), rx))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
         };
 
         let mut r = Vec::new();
@@ -279,9 +285,7 @@ impl PluginRegistry {
         r
     }
 
-    pub fn take_point_receiver(
-        &self,
-    ) -> Option<mpsc::UnboundedReceiver<PointValue>> {
+    pub fn take_point_receiver(&self) -> Option<mpsc::UnboundedReceiver<PointValue>> {
         self.point_rx.lock().unwrap().take()
     }
 
@@ -317,10 +321,7 @@ fn run_plugin_actor(
                     }
                 }
                 Ok(code) => {
-                    monitor.record_error(
-                        &name,
-                        &format!("scan_points returned code {}", code),
-                    );
+                    monitor.record_error(&name, &format!("scan_points returned code {}", code));
                     log::warn!("[{}] scan_points: {}", name, code);
                 }
                 Err(e) => {
@@ -332,7 +333,11 @@ fn run_plugin_actor(
         }
 
         match cmd_rx.try_recv() {
-            Ok(PluginCommand::WritePoint { name: pt, value, reply }) => {
+            Ok(PluginCommand::WritePoint {
+                name: pt,
+                value,
+                reply,
+            }) => {
                 let r = match plugin.write_point(&pt, value) {
                     Ok(0) => Ok(()),
                     Ok(c) => Err(format!("code:{}", c)),

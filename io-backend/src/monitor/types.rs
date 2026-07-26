@@ -1,4 +1,4 @@
-﻿//! Monitor types — serializable structs for status, packets, and snapshots
+//! Monitor types — serializable structs for status, packets, and snapshots
 
 use serde::Serialize;
 
@@ -23,11 +23,11 @@ pub struct PluginStatus {
 #[derive(Debug, Clone, Serialize)]
 pub struct PacketLogEntry {
     pub timestamp_ms: u64,
-    pub direction: String,  // "tx" or "rx"
-    pub protocol: String,   // "modbus", "opcua", "iec104"
+    pub direction: String, // "tx" or "rx"
+    pub protocol: String,  // "modbus", "opcua", "iec104"
     pub length: usize,
-    pub hex_dump: String,   // hex string like "01 03 00 00 00 0A C5 CD"
-    pub summary: String,    // human-readable summary like "Read Holding Registers [0-9]"
+    pub hex_dump: String, // hex string like "01 03 00 00 00 0A C5 CD"
+    pub summary: String,  // human-readable summary like "Read Holding Registers [0-9]"
 }
 
 /// Live point value snapshot for the monitoring UI
@@ -39,7 +39,7 @@ pub struct LivePointInfo {
     pub value: serde_json::Value,
     pub quality: String,
     pub timestamp_ms: u64,
-    pub age_ms: u64,         // how stale the value is (now - timestamp)
+    pub age_ms: u64, // how stale the value is (now - timestamp)
     pub data_type: String,
     pub byte_order: String,
     pub scale: f64,

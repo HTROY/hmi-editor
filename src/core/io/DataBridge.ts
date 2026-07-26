@@ -1,4 +1,4 @@
-﻿import { VariableManager } from "../variables/VariableManager";
+import { VariableManager } from "../variables/VariableManager";
 import type { VariableType } from "../variables/types";
 import { DataSource } from "./DataSource";
 import { WebSocketClient } from "./WebSocketClient";
@@ -219,6 +219,7 @@ export class DataBridge {
 
       this.variableManager.replaceAll(defs);
       console.log(`[DataBridge] 变量列表已导入: ${defs.length} 个, 映射表: ${this.pointIdToVarId.size} 条`);
+      this.onVarsRefreshed?.();
       return defs.length;
     } catch (err) {
       console.error("[DataBridge] 拉取变量列表失败:", err);
@@ -279,7 +280,6 @@ export class DataBridge {
         console.log("[DataBridge] Auto-refreshing variables from backend...");
         try {
           await this.fetchVariablesFromBackend();
-          this.onVarsRefreshed?.();
         } catch (err) {
           console.warn("[DataBridge] Auto-refresh failed:", err);
         }

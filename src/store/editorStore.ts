@@ -54,6 +54,7 @@ interface EditorState {
   rightPanel: RightPanel;
   simRunning: boolean;
   wsConfig: { url: string };
+  varRevision: number;
   setRenderer: (r: Renderer) => void;
   setMode: (m: ToolMode) => void;
   setRightPanel: (p: RightPanel) => void;
@@ -80,6 +81,7 @@ interface EditorState {
   syncSceneToProject: () => void;
   acknowledgeAlarm: (id: string) => void;
   acknowledgeAllAlarms: () => void;
+  bumpVarRevision: () => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => {
@@ -124,6 +126,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     rightPanel: "properties",
     simRunning: false,
     wsConfig: { url: "ws://localhost:8080/iscs/data" },
+    varRevision: 0,
     setRenderer: (r) => {
       set({ renderer: r });
       get().bindingEngine.setRenderer(r);
@@ -485,5 +488,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
         get().authManager.user?.username ?? "operator",
       );
     },
+    bumpVarRevision: () => set((s) => ({ varRevision: s.varRevision + 1 })),
   };
 });
