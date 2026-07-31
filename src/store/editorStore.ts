@@ -55,6 +55,7 @@ interface EditorState {
   simRunning: boolean;
   wsConfig: { url: string };
   varRevision: number;
+  shapeRevision: number;
   setRenderer: (r: Renderer) => void;
   setMode: (m: ToolMode) => void;
   setRightPanel: (p: RightPanel) => void;
@@ -82,12 +83,16 @@ interface EditorState {
   acknowledgeAlarm: (id: string) => void;
   acknowledgeAllAlarms: () => void;
   bumpVarRevision: () => void;
+  bumpShapeRevision: () => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => {
   const scene = new SceneGraph();
   const varManager = new VariableManager();
   const bindingEngine = new BindingEngine(scene, varManager);
+  // 绑定引擎常驻监听变量变化：无论数据来自模拟、io_backend 还是手动测试，
+  // 绑定都立即应用到画布，不需要等到「启动模拟」
+  bindingEngine.start();
   const animEngine = new AnimationEngine(scene);
   const dataBridge = new DataBridge(varManager);
   dataBridge.setOnVarsRefreshed(() => {
@@ -127,6 +132,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     simRunning: false,
     wsConfig: { url: "ws://localhost:8080/iscs/data" },
     varRevision: 0,
+    shapeRevision: 0,
     setRenderer: (r) => {
       set({ renderer: r });
       get().bindingEngine.setRenderer(r);
@@ -213,6 +219,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
         }
         Object.assign(sh, props);
         s.renderer?.render();
+        // 通知 React：shape 是原地修改的，必须触发订阅面板（绑定/属性）重新渲染
+        s.bumpShapeRevision();
       }
     },
     renderScene: () => {
@@ -359,7 +367,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const s = get();
       if (s.simRunning) {
         s.varManager.stopSimulation();
-        s.bindingEngine.stop();
         s.animEngine.stop();
         s.dataBridge.stop();
         s.alarmManager.stop();
@@ -463,7 +470,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
             "STA1_TEMP_ZONE1",
           ]);
         }
-        s.bindingEngine.start();
         s.animEngine.start();
         s.alarmManager.start();
         s.scriptEngine.start();
@@ -489,5 +495,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
       );
     },
     bumpVarRevision: () => set((s) => ({ varRevision: s.varRevision + 1 })),
+    bumpShapeRevision: () => set((s) => ({ shapeRevision: s.shapeRevision + 1 })),
   };
 });

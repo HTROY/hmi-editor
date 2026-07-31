@@ -69,7 +69,19 @@ export class BindingEngine {
     }
     // 重新添加
     const shape = this.scene.get(shapeId);
-    if (shape) this.indexShape(shape);
+    if (shape) {
+      this.indexShape(shape);
+      // 立即用变量当前值刷新该图元的绑定属性，无需等待变量再次变化
+      for (const binding of shape.bindings) {
+        const vv = this.variables.getValue(binding.variableId);
+        if (!vv) continue;
+        const newValue = this.applyMapping(binding, vv.value);
+        if (newValue !== undefined) {
+          (shape as any)[binding.targetProp] = newValue;
+        }
+      }
+      this.renderer?.render();
+    }
   }
 
   /** 启动监听 — 订阅变量变化并自动更新图元 */

@@ -17,7 +17,17 @@ export function BindingPanel() {
     updateShape,
     renderScene,
   } = useEditorStore();
+  // 订阅 shape 修改版本号：updateShape 原地修改 shape 后触发重渲染
+  useEditorStore((s) => s.shapeRevision);
   const shape = selectedId ? scene.get(selectedId) : null;
+
+  // 订阅变量值变化，让「手动测试」区域的值实时刷新
+  const [, forceUpdate] = useState(0);
+  React.useEffect(() => {
+    if (!varManager) return;
+    const unsub = varManager.subscribeAll(() => forceUpdate((n) => n + 1));
+    return unsub;
+  }, [varManager]);
 
   const [editingBindingIdx, setEditingBindingIdx] = useState<number | null>(
     null,

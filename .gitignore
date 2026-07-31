@@ -5,3 +5,4 @@ tsconfig.tsbuildinfo
 io-backend/plugins-src/*/target/
 *.bak
 io-backend/hmi_io.db
+dist/
