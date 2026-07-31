@@ -89,19 +89,19 @@ impl Repo {
     }
 
     pub fn list_plugins(&self) -> anyhow::Result<Vec<PluginRow>> {
-        let c = self.conn.lock().unwrap();
-        let mut s =
-            c.prepare("SELECT id,name,wasm_file,config_json,enabled FROM plugins ORDER BY id")?;
-        let rows: Vec<PluginRow> = s
+        let conn = self.conn.lock().unwrap();
+        let mut sql =
+            conn.prepare("SELECT id,name,wasm_file,config_json,enabled FROM plugins ORDER BY id")?;
+        let rows: Vec<PluginRow> = sql
             .query_map([], |r| map_plugin(r))?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
     }
     pub fn get_plugin(&self, id: i64) -> anyhow::Result<Option<PluginRow>> {
-        let c = self.conn.lock().unwrap();
-        let mut s =
-            c.prepare("SELECT id,name,wasm_file,config_json,enabled FROM plugins WHERE id=?1")?;
-        let mut rows = s.query_map(params![id], |r| map_plugin(r))?;
+        let conn = self.conn.lock().unwrap();
+        let mut sql =
+            conn.prepare("SELECT id,name,wasm_file,config_json,enabled FROM plugins WHERE id=?1")?;
+        let mut rows = sql.query_map(params![id], |r| map_plugin(r))?;
         match rows.next() {
             Some(Ok(r)) => Ok(Some(r)),
             Some(Err(e)) => Err(e.into()),
@@ -114,12 +114,12 @@ impl Repo {
         wasm_file: &str,
         config_json: &str,
     ) -> anyhow::Result<i64> {
-        let c = self.conn.lock().unwrap();
-        c.execute(
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
             "INSERT INTO plugins(name,wasm_file,config_json) VALUES(?1,?2,?3)",
             params![name, wasm_file, config_json],
         )?;
-        Ok(c.last_insert_rowid())
+        Ok(conn.last_insert_rowid())
     }
     pub fn update_plugin(
         &self,
@@ -140,17 +140,17 @@ impl Repo {
         Ok(())
     }
     pub fn list_points(&self, plugin_id: Option<i64>) -> anyhow::Result<Vec<PointRow>> {
-        let c = self.conn.lock().unwrap();
-        let mut s = c.prepare("SELECT id,plugin_id,variable_id,address,data_type,byte_order,scale,offset_val,var_type,description FROM points WHERE (?1 IS NULL OR plugin_id = ?1) ORDER BY plugin_id,id")?;
-        let rows: Vec<PointRow> = s
+        let conn = self.conn.lock().unwrap();
+        let mut sql = conn.prepare("SELECT id,plugin_id,variable_id,address,data_type,byte_order,scale,offset_val,var_type,description FROM points WHERE (?1 IS NULL OR plugin_id = ?1) ORDER BY plugin_id,id")?;
+        let rows: Vec<PointRow> = sql
             .query_map(params![plugin_id], |r| map_point(r))?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
     }
     pub fn get_point(&self, id: i64) -> anyhow::Result<Option<PointRow>> {
-        let c = self.conn.lock().unwrap();
-        let mut s = c.prepare("SELECT id,plugin_id,variable_id,address,data_type,byte_order,scale,offset_val,var_type,description FROM points WHERE id=?1")?;
-        let mut rows = s.query_map(params![id], |r| map_point(r))?;
+        let conn = self.conn.lock().unwrap();
+        let mut sql = conn.prepare("SELECT id,plugin_id,variable_id,address,data_type,byte_order,scale,offset_val,var_type,description FROM points WHERE id=?1")?;
+        let mut rows = sql.query_map(params![id], |r| map_point(r))?;
         match rows.next() {
             Some(Ok(r)) => Ok(Some(r)),
             Some(Err(e)) => Err(e.into()),
@@ -169,9 +169,9 @@ impl Repo {
         vtype: &str,
         description: &str,
     ) -> anyhow::Result<i64> {
-        let c = self.conn.lock().unwrap();
-        c.execute("INSERT OR REPLACE INTO points(plugin_id,variable_id,address,data_type,byte_order,scale,offset_val,var_type,description) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)", params![plugin_id, var_id, addr, dtype, border, scale, offset_val, vtype, description])?;
-        Ok(c.last_insert_rowid())
+        let conn = self.conn.lock().unwrap();
+        conn.execute("INSERT OR REPLACE INTO points(plugin_id,variable_id,address,data_type,byte_order,scale,offset_val,var_type,description) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)", params![plugin_id, var_id, addr, dtype, border, scale, offset_val, vtype, description])?;
+        Ok(conn.last_insert_rowid())
     }
     pub fn update_point(
         &self,

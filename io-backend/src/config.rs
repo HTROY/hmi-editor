@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::db::repo::Repo;
+
 /// Top-level configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -112,7 +114,7 @@ impl AppConfig {
     }
 
     /// Build AppConfig from the database via Repo
-    pub fn from_repo_sync(repo: &crate::db::repo::Repo) -> Self {
+    pub fn from_repo_sync(repo: &Repo) -> Self {
         let scan_interval_ms: u64 = repo
             .get_config("scan_interval_ms")
             .unwrap_or_else(|| "500".into())

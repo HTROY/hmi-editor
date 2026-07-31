@@ -1,102 +1,1239 @@
-﻿<!DOCTYPE html>
+﻿<!doctype html>
 <html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>HMI IO Backend — SCADA Console</title>
-<style>
-:root{--bg-app:#0a0e17;--bg-surface:#111827;--bg-elevated:#1a2332;--bg-overlay:#1e293b;--text-primary:#e8edf4;--text-secondary:#8899b4;--text-muted:#556580;--accent:#3b82f6;--accent-hover:#60a5fa;--accent-muted:rgba(59,130,246,.12);--state-ok:#22c55e;--state-ok-bg:rgba(34,197,94,.12);--state-warn:#f59e0b;--state-warn-bg:rgba(245,158,11,.12);--state-alarm:#ef4444;--state-alarm-bg:rgba(239,68,68,.12);--state-info:#06b6d4;--state-off:#64748b;--border-subtle:rgba(148,163,184,.08);--border-default:rgba(148,163,184,.14);--border-strong:rgba(148,163,184,.22);--border-accent:rgba(59,130,246,.4);--radius-sm:4px;--radius-md:6px;--radius-lg:10px;--shadow-sm:0 1px 2px rgba(0,0,0,.4);--shadow-md:0 4px 12px rgba(0,0,0,.5);--font-ui:"Inter","Segoe UI",system-ui,sans-serif;--font-mono:"JetBrains Mono","Cascadia Code","Consolas",monospace}
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--font-ui);font-size:12.5px;line-height:1.5;background:var(--bg-app);color:var(--text-primary);min-height:100vh;-webkit-font-smoothing:antialiased}
-::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(148,163,184,.18);border-radius:3px}::-webkit-scrollbar-thumb:hover{background:rgba(148,163,184,.32)}
-header{background:var(--bg-surface);border-bottom:1px solid var(--border-subtle);padding:0 24px;height:48px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
-.logo{display:flex;align-items:center;gap:10px}.logo-icon{width:28px;height:28px;border-radius:var(--radius-md);background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff}
-h1{font-size:14px;font-weight:600}.version{font-size:10px;color:var(--text-muted);background:var(--bg-overlay);padding:2px 8px;border-radius:10px}
-nav{display:flex;gap:2px;background:var(--bg-elevated);border-radius:var(--radius-md);padding:2px}
-nav button{padding:5px 16px;border:none;border-radius:var(--radius-sm);background:transparent;color:var(--text-muted);cursor:pointer;font-size:12px;font-family:var(--font-ui);font-weight:500;transition:all .15s;white-space:nowrap}
-nav button:hover{color:var(--text-secondary)}nav button.active{background:var(--accent);color:#fff;box-shadow:var(--shadow-sm)}
-main{max-width:1280px;margin:0 auto;padding:20px 24px}
-.card{background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);padding:18px;margin-bottom:14px}
-.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px}
-.card-title{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
-.card-subtitle{font-size:11px;color:var(--text-muted)}
-.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--bg-elevated);color:var(--text-secondary);cursor:pointer;font-size:12px;font-family:var(--font-ui);font-weight:500;white-space:nowrap;transition:all .15s;text-decoration:none}
-.btn:hover{background:var(--bg-overlay);color:var(--text-primary);border-color:var(--border-strong)}.btn:active{transform:scale(.97)}
-.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}.btn-primary:hover{background:var(--accent-hover)}
-.btn-danger{background:var(--state-alarm);color:#fff;border-color:var(--state-alarm)}.btn-danger:hover{background:#f87171}
-.btn-success{background:var(--state-ok);color:#fff;border-color:var(--state-ok)}
-.btn-sm{padding:4px 10px;font-size:11px;border-radius:var(--radius-sm)}.btn-xs{padding:2px 7px;font-size:10px;border-radius:3px}
-table{width:100%;border-collapse:collapse;font-size:12px}th{padding:8px 12px;text-align:left;font-weight:600;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-muted);border-bottom:1px solid var(--border-default);background:var(--bg-elevated);position:sticky;top:0}td{padding:7px 12px;border-bottom:1px solid var(--border-subtle);color:var(--text-secondary)}tr:hover td{background:rgba(255,255,255,.02)}
-.form-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:flex-end}.form-row label{font-size:10.5px;font-weight:500;color:var(--text-muted);display:block;margin-bottom:3px}
-.form-row input,.form-row select{background:var(--bg-app);border:1px solid var(--border-default);color:var(--text-primary);padding:6px 10px;border-radius:var(--radius-md);font-size:12px;font-family:var(--font-ui);width:100%;min-width:80px;outline:none;transition:border-color .15s,box-shadow .15s}
-.form-row input:focus,.form-row select:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-muted)}.form-row .field{flex:1;min-width:100px}
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:200;align-items:center;justify-content:center}
-.modal-overlay.show{display:flex}.modal{background:var(--bg-surface);border:1px solid var(--border-strong);border-radius:var(--radius-lg);padding:24px;max-width:620px;width:92%;max-height:84vh;overflow-y:auto;box-shadow:var(--shadow-lg);animation:modalIn .2s ease}
-@keyframes modalIn{from{opacity:0;transform:scale(.96) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
-.toast{position:fixed;bottom:24px;right:24px;background:var(--bg-overlay);border:1px solid var(--border-strong);padding:12px 20px;border-radius:var(--radius-md);z-index:300;font-size:12px;box-shadow:var(--shadow-md);animation:toastIn .3s ease}
-@keyframes toastIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:12px;font-size:10.5px;font-weight:500}.badge-ok{background:var(--state-ok-bg);color:var(--state-ok)}.badge-warn{background:var(--state-warn-bg);color:var(--state-warn)}.badge-err{background:var(--state-alarm-bg);color:var(--state-alarm)}.badge-off{background:rgba(100,116,139,.12);color:var(--state-off)}.badge-info{background:var(--state-info-bg);color:var(--state-info)}
-.dot{display:inline-block;width:6px;height:6px;border-radius:50%}.dot-ok{background:var(--state-ok);box-shadow:0 0 6px rgba(34,197,94,.5)}.dot-warn{background:var(--state-warn);box-shadow:0 0 6px rgba(245,158,11,.5)}.dot-err{background:var(--state-alarm);box-shadow:0 0 6px rgba(239,68,68,.5)}.dot-off{background:var(--state-off)}
-.action-bar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}.empty{text-align:center;padding:40px 20px;color:var(--text-muted)}.empty-icon{font-size:32px;margin-bottom:8px;opacity:.5}
-.stats-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:14px}
-.stat-card{background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:12px;text-align:center}
-.stat-value{font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--text-primary)}.stat-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
-.status-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
-.status-card{background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);padding:14px;cursor:pointer;transition:all .15s}
-.status-card:hover{border-color:var(--border-default);transform:translateY(-1px);box-shadow:var(--shadow-sm)}.status-card.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);background:var(--accent-muted)}
-.plugin-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.plugin-name{font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px}
-.plugin-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;color:var(--text-muted)}
-.stat-item{display:flex;align-items:center;gap:5px}.stat-val{color:var(--text-primary);font-weight:500;font-family:var(--font-mono)}
-.uptime-bar{height:3px;background:var(--border-subtle);border-radius:2px;margin-top:8px;overflow:hidden}
-.uptime-fill{height:100%;background:var(--accent);border-radius:2px;transition:width 1s linear}
-.packet-log{max-height:360px;overflow-y:auto;font-family:var(--font-mono);font-size:11px;background:var(--bg-app);border-radius:var(--radius-md);border:1px solid var(--border-subtle)}
-.packet-entry{display:flex;gap:10px;padding:5px 10px;border-bottom:1px solid var(--border-subtle);align-items:flex-start;transition:background .1s}
-.packet-entry:hover{background:rgba(255,255,255,.02)}.packet-dir{font-weight:700;min-width:22px;font-size:10px;padding-top:1px}.packet-dir.tx{color:var(--accent)}.packet-dir.rx{color:var(--state-ok)}
-.packet-time{color:var(--text-muted);min-width:56px;font-size:10px}.packet-hex{color:var(--state-warn);flex:1;word-break:break-all;font-size:10.5px}.packet-summary{color:var(--text-muted);font-size:10px;min-width:100px}
-.point-value-null{color:var(--text-muted);font-style:italic}.point-value-ok{color:var(--state-ok);font-weight:500;font-family:var(--font-mono)}.point-age-stale{color:var(--state-warn)}.point-quality-good{color:var(--state-ok)}.point-quality-unknown{color:var(--text-muted)}
-.refresh-indicator{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-muted)}.refresh-dot{width:6px;height:6px;border-radius:50%;background:var(--state-ok);animation:pulse 1.5s infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.spacer{flex:1}.mono{font-family:var(--font-mono)}.text-center{text-align:center}
-</style>
-</head>
-<body>
-<header><div class="logo"><div class="logo-icon">&#x2699;</div><h1>IO Backend</h1><span class="version">SCADA v2</span></div>
-<nav><button id="nav-plugins" class="active" onclick="showTab('plugins')">协议插件</button><button id="nav-points" onclick="showTab('points')">点位配置</button><button id="nav-monitor" onclick="showTab('monitor')">监控调试</button></nav></header>
-<main id="app"></main>
-<div class="modal-overlay" id="modal-overlay"><div class="modal" id="modal-content"></div></div>
-<div id="toast"></div>
-<script>
-const API='';let currentTab='plugins',plugins=[],currentPluginId=null,monitorInterval=null,selectedMonitorPlugin=null;
-async function api(method,path,body){const opts={method,headers:{}};if(body&&!(body instanceof FormData)){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body)}else if(body instanceof FormData){opts.body=body}const r=await fetch(API+path,opts);if(!r.ok)throw new Error(await r.text());const ct=r.headers.get('Content-Type')||'';if(ct.includes('application/json'))return r.json();return r}
-function toast(msg,type){const el=document.getElementById('toast');el.textContent=msg;el.style.borderColor=type==='error'?'var(--state-alarm)':type==='success'?'var(--state-ok)':'var(--border-strong)';el.style.display='block';setTimeout(()=>el.style.display='none',3000)}
-function showModal(html){document.getElementById('modal-content').innerHTML=html;document.getElementById('modal-overlay').classList.add('show')}
-function closeModal(){document.getElementById('modal-overlay').classList.remove('show')}
-document.getElementById('modal-overlay').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal()});
-function showTab(tab){if(monitorInterval){clearInterval(monitorInterval);monitorInterval=null}currentTab=tab;document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));document.getElementById('nav-'+tab).classList.add('active');if(tab==='plugins')loadPluginsTab();else if(tab==='points')loadPointsTab();else if(tab==='monitor')loadMonitorTab()}
-async function loadPluginsTab(){try{plugins=await api('GET','/api/plugins')}catch(e){plugins=[];toast('加载失败: '+e.message,'error')}renderPlugins()}
-function renderPlugins(){let h='<div class="card"><div class="card-header"><span class="card-title">&#x1F50C; 协议插件</span><span class="card-subtitle">'+plugins.length+' 个已配置</span></div>';h+='<div class="action-bar"><button class="btn btn-primary" onclick="showPluginForm()">+ 添加插件</button></div>';if(!plugins.length){h+='<div class="empty"><div class="empty-icon">&#x1F4E6;</div>暂无插件</div>'}else{h+='<table><thead><tr><th>ID</th><th>名称</th><th>WASM 文件</th><th>状态</th><th>操作</th></tr></thead><tbody>';plugins.forEach(p=>{h+='<tr><td style="color:var(--text-muted);">'+p.id+'</td><td style="font-weight:500;">'+esc(p.name)+'</td><td class="mono" style="font-size:11px;">'+esc(p.wasm_file)+'</td>';h+='<td><span class="badge '+(p.enabled?'badge-ok':'badge-off')+'"><span class="dot '+(p.enabled?'dot-ok':'dot-off')+'"></span>'+(p.enabled?'启用':'停用')+'</span></td>';h+='<td><button class="btn btn-sm" onclick="editPlugin('+p.id+')">编辑</button> <button class="btn btn-sm btn-danger" onclick="deletePlugin('+p.id+')">删除</button></td></tr>'});h+='</tbody></table>'}h+='</div>';document.getElementById('app').innerHTML=h}
-function showPluginForm(id){const p=id?plugins.find(x=>x.id===id):null;showModal('<h3 style="margin-bottom:16px;">'+(id?'编辑':'添加')+'插件</h3><div class="form-row"><div class="field"><label>名称</label><input id="f-name" value="'+esc(p?p.name:'')+'"></div><div class="field"><label>WASM 文件</label><input id="f-wasm" value="'+esc(p?p.wasm_file:'')+'"></div></div><div class="form-row"><div class="field"><label>配置 JSON</label><input id="f-cfg" value="'+esc(p?p.config_json:'')+'"></div></div><div class="form-row"><div class="field"><label>启用</label><select id="f-enabled"><option value="1"'+(p&&p.enabled?' selected':'')+'>是</option><option value="0"'+(p&&!p.enabled?' selected':'')+'>否</option></select></div></div><div style="margin-top:16px;display:flex;gap:8px;"><button class="btn btn-primary" onclick="savePlugin('+(id||0)+')">保存</button><button class="btn" onclick="closeModal()">取消</button></div>')}
-async function savePlugin(id){const data={name:document.getElementById('f-name').value,wasm_file:document.getElementById('f-wasm').value,config_json:document.getElementById('f-cfg').value,enabled:document.getElementById('f-enabled').value==='1'};if(id)await api('PUT','/api/plugins/'+id,data);else await api('POST','/api/plugins',data);closeModal();loadPluginsTab();toast(id?'更新成功':'添加成功','success')}
-function editPlugin(id){showPluginForm(id)}
-async function deletePlugin(id){if(!confirm('确定删除? '))return;await api('DELETE','/api/plugins/'+id);loadPluginsTab();toast('已删除','success')}
-async function loadPointsTab(){try{plugins=await api('GET','/api/plugins')}catch(e){plugins=[]}let h='<div class="card"><div class="card-header"><span class="card-title">&#x1F4CA; 点位配置</span></div>';h+='<div class="form-row" style="margin-bottom:12px;"><div class="field"><label>选择插件</label><select id="plugin-select" onchange="onPluginChange()"><option value="">-- 请选择插件 --</option>';plugins.forEach(p=>{h+='<option value="'+p.id+'"'+(currentPluginId===p.id?' selected':'')+'>'+esc(p.name)+'</option>'});h+='</select></div></div>';if(!currentPluginId){h+='<div class="empty"><div class="empty-icon">&#x1F446;</div>请先选择一个插件</div>'}else{h+='<div class="action-bar"><button class="btn btn-primary" onclick="addPoint()">+ 添加点位</button><button class="btn btn-success" onclick="triggerImport()">&#x1F4E5; 导入 Excel</button><button class="btn" onclick="exportExcel()">&#x1F4E4; 导出 Excel</button><input type="file" id="import-file" style="display:none" accept=".xlsx,.xls" onchange="doImport(event)"></div><div id="points-table"></div>'}h+='</div>';document.getElementById('app').innerHTML=h;if(currentPluginId)renderPointsTable()}
-async function renderPointsTable(){try{const points=await api('GET','/api/points?plugin_id='+currentPluginId);let h='';if(!points.length)h='<div class="empty"><div class="empty-icon">&#x1F4ED;</div>暂无点位</div>';else{h='<table><thead><tr><th>变量 ID</th><th>协议地址</th><th>类型</th><th>字节序</th><th>缩放</th><th>偏移</th><th>变量类型</th><th>操作</th></tr></thead><tbody>';points.forEach(pt=>{h+='<tr><td style="font-weight:500;font-family:var(--font-mono);font-size:11px;">'+esc(pt.variable_id)+'</td><td class="mono" style="font-size:11px;">'+esc(pt.address)+'</td><td class="mono">'+esc(pt.data_type)+'</td><td>'+esc(pt.byte_order)+'</td><td class="mono">'+pt.scale+'</td><td class="mono">'+pt.offset_val+'</td><td><span class="badge badge-info">'+esc(pt.var_type)+'</span></td><td><button class="btn btn-sm" onclick="editPoint('+pt.id+')">编辑</button> <button class="btn btn-sm btn-danger" onclick="deletePoint('+pt.id+')">删除</button></td></tr>'});h+='</tbody></table>'}document.getElementById('points-table').innerHTML=h}catch(e){document.getElementById('points-table').innerHTML='<div class="empty">加载失败: '+esc(e.message)+'</div>'}}
-function onPluginChange(){currentPluginId=document.getElementById('plugin-select').value?parseInt(document.getElementById('plugin-select').value):null;renderPointsTable()}
-function addPoint(){showPointForm(null)}function editPoint(id){showPointForm(id)}
-function showPointForm(id){showModal('<h3 style="margin-bottom:16px;">'+(id?'编辑':'添加')+'点位</h3><div class="form-row"><div class="field"><label>变量 ID</label><input id="f-vid" placeholder="STA1_211_IA"></div><div class="field"><label>协议地址</label><input id="f-addr" placeholder="holding_register:0"></div></div><div class="form-row"><div class="field"><label>数据类型</label><input id="f-dtype" value="uint16"></div><div class="field"><label>字节序</label><input id="f-border" value="big_endian"></div></div><div class="form-row"><div class="field"><label>缩放</label><input id="f-scale" value="1.0" type="number" step="any"></div><div class="field"><label>偏移</label><input id="f-offset" value="0" type="number" step="any"></div><div class="field"><label>变量类型</label><select id="f-vtype"><option>AI</option><option>DI</option><option>AO</option><option>DO</option></select></div></div><div style="margin-top:16px;display:flex;gap:8px;"><button class="btn btn-primary" onclick="savePoint('+(id||0)+')">保存</button><button class="btn" onclick="closeModal()">取消</button></div>');if(id){api('GET','/api/points?plugin_id='+currentPluginId).then(pts=>{const pt=pts.find(x=>x.id===id);if(pt){document.getElementById('f-vid').value=pt.variable_id;document.getElementById('f-addr').value=pt.address;document.getElementById('f-dtype').value=pt.data_type;document.getElementById('f-border').value=pt.byte_order;document.getElementById('f-scale').value=pt.scale;document.getElementById('f-offset').value=pt.offset_val;document.getElementById('f-vtype').value=pt.var_type}})}}
-async function savePoint(id){const data={plugin_id:currentPluginId,variable_id:document.getElementById('f-vid').value,address:document.getElementById('f-addr').value,data_type:document.getElementById('f-dtype').value,byte_order:document.getElementById('f-border').value,scale:parseFloat(document.getElementById('f-scale').value)||1,offset_val:parseFloat(document.getElementById('f-offset').value)||0,var_type:document.getElementById('f-vtype').value};if(id)await api('PUT','/api/points/'+id,data);else await api('POST','/api/points',data);closeModal();renderPointsTable();toast(id?'更新成功':'添加成功','success')}
-async function deletePoint(id){if(!confirm('确定删除? '))return;await api('DELETE','/api/points/'+id);renderPointsTable();toast('已删除','success')}
-function triggerImport(){document.getElementById('import-file').click()}
-async function doImport(e){const file=e.target.files[0];if(!file)return;const fd=new FormData();fd.append('file',file);try{const r=await api('POST','/api/plugins/'+currentPluginId+'/import',fd);toast('导入 '+r.imported+' 条','success');renderPointsTable()}catch(err){toast('导入失败: '+err.message,'error')}e.target.value=''}
-function exportExcel(){window.open(API+'/api/plugins/'+currentPluginId+'/export','_blank')}
-async function loadMonitorTab(){try{plugins=await api('GET','/api/plugins')}catch(e){}if(!selectedMonitorPlugin&&plugins.length)selectedMonitorPlugin=plugins[0].name;document.getElementById('app').innerHTML='<div class="card"><div class="card-header"><span class="card-title">&#x1F4CA; 运行状态监控</span><span class="refresh-indicator"><span class="refresh-dot"></span> 1s 刷新</span></div><div id="monitor-root"></div></div>';await refreshMonitor();if(monitorInterval)clearInterval(monitorInterval);monitorInterval=setInterval(refreshMonitor,1000)}
-async function refreshMonitor(){try{const snapshot=await api('GET','/api/monitor/overview');renderMonitor(snapshot);if(selectedMonitorPlugin){const[points,packets]=await Promise.all([api('GET','/api/monitor/plugins/'+encodeURIComponent(selectedMonitorPlugin)+'/points'),api('GET','/api/monitor/plugins/'+encodeURIComponent(selectedMonitorPlugin)+'/packets?limit=80')]);renderDetail(selectedMonitorPlugin,points,packets)}}catch(e){console.error(e)}}
-function formatUptime(ms){const s=Math.floor(ms/1000);if(s<60)return s+'s';const m=Math.floor(s/60);if(m<60)return m+'m '+(s%60)+'s';return Math.floor(m/60)+'h '+(m%60)+'m'}
-function renderMonitor(snapshot){const stateBadge=(p)=>{const cls=p.connection_state===2?'badge-ok':p.connection_state===3?'badge-err':p.connection_state===1?'badge-warn':'badge-off';const dot=p.connection_state===2?'dot-ok':p.connection_state===3?'dot-err':p.connection_state===1?'dot-warn':'dot-off';return'<span class="badge '+cls+'"><span class="dot '+dot+'"></span>'+esc(p.connection_label)+'</span>'};let h='<div class="stats-bar">';h+='<div class="stat-card"><div class="stat-value">'+snapshot.plugins.length+'</div><div class="stat-label">已加载插件</div></div>';h+='<div class="stat-card"><div class="stat-value">'+snapshot.total_scans+'</div><div class="stat-label">总扫描次数</div></div>';h+='<div class="stat-card"><div class="stat-value" style="color:'+(snapshot.total_errors>0?'var(--state-alarm)':'var(--state-ok)')+'">'+snapshot.total_errors+'</div><div class="stat-label">总错误数</div></div>';h+='<div class="stat-card"><div class="stat-value">'+snapshot.total_points+'</div><div class="stat-label">点位总数</div></div>';h+='<div class="stat-card"><div class="stat-value">'+snapshot.active_ws_clients+'</div><div class="stat-label">WS 客户端</div></div>';h+='<div class="stat-card"><div class="stat-value" style="font-size:16px;">'+formatUptime(snapshot.server_uptime_ms)+'</div><div class="stat-label">服务器运行</div></div></div>';h+='<div class="status-grid">';snapshot.plugins.forEach(p=>{h+='<div class="status-card'+(selectedMonitorPlugin===p.name?' selected':'')+'" onclick="selectPlugin(\''+esc(p.name)+'\')"><div class="plugin-header"><span class="plugin-name">&#x1F50C; '+esc(p.name)+'</span>'+stateBadge(p)+'</div><div class="plugin-stats"><div class="stat-item">&#x1F4E1; 扫描: <span class="stat-val">'+p.scan_count+'</span></div><div class="stat-item">&#x274C; 错误: <span class="stat-val" style="color:'+(p.error_count>0?'var(--state-alarm)':'var(--text-primary)')+'">'+p.error_count+'</span></div><div class="stat-item">&#x23F1; 上次: <span class="stat-val">'+p.last_scan_time_ms+'ms</span></div><div class="stat-item">&#x1F553; 运行: <span class="stat-val">'+formatUptime(p.uptime_ms)+'</span></div></div>';if(p.last_error)h+='<div style="margin-top:8px;font-size:10px;color:var(--state-alarm);padding:4px 6px;background:var(--state-alarm-bg);border-radius:4px;">&#x26A0; '+esc(p.last_error.substring(0,100))+'</div>';h+='<div class="uptime-bar"><div class="uptime-fill" style="width:'+Math.min(100,(p.uptime_ms/snapshot.server_uptime_ms)*100)+'%"></div></div></div>'});h+='</div>';if(!snapshot.plugins.length)h='<div class="empty"><div class="empty-icon">&#x1F50C;</div>暂无运行中的插件</div>';h+='<div id="monitor-detail" style="margin-top:14px;"></div>';document.getElementById('monitor-root').innerHTML=h}
-function selectPlugin(name){selectedMonitorPlugin=name;refreshMonitor()}
-function renderDetail(pluginName,points,packets){const el=document.getElementById('monitor-detail');if(!el)return;const fmtVal=(v)=>{if(v===null||v===undefined)return'<span class="point-value-null">--</span>';if(typeof v==='number')return'<span class="point-value-ok">'+(Number.isInteger(v)?v:v.toFixed(2))+'</span>';return'<span class="point-value-ok">'+esc(String(v))+'</span>'};const fmtAge=(ms)=>{if(!ms)return'-';if(ms<1000)return ms+'ms';if(ms<60000)return(ms/1000).toFixed(1)+'s';return(ms/60000).toFixed(1)+'min'};let h='<div class="card"><div class="card-header"><span class="card-title">&#x1F4E1; 实时点位值</span><span class="card-subtitle">'+points.length+' 个点位 &middot; '+esc(pluginName)+'</span></div>';if(!points.length){h+='<div class="empty"><div class="empty-icon">&#x1F4ED;</div>暂无点位数据</div>'}else{h+='<div style="max-height:320px;overflow-y:auto;"><table><thead><tr><th>变量 ID</th><th>地址</th><th>类型</th><th>当前值</th><th>质量</th><th>时间</th><th>延迟</th><th>配置</th></tr></thead><tbody>';points.forEach(pt=>{const dt=pt.timestamp_ms?new Date(pt.timestamp_ms).toISOString().substr(11,12):'-';const qCls=pt.quality==='good'?'point-quality-good':'point-quality-unknown';const ageCls=pt.age_ms>5000?'point-age-stale':'';h+='<tr><td style="font-weight:500;font-family:var(--font-mono);font-size:10.5px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(pt.variable_id)+'">'+esc(pt.variable_id)+'</td><td class="mono" style="font-size:10.5px;">'+esc(pt.address)+'</td><td><span class="badge badge-info" style="font-size:9px;">'+esc(pt.var_type)+'</span></td><td>'+fmtVal(pt.value)+'</td><td class="'+qCls+'" style="font-size:10.5px;">'+esc(pt.quality)+'</td><td style="font-size:10px;color:var(--text-muted);">'+dt+'</td><td class="'+ageCls+'" style="font-size:10px;">'+fmtAge(pt.age_ms)+'</td><td style="font-size:9px;color:var(--text-muted);">'+esc(pt.data_type)+'/'+esc(pt.byte_order)+' &times;'+pt.scale+'+'+pt.offset_val+'</td></tr>'});h+='</tbody></table></div>'}h+='</div><div class="card"><div class="card-header"><span class="card-title">&#x1F4E8; 网络报文日志</span><span class="card-subtitle">最近 '+packets.length+' 条</span></div>';if(!packets.length){h+='<div class="empty"><div class="empty-icon">&#x1F4E1;</div>暂无报文 — 插件需通过 host_log 或 host_on_packet 上报</div>'}else{h+='<div class="packet-log">';packets.slice().reverse().forEach(pkt=>{const t=pkt.timestamp_ms>1e12?new Date(pkt.timestamp_ms).toISOString().substr(11,12):(pkt.timestamp_ms/1000).toFixed(1)+'s';h+='<div class="packet-entry"><span class="packet-dir '+(pkt.direction.toLowerCase())+'">'+pkt.direction.toUpperCase()+'</span><span class="packet-time">'+t+'</span><span class="packet-hex">'+esc(pkt.hex_dump)+'</span><span class="packet-summary">'+esc(pkt.summary.substring(0,80))+'</span></div>'});h+='</div>'}h+='</div>';el.innerHTML=h}
-function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-loadPluginsTab();
-</script>
-</body>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+        <title>HMI IO Backend — SCADA Console</title>
+        <style>
+            :root {
+                --bg-app: #0a0e17;
+                --bg-surface: #111827;
+                --bg-elevated: #1a2332;
+                --bg-overlay: #1e293b;
+                --text-primary: #e8edf4;
+                --text-secondary: #8899b4;
+                --text-muted: #556580;
+                --accent: #3b82f6;
+                --accent-hover: #60a5fa;
+                --accent-muted: rgba(59, 130, 246, 0.12);
+                --state-ok: #22c55e;
+                --state-ok-bg: rgba(34, 197, 94, 0.12);
+                --state-warn: #f59e0b;
+                --state-warn-bg: rgba(245, 158, 11, 0.12);
+                --state-alarm: #ef4444;
+                --state-alarm-bg: rgba(239, 68, 68, 0.12);
+                --state-info: #06b6d4;
+                --state-off: #64748b;
+                --border-subtle: rgba(148, 163, 184, 0.08);
+                --border-default: rgba(148, 163, 184, 0.14);
+                --border-strong: rgba(148, 163, 184, 0.22);
+                --border-accent: rgba(59, 130, 246, 0.4);
+                --radius-sm: 4px;
+                --radius-md: 6px;
+                --radius-lg: 10px;
+                --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+                --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+                --font-ui: "Inter", "Segoe UI", system-ui, sans-serif;
+                --font-mono:
+                    "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+            }
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+            body {
+                font-family: var(--font-ui);
+                font-size: 12.5px;
+                line-height: 1.5;
+                background: var(--bg-app);
+                color: var(--text-primary);
+                min-height: 100vh;
+                -webkit-font-smoothing: antialiased;
+            }
+            ::-webkit-scrollbar {
+                width: 6px;
+                height: 6px;
+            }
+            ::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            ::-webkit-scrollbar-thumb {
+                background: rgba(148, 163, 184, 0.18);
+                border-radius: 3px;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+                background: rgba(148, 163, 184, 0.32);
+            }
+            header {
+                background: var(--bg-surface);
+                border-bottom: 1px solid var(--border-subtle);
+                padding: 0 24px;
+                height: 48px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                position: sticky;
+                top: 0;
+                z-index: 100;
+            }
+            .logo {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+            .logo-icon {
+                width: 28px;
+                height: 28px;
+                border-radius: var(--radius-md);
+                background: var(--accent);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 14px;
+                color: #fff;
+            }
+            h1 {
+                font-size: 14px;
+                font-weight: 600;
+            }
+            .version {
+                font-size: 10px;
+                color: var(--text-muted);
+                background: var(--bg-overlay);
+                padding: 2px 8px;
+                border-radius: 10px;
+            }
+            nav {
+                display: flex;
+                gap: 2px;
+                background: var(--bg-elevated);
+                border-radius: var(--radius-md);
+                padding: 2px;
+            }
+            nav button {
+                padding: 5px 16px;
+                border: none;
+                border-radius: var(--radius-sm);
+                background: transparent;
+                color: var(--text-muted);
+                cursor: pointer;
+                font-size: 12px;
+                font-family: var(--font-ui);
+                font-weight: 500;
+                transition: all 0.15s;
+                white-space: nowrap;
+            }
+            nav button:hover {
+                color: var(--text-secondary);
+            }
+            nav button.active {
+                background: var(--accent);
+                color: #fff;
+                box-shadow: var(--shadow-sm);
+            }
+            main {
+                max-width: 1280px;
+                margin: 0 auto;
+                padding: 20px 24px;
+            }
+            .card {
+                background: var(--bg-surface);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-lg);
+                padding: 18px;
+                margin-bottom: 14px;
+            }
+            .card-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 14px;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            .card-title {
+                font-size: 13px;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .card-subtitle {
+                font-size: 11px;
+                color: var(--text-muted);
+            }
+            .btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                padding: 6px 14px;
+                border: 1px solid var(--border-default);
+                border-radius: var(--radius-md);
+                background: var(--bg-elevated);
+                color: var(--text-secondary);
+                cursor: pointer;
+                font-size: 12px;
+                font-family: var(--font-ui);
+                font-weight: 500;
+                white-space: nowrap;
+                transition: all 0.15s;
+                text-decoration: none;
+            }
+            .btn:hover {
+                background: var(--bg-overlay);
+                color: var(--text-primary);
+                border-color: var(--border-strong);
+            }
+            .btn:active {
+                transform: scale(0.97);
+            }
+            .btn-primary {
+                background: var(--accent);
+                color: #fff;
+                border-color: var(--accent);
+            }
+            .btn-primary:hover {
+                background: var(--accent-hover);
+            }
+            .btn-danger {
+                background: var(--state-alarm);
+                color: #fff;
+                border-color: var(--state-alarm);
+            }
+            .btn-danger:hover {
+                background: #f87171;
+            }
+            .btn-success {
+                background: var(--state-ok);
+                color: #fff;
+                border-color: var(--state-ok);
+            }
+            .btn-sm {
+                padding: 4px 10px;
+                font-size: 11px;
+                border-radius: var(--radius-sm);
+            }
+            .btn-xs {
+                padding: 2px 7px;
+                font-size: 10px;
+                border-radius: 3px;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 12px;
+            }
+            th {
+                padding: 8px 12px;
+                text-align: left;
+                font-weight: 600;
+                font-size: 10.5px;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: var(--text-muted);
+                border-bottom: 1px solid var(--border-default);
+                background: var(--bg-elevated);
+                position: sticky;
+                top: 0;
+            }
+            td {
+                padding: 7px 12px;
+                border-bottom: 1px solid var(--border-subtle);
+                color: var(--text-secondary);
+            }
+            tr:hover td {
+                background: rgba(255, 255, 255, 0.02);
+            }
+            .form-row {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+                margin-bottom: 8px;
+                align-items: flex-end;
+            }
+            .form-row label {
+                font-size: 10.5px;
+                font-weight: 500;
+                color: var(--text-muted);
+                display: block;
+                margin-bottom: 3px;
+            }
+            .form-row input,
+            .form-row select {
+                background: var(--bg-app);
+                border: 1px solid var(--border-default);
+                color: var(--text-primary);
+                padding: 6px 10px;
+                border-radius: var(--radius-md);
+                font-size: 12px;
+                font-family: var(--font-ui);
+                width: 100%;
+                min-width: 80px;
+                outline: none;
+                transition:
+                    border-color 0.15s,
+                    box-shadow 0.15s;
+            }
+            .form-row input:focus,
+            .form-row select:focus {
+                border-color: var(--accent);
+                box-shadow: 0 0 0 2px var(--accent-muted);
+            }
+            .form-row .field {
+                flex: 1;
+                min-width: 100px;
+            }
+            .modal-overlay {
+                display: none;
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.7);
+                backdrop-filter: blur(4px);
+                z-index: 200;
+                align-items: center;
+                justify-content: center;
+            }
+            .modal-overlay.show {
+                display: flex;
+            }
+            .modal {
+                background: var(--bg-surface);
+                border: 1px solid var(--border-strong);
+                border-radius: var(--radius-lg);
+                padding: 24px;
+                max-width: 620px;
+                width: 92%;
+                max-height: 84vh;
+                overflow-y: auto;
+                box-shadow: var(--shadow-lg);
+                animation: modalIn 0.2s ease;
+            }
+            @keyframes modalIn {
+                from {
+                    opacity: 0;
+                    transform: scale(0.96) translateY(8px);
+                }
+                to {
+                    opacity: 1;
+                    transform: scale(1) translateY(0);
+                }
+            }
+            .toast {
+                position: fixed;
+                bottom: 24px;
+                right: 24px;
+                background: var(--bg-overlay);
+                border: 1px solid var(--border-strong);
+                padding: 12px 20px;
+                border-radius: var(--radius-md);
+                z-index: 300;
+                font-size: 12px;
+                box-shadow: var(--shadow-md);
+                animation: toastIn 0.3s ease;
+            }
+            @keyframes toastIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(12px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            .badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 2px 10px;
+                border-radius: 12px;
+                font-size: 10.5px;
+                font-weight: 500;
+            }
+            .badge-ok {
+                background: var(--state-ok-bg);
+                color: var(--state-ok);
+            }
+            .badge-warn {
+                background: var(--state-warn-bg);
+                color: var(--state-warn);
+            }
+            .badge-err {
+                background: var(--state-alarm-bg);
+                color: var(--state-alarm);
+            }
+            .badge-off {
+                background: rgba(100, 116, 139, 0.12);
+                color: var(--state-off);
+            }
+            .badge-info {
+                background: var(--state-info-bg);
+                color: var(--state-info);
+            }
+            .dot {
+                display: inline-block;
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+            }
+            .dot-ok {
+                background: var(--state-ok);
+                box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+            }
+            .dot-warn {
+                background: var(--state-warn);
+                box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
+            }
+            .dot-err {
+                background: var(--state-alarm);
+                box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+            }
+            .dot-off {
+                background: var(--state-off);
+            }
+            .action-bar {
+                display: flex;
+                gap: 8px;
+                margin-bottom: 14px;
+                flex-wrap: wrap;
+                align-items: center;
+            }
+            .empty {
+                text-align: center;
+                padding: 40px 20px;
+                color: var(--text-muted);
+            }
+            .empty-icon {
+                font-size: 32px;
+                margin-bottom: 8px;
+                opacity: 0.5;
+            }
+            .stats-bar {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                gap: 8px;
+                margin-bottom: 14px;
+            }
+            .stat-card {
+                background: var(--bg-elevated);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                padding: 12px;
+                text-align: center;
+            }
+            .stat-value {
+                font-size: 22px;
+                font-weight: 700;
+                font-family: var(--font-mono);
+                color: var(--text-primary);
+            }
+            .stat-label {
+                font-size: 10px;
+                color: var(--text-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+                margin-top: 2px;
+            }
+            .status-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+                gap: 10px;
+            }
+            .status-card {
+                background: var(--bg-elevated);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-lg);
+                padding: 14px;
+                cursor: pointer;
+                transition: all 0.15s;
+            }
+            .status-card:hover {
+                border-color: var(--border-default);
+                transform: translateY(-1px);
+                box-shadow: var(--shadow-sm);
+            }
+            .status-card.selected {
+                border-color: var(--accent);
+                box-shadow: 0 0 0 1px var(--accent);
+                background: var(--accent-muted);
+            }
+            .plugin-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 10px;
+            }
+            .plugin-name {
+                font-size: 13px;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .plugin-stats {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 6px;
+                font-size: 11px;
+                color: var(--text-muted);
+            }
+            .stat-item {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+            }
+            .stat-val {
+                color: var(--text-primary);
+                font-weight: 500;
+                font-family: var(--font-mono);
+            }
+            .uptime-bar {
+                height: 3px;
+                background: var(--border-subtle);
+                border-radius: 2px;
+                margin-top: 8px;
+                overflow: hidden;
+            }
+            .uptime-fill {
+                height: 100%;
+                background: var(--accent);
+                border-radius: 2px;
+                transition: width 1s linear;
+            }
+            .packet-log {
+                max-height: 360px;
+                overflow-y: auto;
+                font-family: var(--font-mono);
+                font-size: 11px;
+                background: var(--bg-app);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--border-subtle);
+            }
+            .packet-entry {
+                display: flex;
+                gap: 10px;
+                padding: 5px 10px;
+                border-bottom: 1px solid var(--border-subtle);
+                align-items: flex-start;
+                transition: background 0.1s;
+            }
+            .packet-entry:hover {
+                background: rgba(255, 255, 255, 0.02);
+            }
+            .packet-dir {
+                font-weight: 700;
+                min-width: 22px;
+                font-size: 10px;
+                padding-top: 1px;
+            }
+            .packet-dir.tx {
+                color: var(--accent);
+            }
+            .packet-dir.rx {
+                color: var(--state-ok);
+            }
+            .packet-time {
+                color: var(--text-muted);
+                min-width: 56px;
+                font-size: 10px;
+            }
+            .packet-hex {
+                color: var(--state-warn);
+                flex: 1;
+                word-break: break-all;
+                font-size: 10.5px;
+            }
+            .packet-summary {
+                color: var(--text-muted);
+                font-size: 10px;
+                min-width: 100px;
+            }
+            .point-value-null {
+                color: var(--text-muted);
+                font-style: italic;
+            }
+            .point-value-ok {
+                color: var(--state-ok);
+                font-weight: 500;
+                font-family: var(--font-mono);
+            }
+            .point-age-stale {
+                color: var(--state-warn);
+            }
+            .point-quality-good {
+                color: var(--state-ok);
+            }
+            .point-quality-unknown {
+                color: var(--text-muted);
+            }
+            .refresh-indicator {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                font-size: 10px;
+                color: var(--text-muted);
+            }
+            .refresh-dot {
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: var(--state-ok);
+                animation: pulse 1.5s infinite;
+            }
+            @keyframes pulse {
+                0%,
+                100% {
+                    opacity: 1;
+                }
+                50% {
+                    opacity: 0.3;
+                }
+            }
+            .spacer {
+                flex: 1;
+            }
+            .mono {
+                font-family: var(--font-mono);
+            }
+            .text-center {
+                text-align: center;
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <div class="logo">
+                <div class="logo-icon">&#x2699;</div>
+                <h1>IO Backend</h1>
+                <span class="version">SCADA v2</span>
+            </div>
+            <nav>
+                <button
+                    id="nav-plugins"
+                    class="active"
+                    onclick="showTab('plugins')"
+                >
+                    协议插件</button
+                ><button id="nav-points" onclick="showTab('points')">
+                    点位配置</button
+                ><button id="nav-monitor" onclick="showTab('monitor')">
+                    监控调试
+                </button>
+            </nav>
+        </header>
+        <main id="app"></main>
+        <div class="modal-overlay" id="modal-overlay">
+            <div class="modal" id="modal-content"></div>
+        </div>
+        <div id="toast"></div>
+        <script>
+            const API = "";
+            let currentTab = "plugins",
+                plugins = [],
+                currentPluginId = null,
+                monitorInterval = null,
+                selectedMonitorPlugin = null;
+            async function api(method, path, body) {
+                const opts = { method, headers: {} };
+                if (body && !(body instanceof FormData)) {
+                    opts.headers["Content-Type"] = "application/json";
+                    opts.body = JSON.stringify(body);
+                } else if (body instanceof FormData) {
+                    opts.body = body;
+                }
+                const r = await fetch(API + path, opts);
+                if (!r.ok) throw new Error(await r.text());
+                const ct = r.headers.get("Content-Type") || "";
+                if (ct.includes("application/json")) return r.json();
+                return r;
+            }
+            function toast(msg, type) {
+                const el = document.getElementById("toast");
+                el.textContent = msg;
+                el.style.borderColor =
+                    type === "error"
+                        ? "var(--state-alarm)"
+                        : type === "success"
+                          ? "var(--state-ok)"
+                          : "var(--border-strong)";
+                el.style.display = "block";
+                setTimeout(() => (el.style.display = "none"), 3000);
+            }
+            function showModal(html) {
+                document.getElementById("modal-content").innerHTML = html;
+                document.getElementById("modal-overlay").classList.add("show");
+            }
+            function closeModal() {
+                document
+                    .getElementById("modal-overlay")
+                    .classList.remove("show");
+            }
+            document
+                .getElementById("modal-overlay")
+                .addEventListener("click", (e) => {
+                    if (e.target === e.currentTarget) closeModal();
+                });
+            function showTab(tab) {
+                if (monitorInterval) {
+                    clearInterval(monitorInterval);
+                    monitorInterval = null;
+                }
+                currentTab = tab;
+                document
+                    .querySelectorAll("nav button")
+                    .forEach((b) => b.classList.remove("active"));
+                document.getElementById("nav-" + tab).classList.add("active");
+                if (tab === "plugins") loadPluginsTab();
+                else if (tab === "points") loadPointsTab();
+                else if (tab === "monitor") loadMonitorTab();
+            }
+            async function loadPluginsTab() {
+                try {
+                    plugins = await api("GET", "/api/plugins");
+                } catch (e) {
+                    plugins = [];
+                    toast("加载失败: " + e.message, "error");
+                }
+                renderPlugins();
+            }
+            function renderPlugins() {
+                let h =
+                    '<div class="card"><div class="card-header"><span class="card-title">&#x1F50C; 协议插件</span><span class="card-subtitle">' +
+                    plugins.length +
+                    " 个已配置</span></div>";
+                h +=
+                    '<div class="action-bar"><button class="btn btn-primary" onclick="showPluginForm()">+ 添加插件</button></div>';
+                if (!plugins.length) {
+                    h +=
+                        '<div class="empty"><div class="empty-icon">&#x1F4E6;</div>暂无插件</div>';
+                } else {
+                    h +=
+                        "<table><thead><tr><th>ID</th><th>名称</th><th>WASM 文件</th><th>状态</th><th>操作</th></tr></thead><tbody>";
+                    plugins.forEach((p) => {
+                        h +=
+                            '<tr><td style="color:var(--text-muted);">' +
+                            p.id +
+                            '</td><td style="font-weight:500;">' +
+                            esc(p.name) +
+                            '</td><td class="mono" style="font-size:11px;">' +
+                            esc(p.wasm_file) +
+                            "</td>";
+                        h +=
+                            '<td><span class="badge ' +
+                            (p.enabled ? "badge-ok" : "badge-off") +
+                            '"><span class="dot ' +
+                            (p.enabled ? "dot-ok" : "dot-off") +
+                            '"></span>' +
+                            (p.enabled ? "启用" : "停用") +
+                            "</span></td>";
+                        h +=
+                            '<td><button class="btn btn-sm" onclick="editPlugin(' +
+                            p.id +
+                            ')">编辑</button> <button class="btn btn-sm btn-danger" onclick="deletePlugin(' +
+                            p.id +
+                            ')">删除</button></td></tr>';
+                    });
+                    h += "</tbody></table>";
+                }
+                h += "</div>";
+                document.getElementById("app").innerHTML = h;
+            }
+            function showPluginForm(id) {
+                const p = id ? plugins.find((x) => x.id === id) : null;
+                showModal(
+                    '<h3 style="margin-bottom:16px;">' +
+                        (id ? "编辑" : "添加") +
+                        '插件</h3><div class="form-row"><div class="field"><label>名称</label><input id="f-name" value="' +
+                        esc(p ? p.name : "") +
+                        '"></div><div class="field"><label>WASM 文件</label><input id="f-wasm" value="' +
+                        esc(p ? p.wasm_file : "") +
+                        '"></div></div><div class="form-row"><div class="field"><label>配置 JSON</label><input id="f-cfg" value="' +
+                        esc(p ? p.config_json : "") +
+                        '"></div></div><div class="form-row"><div class="field"><label>启用</label><select id="f-enabled"><option value="1"' +
+                        (p && p.enabled ? " selected" : "") +
+                        '>是</option><option value="0"' +
+                        (p && !p.enabled ? " selected" : "") +
+                        '>否</option></select></div></div><div style="margin-top:16px;display:flex;gap:8px;"><button class="btn btn-primary" onclick="savePlugin(' +
+                        (id || 0) +
+                        ')">保存</button><button class="btn" onclick="closeModal()">取消</button></div>',
+                );
+            }
+            async function savePlugin(id) {
+                const data = {
+                    name: document.getElementById("f-name").value,
+                    wasm_file: document.getElementById("f-wasm").value,
+                    config_json: document.getElementById("f-cfg").value,
+                    enabled: document.getElementById("f-enabled").value === "1",
+                };
+                if (id) await api("PUT", "/api/plugins/" + id, data);
+                else await api("POST", "/api/plugins", data);
+                closeModal();
+                loadPluginsTab();
+                toast(id ? "更新成功" : "添加成功", "success");
+            }
+            function editPlugin(id) {
+                showPluginForm(id);
+            }
+            async function deletePlugin(id) {
+                if (!confirm("确定删除? ")) return;
+                await api("DELETE", "/api/plugins/" + id);
+                loadPluginsTab();
+                toast("已删除", "success");
+            }
+            async function loadPointsTab() {
+                try {
+                    plugins = await api("GET", "/api/plugins");
+                } catch (e) {
+                    plugins = [];
+                }
+                let h =
+                    '<div class="card"><div class="card-header"><span class="card-title">&#x1F4CA; 点位配置</span></div>';
+                h +=
+                    '<div class="form-row" style="margin-bottom:12px;"><div class="field"><label>选择插件</label><select id="plugin-select" onchange="onPluginChange()"><option value="">-- 请选择插件 --</option>';
+                plugins.forEach((p) => {
+                    h +=
+                        '<option value="' +
+                        p.id +
+                        '"' +
+                        (currentPluginId === p.id ? " selected" : "") +
+                        ">" +
+                        esc(p.name) +
+                        "</option>";
+                });
+                h += "</select></div></div>";
+                if (!currentPluginId) {
+                    h +=
+                        '<div class="empty"><div class="empty-icon">&#x1F446;</div>请先选择一个插件</div>';
+                } else {
+                    h +=
+                        '<div class="action-bar"><button class="btn btn-primary" onclick="addPoint()">+ 添加点位</button><button class="btn btn-success" onclick="triggerImport()">&#x1F4E5; 导入 Excel</button><button class="btn" onclick="exportExcel()">&#x1F4E4; 导出 Excel</button><input type="file" id="import-file" style="display:none" accept=".xlsx,.xls" onchange="doImport(event)"></div><div id="points-table"></div>';
+                }
+                h += "</div>";
+                document.getElementById("app").innerHTML = h;
+                if (currentPluginId) renderPointsTable();
+            }
+            async function renderPointsTable() {
+                try {
+                    const points = await api(
+                        "GET",
+                        "/api/points?plugin_id=" + currentPluginId,
+                    );
+                    let h = "";
+                    if (!points.length)
+                        h =
+                            '<div class="empty"><div class="empty-icon">&#x1F4ED;</div>暂无点位</div>';
+                    else {
+                        h =
+                            "<table><thead><tr><th>变量 ID</th><th>协议地址</th><th>类型</th><th>字节序</th><th>缩放</th><th>偏移</th><th>变量类型</th><th>操作</th></tr></thead><tbody>";
+                        points.forEach((pt) => {
+                            h +=
+                                '<tr><td style="font-weight:500;font-family:var(--font-mono);font-size:11px;">' +
+                                esc(pt.variable_id) +
+                                '</td><td class="mono" style="font-size:11px;">' +
+                                esc(pt.address) +
+                                '</td><td class="mono">' +
+                                esc(pt.data_type) +
+                                "</td><td>" +
+                                esc(pt.byte_order) +
+                                '</td><td class="mono">' +
+                                pt.scale +
+                                '</td><td class="mono">' +
+                                pt.offset_val +
+                                '</td><td><span class="badge badge-info">' +
+                                esc(pt.var_type) +
+                                '</span></td><td><button class="btn btn-sm" onclick="editPoint(' +
+                                pt.id +
+                                ')">编辑</button> <button class="btn btn-sm btn-danger" onclick="deletePoint(' +
+                                pt.id +
+                                ')">删除</button></td></tr>';
+                        });
+                        h += "</tbody></table>";
+                    }
+                    document.getElementById("points-table").innerHTML = h;
+                } catch (e) {
+                    document.getElementById("points-table").innerHTML =
+                        '<div class="empty">加载失败: ' +
+                        esc(e.message) +
+                        "</div>";
+                }
+            }
+            function onPluginChange() {
+                currentPluginId = document.getElementById("plugin-select").value
+                    ? parseInt(document.getElementById("plugin-select").value)
+                    : null;
+                renderPointsTable();
+            }
+            function addPoint() {
+                showPointForm(null);
+            }
+            function editPoint(id) {
+                showPointForm(id);
+            }
+            function showPointForm(id) {
+                showModal(
+                    '<h3 style="margin-bottom:16px;">' +
+                        (id ? "编辑" : "添加") +
+                        '点位</h3><div class="form-row"><div class="field"><label>变量 ID</label><input id="f-vid" placeholder="STA1_211_IA"></div><div class="field"><label>协议地址</label><input id="f-addr" placeholder="holding_register:0"></div></div><div class="form-row"><div class="field"><label>数据类型</label><input id="f-dtype" value="uint16"></div><div class="field"><label>字节序</label><input id="f-border" value="big_endian"></div></div><div class="form-row"><div class="field"><label>缩放</label><input id="f-scale" value="1.0" type="number" step="any"></div><div class="field"><label>偏移</label><input id="f-offset" value="0" type="number" step="any"></div><div class="field"><label>变量类型</label><select id="f-vtype"><option>AI</option><option>DI</option><option>AO</option><option>DO</option></select></div></div><div style="margin-top:16px;display:flex;gap:8px;"><button class="btn btn-primary" onclick="savePoint(' +
+                        (id || 0) +
+                        ')">保存</button><button class="btn" onclick="closeModal()">取消</button></div>',
+                );
+                if (id) {
+                    api("GET", "/api/points?plugin_id=" + currentPluginId).then(
+                        (pts) => {
+                            const pt = pts.find((x) => x.id === id);
+                            if (pt) {
+                                document.getElementById("f-vid").value =
+                                    pt.variable_id;
+                                document.getElementById("f-addr").value =
+                                    pt.address;
+                                document.getElementById("f-dtype").value =
+                                    pt.data_type;
+                                document.getElementById("f-border").value =
+                                    pt.byte_order;
+                                document.getElementById("f-scale").value =
+                                    pt.scale;
+                                document.getElementById("f-offset").value =
+                                    pt.offset_val;
+                                document.getElementById("f-vtype").value =
+                                    pt.var_type;
+                            }
+                        },
+                    );
+                }
+            }
+            async function savePoint(id) {
+                const data = {
+                    plugin_id: currentPluginId,
+                    variable_id: document.getElementById("f-vid").value,
+                    address: document.getElementById("f-addr").value,
+                    data_type: document.getElementById("f-dtype").value,
+                    byte_order: document.getElementById("f-border").value,
+                    scale:
+                        parseFloat(document.getElementById("f-scale").value) ||
+                        1,
+                    offset_val:
+                        parseFloat(document.getElementById("f-offset").value) ||
+                        0,
+                    var_type: document.getElementById("f-vtype").value,
+                };
+                if (id) await api("PUT", "/api/points/" + id, data);
+                else await api("POST", "/api/points", data);
+                closeModal();
+                renderPointsTable();
+                toast(id ? "更新成功" : "添加成功", "success");
+            }
+            async function deletePoint(id) {
+                if (!confirm("确定删除? ")) return;
+                await api("DELETE", "/api/points/" + id);
+                renderPointsTable();
+                toast("已删除", "success");
+            }
+            function triggerImport() {
+                document.getElementById("import-file").click();
+            }
+            async function doImport(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                const fd = new FormData();
+                fd.append("file", file);
+                try {
+                    const r = await api(
+                        "POST",
+                        "/api/plugins/" + currentPluginId + "/import",
+                        fd,
+                    );
+                    toast("导入 " + r.imported + " 条", "success");
+                    renderPointsTable();
+                } catch (err) {
+                    toast("导入失败: " + err.message, "error");
+                }
+                e.target.value = "";
+            }
+            function exportExcel() {
+                window.open(
+                    API + "/api/plugins/" + currentPluginId + "/export",
+                    "_blank",
+                );
+            }
+            async function loadMonitorTab() {
+                try {
+                    plugins = await api("GET", "/api/plugins");
+                } catch (e) {}
+                if (!selectedMonitorPlugin && plugins.length)
+                    selectedMonitorPlugin = plugins[0].name;
+                document.getElementById("app").innerHTML =
+                    '<div class="card"><div class="card-header"><span class="card-title">&#x1F4CA; 运行状态监控</span><span class="refresh-indicator"><span class="refresh-dot"></span> 1s 刷新</span></div><div id="monitor-root"></div></div>';
+                await refreshMonitor();
+                if (monitorInterval) clearInterval(monitorInterval);
+                monitorInterval = setInterval(refreshMonitor, 1000);
+            }
+            async function refreshMonitor() {
+                try {
+                    const snapshot = await api("GET", "/api/monitor/overview");
+                    renderMonitor(snapshot);
+                    if (selectedMonitorPlugin) {
+                        const [points, packets] = await Promise.all([
+                            api(
+                                "GET",
+                                "/api/monitor/plugins/" +
+                                    encodeURIComponent(selectedMonitorPlugin) +
+                                    "/points",
+                            ),
+                            api(
+                                "GET",
+                                "/api/monitor/plugins/" +
+                                    encodeURIComponent(selectedMonitorPlugin) +
+                                    "/packets?limit=80",
+                            ),
+                        ]);
+                        renderDetail(selectedMonitorPlugin, points, packets);
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+            function formatUptime(ms) {
+                const s = Math.floor(ms / 1000);
+                if (s < 60) return s + "s";
+                const m = Math.floor(s / 60);
+                if (m < 60) return m + "m " + (s % 60) + "s";
+                return Math.floor(m / 60) + "h " + (m % 60) + "m";
+            }
+            function renderMonitor(snapshot) {
+                const stateBadge = (p) => {
+                    const cls =
+                        p.connection_state === 2
+                            ? "badge-ok"
+                            : p.connection_state === 3
+                              ? "badge-err"
+                              : p.connection_state === 1
+                                ? "badge-warn"
+                                : "badge-off";
+                    const dot =
+                        p.connection_state === 2
+                            ? "dot-ok"
+                            : p.connection_state === 3
+                              ? "dot-err"
+                              : p.connection_state === 1
+                                ? "dot-warn"
+                                : "dot-off";
+                    return (
+                        '<span class="badge ' +
+                        cls +
+                        '"><span class="dot ' +
+                        dot +
+                        '"></span>' +
+                        esc(p.connection_label) +
+                        "</span>"
+                    );
+                };
+                let h = '<div class="stats-bar">';
+                h +=
+                    '<div class="stat-card"><div class="stat-value">' +
+                    snapshot.plugins.length +
+                    '</div><div class="stat-label">已加载插件</div></div>';
+                h +=
+                    '<div class="stat-card"><div class="stat-value">' +
+                    snapshot.total_scans +
+                    '</div><div class="stat-label">总扫描次数</div></div>';
+                h +=
+                    '<div class="stat-card"><div class="stat-value" style="color:' +
+                    (snapshot.total_errors > 0
+                        ? "var(--state-alarm)"
+                        : "var(--state-ok)") +
+                    '">' +
+                    snapshot.total_errors +
+                    '</div><div class="stat-label">总错误数</div></div>';
+                h +=
+                    '<div class="stat-card"><div class="stat-value">' +
+                    snapshot.total_points +
+                    '</div><div class="stat-label">点位总数</div></div>';
+                h +=
+                    '<div class="stat-card"><div class="stat-value">' +
+                    snapshot.active_ws_clients +
+                    '</div><div class="stat-label">WS 客户端</div></div>';
+                h +=
+                    '<div class="stat-card"><div class="stat-value" style="font-size:16px;">' +
+                    formatUptime(snapshot.server_uptime_ms) +
+                    '</div><div class="stat-label">服务器运行</div></div></div>';
+                h += '<div class="status-grid">';
+                snapshot.plugins.forEach((p) => {
+                    h +=
+                        '<div class="status-card' +
+                        (selectedMonitorPlugin === p.name ? " selected" : "") +
+                        '" onclick="selectPlugin(\'' +
+                        esc(p.name) +
+                        '\')"><div class="plugin-header"><span class="plugin-name">&#x1F50C; ' +
+                        esc(p.name) +
+                        "</span>" +
+                        stateBadge(p) +
+                        '</div><div class="plugin-stats"><div class="stat-item">&#x1F4E1; 扫描: <span class="stat-val">' +
+                        p.scan_count +
+                        '</span></div><div class="stat-item">&#x274C; 错误: <span class="stat-val" style="color:' +
+                        (p.error_count > 0
+                            ? "var(--state-alarm)"
+                            : "var(--text-primary)") +
+                        '">' +
+                        p.error_count +
+                        '</span></div><div class="stat-item">&#x23F1; 上次: <span class="stat-val">' +
+                        p.last_scan_time_ms +
+                        'ms</span></div><div class="stat-item">&#x1F553; 运行: <span class="stat-val">' +
+                        formatUptime(p.uptime_ms) +
+                        "</span></div></div>";
+                    if (p.last_error)
+                        h +=
+                            '<div style="margin-top:8px;font-size:10px;color:var(--state-alarm);padding:4px 6px;background:var(--state-alarm-bg);border-radius:4px;">&#x26A0; ' +
+                            esc(p.last_error.substring(0, 100)) +
+                            "</div>";
+                    h +=
+                        '<div class="uptime-bar"><div class="uptime-fill" style="width:' +
+                        Math.min(
+                            100,
+                            (p.uptime_ms / snapshot.server_uptime_ms) * 100,
+                        ) +
+                        '%"></div></div></div>';
+                });
+                h += "</div>";
+                if (!snapshot.plugins.length)
+                    h =
+                        '<div class="empty"><div class="empty-icon">&#x1F50C;</div>暂无运行中的插件</div>';
+                h += '<div id="monitor-detail" style="margin-top:14px;"></div>';
+                document.getElementById("monitor-root").innerHTML = h;
+            }
+            function selectPlugin(name) {
+                selectedMonitorPlugin = name;
+                refreshMonitor();
+            }
+            function renderDetail(pluginName, points, packets) {
+                const el = document.getElementById("monitor-detail");
+                if (!el) return;
+                const fmtVal = (v) => {
+                    if (v === null || v === undefined)
+                        return '<span class="point-value-null">--</span>';
+                    if (typeof v === "number")
+                        return (
+                            '<span class="point-value-ok">' +
+                            (Number.isInteger(v) ? v : v.toFixed(2)) +
+                            "</span>"
+                        );
+                    return (
+                        '<span class="point-value-ok">' +
+                        esc(String(v)) +
+                        "</span>"
+                    );
+                };
+                const fmtAge = (ms) => {
+                    if (!ms) return "-";
+                    if (ms < 1000) return ms + "ms";
+                    if (ms < 60000) return (ms / 1000).toFixed(1) + "s";
+                    return (ms / 60000).toFixed(1) + "min";
+                };
+                let h =
+                    '<div class="card"><div class="card-header"><span class="card-title">&#x1F4E1; 实时点位值</span><span class="card-subtitle">' +
+                    points.length +
+                    " 个点位 &middot; " +
+                    esc(pluginName) +
+                    "</span></div>";
+                if (!points.length) {
+                    h +=
+                        '<div class="empty"><div class="empty-icon">&#x1F4ED;</div>暂无点位数据</div>';
+                } else {
+                    h +=
+                        '<div style="max-height:320px;overflow-y:auto;"><table><thead><tr><th>变量 ID</th><th>地址</th><th>类型</th><th>当前值</th><th>质量</th><th>时间</th><th>延迟</th><th>配置</th></tr></thead><tbody>';
+                    points.forEach((pt) => {
+                        const dt = pt.timestamp_ms
+                            ? new Date(pt.timestamp_ms)
+                                  .toISOString()
+                                  .substr(11, 12)
+                            : "-";
+                        const qCls =
+                            pt.quality === "good"
+                                ? "point-quality-good"
+                                : "point-quality-unknown";
+                        const ageCls =
+                            pt.age_ms > 5000 ? "point-age-stale" : "";
+                        h +=
+                            '<tr><td style="font-weight:500;font-family:var(--font-mono);font-size:10.5px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' +
+                            esc(pt.variable_id) +
+                            '">' +
+                            esc(pt.variable_id) +
+                            '</td><td class="mono" style="font-size:10.5px;">' +
+                            esc(pt.address) +
+                            '</td><td><span class="badge badge-info" style="font-size:9px;">' +
+                            esc(pt.var_type) +
+                            "</span></td><td>" +
+                            fmtVal(pt.value) +
+                            '</td><td class="' +
+                            qCls +
+                            '" style="font-size:10.5px;">' +
+                            esc(pt.quality) +
+                            '</td><td style="font-size:10px;color:var(--text-muted);">' +
+                            dt +
+                            '</td><td class="' +
+                            ageCls +
+                            '" style="font-size:10px;">' +
+                            fmtAge(pt.age_ms) +
+                            '</td><td style="font-size:9px;color:var(--text-muted);">' +
+                            esc(pt.data_type) +
+                            "/" +
+                            esc(pt.byte_order) +
+                            " &times;" +
+                            pt.scale +
+                            "+" +
+                            pt.offset_val +
+                            "</td></tr>";
+                    });
+                    h += "</tbody></table></div>";
+                }
+                h +=
+                    '</div><div class="card"><div class="card-header"><span class="card-title">&#x1F4E8; 网络报文日志</span><span class="card-subtitle">最近 ' +
+                    packets.length +
+                    " 条</span></div>";
+                if (!packets.length) {
+                    h +=
+                        '<div class="empty"><div class="empty-icon">&#x1F4E1;</div>暂无报文 — 插件需通过 host_log 或 host_on_packet 上报</div>';
+                } else {
+                    h += '<div class="packet-log">';
+                    packets
+                        .slice()
+                        .reverse()
+                        .forEach((pkt) => {
+                            const t =
+                                pkt.timestamp_ms > 1e12
+                                    ? new Date(pkt.timestamp_ms)
+                                          .toISOString()
+                                          .substr(11, 12)
+                                    : (pkt.timestamp_ms / 1000).toFixed(1) +
+                                      "s";
+                            h +=
+                                '<div class="packet-entry"><span class="packet-dir ' +
+                                pkt.direction.toLowerCase() +
+                                '">' +
+                                pkt.direction.toUpperCase() +
+                                '</span><span class="packet-time">' +
+                                t +
+                                '</span><span class="packet-hex">' +
+                                esc(pkt.hex_dump) +
+                                '</span><span class="packet-summary">' +
+                                esc(pkt.summary.substring(0, 80)) +
+                                "</span></div>";
+                        });
+                    h += "</div>";
+                }
+                h += "</div>";
+                el.innerHTML = h;
+            }
+            function esc(s) {
+                return (s || "")
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;");
+            }
+            loadPluginsTab();
+        </script>
+    </body>
 </html>
