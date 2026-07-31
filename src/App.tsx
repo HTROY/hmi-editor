@@ -58,6 +58,11 @@ function App() {
   const rp = useEditorStore((s) => s.rightPanel);
   const setRp = useEditorStore((s) => s.setRightPanel);
   const [showLib, setShowLib] = useState(true);
+  // 记录已访问过的面板：首次访问后保持挂载（切走时隐藏而非卸载），
+  // 避免切回面板时本地状态全部重置
+  const [visitedPanels, setVisitedPanels] = useState<Set<string>>(
+    () => new Set([rp]),
+  );
 
   return (
     <div className="app">
@@ -89,7 +94,12 @@ function App() {
               <button
                 key={t.key}
                 className={`panel-tab${rp === t.key ? " active" : ""}`}
-                onClick={() => setRp(t.key)}
+                onClick={() => {
+                  setRp(t.key);
+                  setVisitedPanels((prev) =>
+                    prev.has(t.key) ? prev : new Set(prev).add(t.key),
+                  );
+                }}
                 title={t.label}
               >
                 {t.label}
@@ -97,7 +107,17 @@ function App() {
             ))}
           </div>
           <div className="panel fade-in">
-            {PANELS[rp] ?? (
+            {TABS.map((t) =>
+              visitedPanels.has(t.key) ? (
+                <div
+                  key={t.key}
+                  style={{ display: rp === t.key ? undefined : "none" }}
+                >
+                  {PANELS[t.key]}
+                </div>
+              ) : null,
+            )}
+            {!visitedPanels.has(rp) && (
               <div className="panel-hint">← 选择上方面板查看内容</div>
             )}
           </div>

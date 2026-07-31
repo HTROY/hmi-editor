@@ -3,7 +3,12 @@ import type { VariableType } from "../variables/types";
 import { DataSource } from "./DataSource";
 import { WebSocketClient } from "./WebSocketClient";
 import { IEC104Simulator } from "./IEC104Simulator";
-import type { ConnectionStatus, DataSourceType, MonitorSnapshot } from "./types";
+import type {
+  ConnectionStatus,
+  DataPoint,
+  DataSourceType,
+  MonitorSnapshot,
+} from "./types";
 
 // ============================================================
 // DataBridge — I/O 数据源 → VariableManager 桥接
@@ -24,6 +29,8 @@ export class DataBridge {
   private pointIdToVarId: Map<string, string> = new Map();
   /** 内部变量 ID → 后端点位标识（控制命令反向路由用） */
   private varIdToPointId: Map<string, string> = new Map();
+  /** 最近一次收到的点位值缓存（用于变量导入完成后重放，防止快照先于导入到达导致丢值） */
+  private lastValues: Map<string, DataPoint> = new Map();
 
   // IEC 104 模拟器内置
   iec104Simulator: IEC104Simulator;
@@ -190,20 +197,41 @@ export class DataBridge {
       this.pointIdToVarId.clear();
       this.varIdToPointId.clear();
 
-      const defs = points.map((p) => {
+      // 同一个 variable_id 可能被多个插件共享（多协议冗余采集同一逻辑点位）。
+      // 所有后端点位（DB id / variable_id）都映射到该逻辑变量，保证任意
+      // 协议推来的数据都能路由；但变量定义只导入一次，避免点表出现重复变量。
+      const seenVarIds = new Set<string>();
+      const defs: Array<{
+        id: string;
+        name: string;
+        type: VariableType;
+        address: string;
+        defaultValue: number;
+        unit: string;
+        description: string;
+        group: string;
+        min: number;
+        max: number;
+        alarmHigh: number;
+        alarmLow: number;
+      }> = [];
+
+      for (const p of points) {
         const varType: VariableType = (["AI","DI","AO","DO"].includes(p.var_type) ? p.var_type as VariableType : "AI");
-        const internalId = `p${p.plugin_id}_${p.variable_id}`;
         const backendPointId = String(p.id);
 
-        // 建立双向映射：后端 DB id 和 variable_id 都映射到内部 ID
-        this.pointIdToVarId.set(backendPointId, internalId);
-        this.pointIdToVarId.set(p.variable_id, internalId);
-        // 反向映射：内部 ID → 后端 DB id（控制命令用）
-        this.varIdToPointId.set(internalId, backendPointId);
+        // 建立双向映射：后端 DB id 和 variable_id 都映射到逻辑变量 ID
+        this.pointIdToVarId.set(backendPointId, p.variable_id);
+        this.pointIdToVarId.set(p.variable_id, p.variable_id);
+        // 反向映射：逻辑变量 ID → 后端 DB id（控制命令用）
+        this.varIdToPointId.set(p.variable_id, backendPointId);
 
-        return {
-          id: internalId,
-          name: p.variable_id + ` [P${p.plugin_id}]`,
+        if (seenVarIds.has(p.variable_id)) continue;
+        seenVarIds.add(p.variable_id);
+
+        defs.push({
+          id: p.variable_id,
+          name: p.variable_id,
           type: varType,
           address: p.address,
           defaultValue: 0,
@@ -214,11 +242,19 @@ export class DataBridge {
           max: (varType === "AI" || varType === "AO") ? 100 : 1,
           alarmHigh: 0,
           alarmLow: 0,
-        };
-      });
+        });
+      }
 
       this.variableManager.replaceAll(defs);
-      console.log(`[DataBridge] 变量列表已导入: ${defs.length} 个, 映射表: ${this.pointIdToVarId.size} 条`);
+
+      // 重放最近一次收到的值：WS 快照通常先于 /api/points 导入完成到达，
+      // 若直接 setValue 会因变量尚未定义而被丢弃。导入完成后补写一次，
+      // 保证恒定值（如 modbus 读取的固定转速）也能在点表中正确显示。
+      for (const [id, p] of this.lastValues) {
+        this.variableManager.setValue(id, p.value, p.quality);
+      }
+
+      console.log(`[DataBridge] 变量列表已导入: ${defs.length} 个（去重前 ${points.length} 条）, 映射表: ${this.pointIdToVarId.size} 条`);
       this.onVarsRefreshed?.();
       return defs.length;
     } catch (err) {
@@ -249,6 +285,8 @@ export class DataBridge {
         const varId = this.pointIdToVarId.get(String(point.id)) ?? point.id;
         const mapping = this.pointIdToVarId.get(String(point.id));
         console.log("[DataBridge] Data point:", point.id, "val:", point.value, "mapped to:", varId, "hasMapping:", !!mapping);
+        // 先缓存再写入：若变量尚未导入，setValue 会被丢弃，导入完成后需要重放
+        this.lastValues.set(varId, point);
         this.variableManager.setValue(varId, point.value, point.quality);
       },
       onStatus: (status) => {
