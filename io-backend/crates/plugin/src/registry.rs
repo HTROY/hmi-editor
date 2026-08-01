@@ -14,7 +14,7 @@ use super::host::PluginHost;
 use super::interface::PluginInstance;
 use hmi_io_config::{AppConfig, PluginInstance as PluginInstanceConfig};
 use hmi_io_monitor::collector::MonitorCollector;
-use hmi_io_point::types::PointValue;
+use hmi_io_point::{point_key, types::PointValue};
 
 /// Minimum time between automatic reconnect attempts after a link loss.
 const RECONNECT_MIN_INTERVAL: Duration = Duration::from_secs(5);
@@ -190,41 +190,38 @@ impl PluginRegistry {
     }
 
     pub async fn write_point(&self, point_name: &str, value: f64) -> anyhow::Result<()> {
-        // Collect sender + receiver pairs first, then await
-        let pairs: Vec<(String, oneshot::Receiver<Result<(), String>>)> = {
-            let plugins = self.plugins.lock().unwrap();
-            plugins
-                .iter()
-                .filter_map(|(pn, h)| {
-                    let (tx, rx) = oneshot::channel();
-                    if h.cmd_tx
-                        .send(PluginCommand::WritePoint {
-                            name: point_name.to_string(),
-                            value,
-                            reply: tx,
-                        })
-                        .is_ok()
-                    {
-                        Some((pn.clone(), rx))
-                    } else {
-                        None
-                    }
-                })
-                .collect()
+        let target = {
+            let cache = self.config_cache.lock().unwrap();
+            cache
+                .as_ref()
+                .and_then(|cfg| resolve_write_target(cfg, point_name))
+        };
+        let Some((plugin_name, variable_id)) = target else {
+            anyhow::bail!("point '{}' not found in any plugin instance", point_name);
         };
 
-        for (pn, rx) in pairs {
-            if let Ok(result) = rx.await {
-                match result {
-                    Ok(()) => {
-                        log::debug!("Wrote '{}' via '{}'", point_name, pn);
-                        return Ok(());
-                    }
-                    Err(e) => log::debug!("'{}' rejected: {}", pn, e),
-                }
-            }
+        let cmd_tx = {
+            let plugins = self.plugins.lock().unwrap();
+            plugins.get(&plugin_name).map(|h| h.cmd_tx.clone())
+        };
+        let Some(cmd_tx) = cmd_tx else {
+            anyhow::bail!("plugin instance '{}' is not running", plugin_name);
+        };
+
+        let (tx, rx) = oneshot::channel();
+        cmd_tx
+            .send(PluginCommand::WritePoint {
+                name: variable_id,
+                value,
+                reply: tx,
+            })
+            .map_err(|_| anyhow::anyhow!("plugin '{}' is not accepting commands", plugin_name))?;
+
+        match rx.await {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(e)) => anyhow::bail!("plugin '{}' rejected write: {}", plugin_name, e),
+            Err(e) => anyhow::bail!("plugin '{}' write failed: {}", plugin_name, e),
         }
-        anyhow::bail!("point '{}' not found in any plugin", point_name)
     }
 
     pub async fn plugin_statuses(&self) -> Vec<(String, String)> {
@@ -273,6 +270,15 @@ impl PluginRegistry {
         }
         plugins.clear();
     }
+}
+
+fn resolve_write_target(config: &AppConfig, point_name: &str) -> Option<(String, String)> {
+    config.plugins.instances.iter().find_map(|inst| {
+        inst.points
+            .iter()
+            .find(|pt| point_key(&inst.name, &pt.id) == point_name)
+            .map(|pt| (inst.name.clone(), pt.id.clone()))
+    })
 }
 
 // ── Plugin Actor Loop ──────────────────────────────────────
@@ -353,4 +359,65 @@ async fn run_plugin_actor(
         }
     }
     log::info!("Plugin '{}' actor stopped", name);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hmi_io_config::PointMapping;
+
+    fn mapping(id: &str) -> PointMapping {
+        PointMapping {
+            id: id.into(),
+            address: "coil:0".into(),
+            data_type: "bool".into(),
+            byte_order: "big_endian".into(),
+            scale: 1.0,
+            offset: 0.0,
+            var_type: "DI".into(),
+        }
+    }
+
+    fn config_with_two_instances() -> AppConfig {
+        let mut cfg = AppConfig::default_config();
+        cfg.plugins.instances = vec![
+            PluginInstanceConfig {
+                name: "mb1".into(),
+                wasm_file: "modbus.wasm".into(),
+                config: serde_json::json!({}),
+                points: vec![mapping("P1")],
+            },
+            PluginInstanceConfig {
+                name: "mb2".into(),
+                wasm_file: "modbus.wasm".into(),
+                config: serde_json::json!({}),
+                points: vec![mapping("P1"), mapping("P2")],
+            },
+        ];
+        cfg
+    }
+
+    #[test]
+    fn resolve_write_target_routes_to_correct_instance() {
+        let cfg = config_with_two_instances();
+        assert_eq!(
+            resolve_write_target(&cfg, "mb1:P1"),
+            Some(("mb1".to_string(), "P1".to_string()))
+        );
+        assert_eq!(
+            resolve_write_target(&cfg, "mb2:P1"),
+            Some(("mb2".to_string(), "P1".to_string()))
+        );
+        assert_eq!(
+            resolve_write_target(&cfg, "mb2:P2"),
+            Some(("mb2".to_string(), "P2".to_string()))
+        );
+    }
+
+    #[test]
+    fn resolve_write_target_unknown_returns_none() {
+        let cfg = config_with_two_instances();
+        assert_eq!(resolve_write_target(&cfg, "mb1:P2"), None);
+        assert_eq!(resolve_write_target(&cfg, "P1"), None);
+    }
 }
