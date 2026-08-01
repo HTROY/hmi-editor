@@ -1,5 +1,5 @@
 use hmi_io_config::{AppConfig, PointMapping};
-use crate::types::PointValue;
+use crate::types::{point_key, PointValue};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -18,7 +18,7 @@ impl PointManager {
         for inst in &config.plugins.instances {
             for pt in &inst.points {
                 points.insert(
-                    pt.id.clone(),
+                    point_key(&inst.name, &pt.id),
                     CachedPoint {
                         mapping: pt.clone(),
                         last_value: None,
@@ -94,6 +94,8 @@ fn apply_scaling(raw: PointValue, scale: f64, offset: f64) -> PointValue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hmi_io_config::PluginInstance as PluginInstanceConfig;
+    use crate::types::point_key;
 
     fn make_mapping(id: &str) -> PointMapping {
         PointMapping {
@@ -165,6 +167,53 @@ mod tests {
         mgr.insert_test_point("pt2", make_mapping("pt2"));
         mgr.update(PointValue::new("pt1", 10.0, "good", 1000));
         mgr.update(PointValue::new("pt2", 20.0, "good", 2000));
+        let vals = mgr.get_all_values();
+        assert_eq!(vals.len(), 2);
+    }
+
+    #[test]
+    fn same_variable_id_across_instances_are_distinct() {
+        let mut config = AppConfig::default_config();
+        config.plugins.instances = vec![
+            PluginInstanceConfig {
+                name: "mb1".into(),
+                wasm_file: "modbus.wasm".into(),
+                config: serde_json::json!({}),
+                points: vec![make_mapping("P1")],
+            },
+            PluginInstanceConfig {
+                name: "mb2".into(),
+                wasm_file: "modbus.wasm".into(),
+                config: serde_json::json!({}),
+                points: vec![make_mapping("P1")],
+            },
+        ];
+        let mgr = PointManager::from_config(&config);
+        assert_eq!(mgr.count(), 2);
+        assert!(mgr.has_point(&point_key("mb1", "P1")));
+        assert!(mgr.has_point(&point_key("mb2", "P1")));
+    }
+
+    #[test]
+    fn same_variable_id_across_instances_update_independently() {
+        let mut config = AppConfig::default_config();
+        config.plugins.instances = vec![
+            PluginInstanceConfig {
+                name: "mb1".into(),
+                wasm_file: "modbus.wasm".into(),
+                config: serde_json::json!({}),
+                points: vec![make_mapping("P1")],
+            },
+            PluginInstanceConfig {
+                name: "mb2".into(),
+                wasm_file: "modbus.wasm".into(),
+                config: serde_json::json!({}),
+                points: vec![make_mapping("P1")],
+            },
+        ];
+        let mut mgr = PointManager::from_config(&config);
+        mgr.update(PointValue::new(&point_key("mb1", "P1"), 1.0, "good", 1000));
+        mgr.update(PointValue::new(&point_key("mb2", "P1"), 2.0, "good", 1001));
         let vals = mgr.get_all_values();
         assert_eq!(vals.len(), 2);
     }
