@@ -14,7 +14,7 @@ use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 use super::interface::PluginInstance;
 use hmi_io_monitor::collector::MonitorCollector;
-use hmi_io_point::types::PointValue;
+use hmi_io_point::{point_key, types::PointValue};
 
 use hmi::plugin::events;
 
@@ -47,6 +47,21 @@ impl wasmtime::component::HasData for HostState {
 }
 
 impl events::Host for HostState {}
+
+fn outgoing_point(
+    plugin_name: &str,
+    variable_id: &str,
+    value: f64,
+    quality: &str,
+    timestamp: u64,
+) -> PointValue {
+    PointValue::new(
+        &point_key(plugin_name, variable_id),
+        value,
+        quality,
+        timestamp,
+    )
+}
 
 impl events::HostWithStore<HostState> for HostState {
     fn log(
@@ -81,9 +96,11 @@ impl events::HostWithStore<HostState> for HostState {
             accessor.with(|mut access| {
                 let s: &mut HostState = access.get();
                 let qs = if quality.is_empty() { "good" } else { &quality };
-                let pv = PointValue::new(&name, value, qs, timestamp);
-                s.monitor.update_point_value(&s.plugin_name, &pv);
-                let _ = s.point_tx.send(pv);
+                let raw = PointValue::new(&name, value, qs, timestamp);
+                s.monitor.update_point_value(&s.plugin_name, &raw);
+                let _ = s
+                    .point_tx
+                    .send(outgoing_point(&s.plugin_name, &name, value, qs, timestamp));
             });
         }
     }
@@ -153,5 +170,17 @@ impl PluginHost {
             })?;
         let lifecycle = inst.hmi_plugin_lifecycle().clone();
         Ok(PluginInstance::new(store, lifecycle))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::outgoing_point;
+
+    #[test]
+    fn outgoing_point_uses_composite_key() {
+        let pv = outgoing_point("mb1", "P1", 42.0, "good", 1000);
+        assert_eq!(pv.id, "mb1:P1");
+        assert_eq!(pv.value, serde_json::json!(42.0));
     }
 }
