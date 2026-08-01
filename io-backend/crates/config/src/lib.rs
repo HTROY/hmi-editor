@@ -113,6 +113,19 @@ impl AppConfig {
         }
     }
 
+    pub fn validate(&self) -> anyhow::Result<()> {
+        let mut seen = std::collections::HashSet::new();
+        for inst in &self.plugins.instances {
+            if !seen.insert(inst.name.clone()) {
+                anyhow::bail!(
+                    "duplicate plugin instance name '{}'; instance names must be unique",
+                    inst.name
+                );
+            }
+        }
+        Ok(())
+    }
+
     /// Build AppConfig from the database via Repo
     pub fn from_repo_sync(repo: &Repo) -> Self {
         let scan_interval_ms: u64 = repo
@@ -178,5 +191,34 @@ impl AppConfig {
                 instances,
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn instance(name: &str) -> PluginInstance {
+        PluginInstance {
+            name: name.into(),
+            wasm_file: "p.wasm".into(),
+            config: serde_json::json!({}),
+            points: vec![],
+        }
+    }
+
+    #[test]
+    fn validate_accepts_unique_instance_names() {
+        let mut cfg = AppConfig::default_config();
+        cfg.plugins.instances = vec![instance("modbus_1"), instance("modbus_2")];
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_instance_names() {
+        let mut cfg = AppConfig::default_config();
+        cfg.plugins.instances = vec![instance("modbus_tcp"), instance("modbus_tcp")];
+        let err = cfg.validate().unwrap_err();
+        assert!(err.to_string().contains("modbus_tcp"));
     }
 }

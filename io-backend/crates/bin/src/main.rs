@@ -21,7 +21,7 @@ fn main() -> anyhow::Result<()> {
     let config_path = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "config.yaml".to_string());
-    let app_config = build_config(&repo, &config_path);
+    let app_config = build_config(&repo, &config_path)?;
 
     let ws_port: u16 = repo
         .get_config("ws_port")
@@ -141,11 +141,13 @@ let ws_cfg = hmi_io_config::ServerConfig {
     Ok(())
 }
 
-fn build_config(repo: &Repo, yaml_path: &str) -> AppConfig {
+fn build_config(repo: &Repo, yaml_path: &str) -> anyhow::Result<AppConfig> {
     if let Ok(plugins) = repo.list_plugins() {
         if !plugins.is_empty() {
             log::info!("Loading config from database");
-            return AppConfig::from_repo_sync(repo);
+            let cfg = AppConfig::from_repo_sync(repo);
+            cfg.validate()?;
+            return Ok(cfg);
         }
     }
     log::info!("Loading config from {}", yaml_path);
@@ -158,8 +160,9 @@ fn build_config(repo: &Repo, yaml_path: &str) -> AppConfig {
             d
         }
     };
+    app_config.validate()?;
     migrate_yaml_to_db(repo, &app_config);
-    app_config
+    Ok(app_config)
 }
 
 fn migrate_yaml_to_db(repo: &Repo, config: &AppConfig) {
