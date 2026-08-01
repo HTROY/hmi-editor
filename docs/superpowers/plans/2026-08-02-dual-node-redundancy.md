@@ -3094,3 +3094,2245 @@ Expected: A 日志 `Promoted to ACTIVE`/`initial state: active`；B 日志 `init
 - **Spec 覆盖**：静态角色+双通道心跳（Task 4/9）、值同步备机（Task 4/7/11-13）、配置快照同步（Task 5/7）、自动回切（Task 4）、web-ui 配置/监控页（Task 12/13/14）、HMI 前端双地址（Task 15/16）、错误处理与分裂告警（Task 4/8/13）、E2E（Task 18）。无缺口。
 - **类型一致性**：`RedundancyConfig` 字段、`NodeState`/`RoleCommand`、`SyncBody`/`ClaimBody`/`ConfigPushBody`、`ConfigSnapshot` 系列、TS `RedundancyStatus` 与 Rust `get_status()` 输出逐字段对齐；`engine.is_active()` 语义在 Task 4 定义并被 Task 7/9 使用。
 - **占位符扫描**：无 TBD/TODO；所有代码步骤均给出完整代码或精确修改点。
+
+---
+
+# Part B：节点级采集健康触发 + 实例级冗余（增量）
+
+> 本部分在 Part A（Task 1–18）基础上追加。执行顺序：Task 19 → Task 30。
+> 注意：Part B 各任务推进期间，跨 crate 引用会阶段性编译失败（如 db 新字段先于 web/bin 改造），属预期；每个任务验证只针对其声明的 crate 或构建命令。
+
+## Task 19: DB 插件冗余字段迁移
+
+**Files:**
+- Modify: `io-backend/crates/db/src/schema.rs`
+- Modify: `io-backend/crates/db/src/repo.rs`
+
+- [ ] **Step 1: 写失败测试**
+
+在 `io-backend/crates/db/src/repo.rs` 的 `mod tests` 中加入：
+
+```rust
+#[test]
+fn plugin_row_round_trips_redundancy_fields() {
+    let repo = Repo::new(":memory:").unwrap();
+    let pid = repo
+        .insert_plugin_full("mb1", "mb.wasm", "{}", "mb-link", "primary", 0)
+        .unwrap();
+    let p = repo.get_plugin(pid).unwrap().unwrap();
+    assert_eq!(p.redundancy_group, "mb-link");
+    assert_eq!(p.redundancy_role, "primary");
+    assert_eq!(p.priority, 0);
+    repo.update_plugin_full(pid, "mb1", "mb.wasm", "{}", "mb-link", "backup", 2, true)
+        .unwrap();
+    let p = repo.get_plugin(pid).unwrap().unwrap();
+    assert_eq!(p.redundancy_role, "backup");
+    assert_eq!(p.priority, 2);
+}
+```
+
+同时把既有 `apply_config_snapshot_replaces_plugins_and_points` 测试中的 `SnapshotPlugin` 增加字段：
+
+```rust
+SnapshotPlugin {
+    name: "new".into(),
+    wasm_file: "new.wasm".into(),
+    config_json: "{}".into(),
+    enabled: true,
+    redundancy_group: "mb-link".into(),
+    redundancy_role: "backup".into(),
+    priority: 1,
+    points: vec![SnapshotPoint {
+        variable_id: "P2".into(),
+        address: "b".into(),
+        data_type: "uint16".into(),
+        byte_order: "big_endian".into(),
+        scale: 1.0,
+        offset_val: 0.0,
+        var_type: "AI".into(),
+        description: String::new(),
+    }],
+}
+```
+
+并在断言中加 `assert_eq!(plugins[0].redundancy_group, "mb-link");`。
+
+- [ ] **Step 2: 运行确认失败**
+
+Run: `cargo test -p hmi-io-db`
+Expected: 编译失败（`insert_plugin_full` / 字段不存在）。
+
+- [ ] **Step 3: 实现 schema.rs**
+
+在 `init_db` 的 description 迁移之后加：
+
+```rust
+// Migration: add instance-redundancy columns if missing
+for (col, sql) in [
+    (
+        "redundancy_group",
+        "ALTER TABLE plugins ADD COLUMN redundancy_group TEXT NOT NULL DEFAULT ''",
+    ),
+    (
+        "redundancy_role",
+        "ALTER TABLE plugins ADD COLUMN redundancy_role TEXT NOT NULL DEFAULT ''",
+    ),
+    (
+        "priority",
+        "ALTER TABLE plugins ADD COLUMN priority INTEGER NOT NULL DEFAULT 0",
+    ),
+] {
+    let has: bool = conn
+        .prepare(&format!("SELECT 1 FROM pragma_table_info('plugins') WHERE name='{}'", col))?
+        .exists([])?;
+    if !has {
+        log::info!("Migrating: adding {} column to plugins table", col);
+        conn.execute_batch(sql)?;
+    }
+}
+```
+
+- [ ] **Step 4: 实现 repo.rs**
+
+`PluginRow` 增加字段：
+
+```rust
+pub struct PluginRow {
+    pub id: i64,
+    pub name: String,
+    pub wasm_file: String,
+    pub config_json: String,
+    pub enabled: bool,
+    pub redundancy_group: String,
+    pub redundancy_role: String,
+    pub priority: u32,
+}
+```
+
+`map_plugin` 改为：
+
+```rust
+fn map_plugin(row: &rusqlite::Row) -> rusqlite::Result<PluginRow> {
+    Ok(PluginRow {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        wasm_file: row.get(2)?,
+        config_json: row.get(3)?,
+        enabled: row.get::<_, i32>(4)? != 0,
+        redundancy_group: row.get(5)?,
+        redundancy_role: row.get(6)?,
+        priority: row.get(7)?,
+    })
+}
+```
+
+`list_plugins` / `get_plugin` 的 SELECT 改为：
+
+```sql
+SELECT id,name,wasm_file,config_json,enabled,redundancy_group,redundancy_role,priority FROM plugins ...
+```
+
+保留旧 `insert_plugin` / `update_plugin` 签名不变（内部调用新方法、缺省空组），新增：
+
+```rust
+pub fn insert_plugin_full(
+    &self,
+    name: &str,
+    wasm_file: &str,
+    config_json: &str,
+    redundancy_group: &str,
+    redundancy_role: &str,
+    priority: u32,
+) -> anyhow::Result<i64> {
+    let conn = self.conn.lock().unwrap();
+    conn.execute(
+        "INSERT INTO plugins(name,wasm_file,config_json,redundancy_group,redundancy_role,priority)
+         VALUES(?1,?2,?3,?4,?5,?6)",
+        params![name, wasm_file, config_json, redundancy_group, redundancy_role, priority],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn insert_plugin(&self, name: &str, wasm_file: &str, config_json: &str) -> anyhow::Result<i64> {
+    self.insert_plugin_full(name, wasm_file, config_json, "", "", 0)
+}
+
+pub fn update_plugin_full(
+    &self,
+    id: i64,
+    name: &str,
+    wasm_file: &str,
+    config_json: &str,
+    redundancy_group: &str,
+    redundancy_role: &str,
+    priority: u32,
+    enabled: bool,
+) -> anyhow::Result<()> {
+    self.conn.lock().unwrap().execute(
+        "UPDATE plugins SET name=?2,wasm_file=?3,config_json=?4,redundancy_group=?5,redundancy_role=?6,priority=?7,enabled=?8,updated_at=datetime('now') WHERE id=?1",
+        params![id, name, wasm_file, config_json, redundancy_group, redundancy_role, priority, enabled as i32],
+    )?;
+    Ok(())
+}
+
+pub fn update_plugin(
+    &self,
+    id: i64,
+    name: &str,
+    wasm_file: &str,
+    config_json: &str,
+    enabled: bool,
+) -> anyhow::Result<()> {
+    self.update_plugin_full(id, name, wasm_file, config_json, "", "", 0, enabled)
+}
+```
+
+`SnapshotPlugin` 增加字段（`redundancy_group`、`redundancy_role`、`priority`），`apply_config_snapshot` 的插件插入语句改为：
+
+```rust
+tx.execute(
+    "INSERT INTO plugins(name,wasm_file,config_json,enabled,redundancy_group,redundancy_role,priority)
+     VALUES(?1,?2,?3,?4,?5,?6,?7)",
+    params![
+        pl.name,
+        pl.wasm_file,
+        pl.config_json,
+        pl.enabled as i32,
+        pl.redundancy_group,
+        pl.redundancy_role,
+        pl.priority
+    ],
+)?;
+```
+
+- [ ] **Step 5: 运行确认通过**
+
+Run: `cargo test -p hmi-io-db`
+Expected: 新测试 + 既有测试全绿。
+
+- [ ] **Step 6: 提交**
+
+```bash
+git add io-backend/crates/db/src/schema.rs io-backend/crates/db/src/repo.rs
+git commit -m "feat(db): add plugin redundancy group fields and migration"
+```
+
+---
+
+## Task 20: 配置层实例组字段与校验
+
+**Files:**
+- Modify: `io-backend/crates/config/src/lib.rs`
+
+- [ ] **Step 1: 写失败测试**
+
+在 `io-backend/crates/config/src/lib.rs` 的 `mod tests` 中加入辅助函数与测试：
+
+```rust
+fn group_instance(
+    name: &str,
+    group: &str,
+    role: &str,
+    priority: u32,
+    ids: &[&str],
+) -> PluginInstance {
+    PluginInstance {
+        name: name.into(),
+        wasm_file: "p.wasm".into(),
+        config: serde_json::json!({}),
+        points: ids
+            .iter()
+            .map(|id| PointMapping {
+                id: id.to_string(),
+                address: "a".into(),
+                data_type: "uint16".into(),
+                byte_order: "big_endian".into(),
+                scale: 1.0,
+                offset: 0.0,
+                var_type: "AI".into(),
+            })
+            .collect(),
+        redundancy_group: group.into(),
+        redundancy_role: role.into(),
+        priority,
+    }
+}
+
+#[test]
+fn redundancy_config_new_defaults() {
+    let cfg = RedundancyConfig::default();
+    assert_eq!(cfg.plugin_unhealthy_threshold, 3);
+    assert_eq!(cfg.plugin_promotion_cooldown_ms, 60_000);
+    assert_eq!(cfg.instance_failover_threshold, 3);
+    assert!(cfg.instance_failback_enabled);
+    assert_eq!(cfg.instance_failback_delay_ms, 30_000);
+    assert_eq!(cfg.instance_switch_cooldown_ms, 60_000);
+}
+
+#[test]
+fn validate_rejects_multiple_primaries_in_group() {
+    let mut cfg = AppConfig::default_config();
+    cfg.plugins.instances = vec![
+        group_instance("mb1", "mb-link", "primary", 0, &["P1"]),
+        group_instance("mb2", "mb-link", "primary", 0, &["P1"]),
+    ];
+    let err = cfg.validate().unwrap_err();
+    assert!(err.to_string().contains("multiple primary"));
+}
+
+#[test]
+fn validate_rejects_backup_without_priority() {
+    let mut cfg = AppConfig::default_config();
+    cfg.plugins.instances = vec![
+        group_instance("mb1", "mb-link", "primary", 0, &["P1"]),
+        group_instance("mb2", "mb-link", "backup", 0, &["P1"]),
+    ];
+    assert!(cfg.validate().is_err());
+}
+
+#[test]
+fn validate_rejects_duplicate_backup_priority() {
+    let mut cfg = AppConfig::default_config();
+    cfg.plugins.instances = vec![
+        group_instance("mb1", "mb-link", "primary", 0, &["P1"]),
+        group_instance("mb2", "mb-link", "backup", 1, &["P1"]),
+        group_instance("mb3", "mb-link", "backup", 1, &["P1"]),
+    ];
+    let err = cfg.validate().unwrap_err();
+    assert!(err.to_string().contains("duplicate backup priority"));
+}
+
+#[test]
+fn validate_rejects_point_set_mismatch() {
+    let mut cfg = AppConfig::default_config();
+    cfg.plugins.instances = vec![
+        group_instance("mb1", "mb-link", "primary", 0, &["P1", "P2"]),
+        group_instance("mb2", "mb-link", "backup", 1, &["P1"]),
+    ];
+    assert!(cfg.validate().is_err());
+}
+
+#[test]
+fn validate_accepts_standalone_and_grouped() {
+    let mut cfg = AppConfig::default_config();
+    cfg.plugins.instances = vec![
+        group_instance("standalone", "", "", 0, &["P1"]),
+        group_instance("mb1", "mb-link", "primary", 0, &["P1"]),
+        group_instance("mb2", "mb-link", "backup", 1, &["P1"]),
+        group_instance("mb3", "mb-link", "backup", 2, &["P1"]),
+    ];
+    assert!(cfg.validate().is_ok());
+}
+```
+
+既有 `instance()` 辅助函数补三个字段（`redundancy_group/role/priority` 为空/0）。
+
+- [ ] **Step 2: 运行确认失败**
+
+Run: `cargo test -p hmi-io-config`
+Expected: 编译失败（新字段不存在）。
+
+- [ ] **Step 3: 实现**
+
+`PluginInstance` 增加字段：
+
+```rust
+pub struct PluginInstance {
+    pub name: String,
+    pub wasm_file: String,
+    #[serde(default)]
+    pub config: serde_json::Value,
+    #[serde(default)]
+    pub points: Vec<PointMapping>,
+    #[serde(default)]
+    pub redundancy_group: String,
+    #[serde(default)]
+    pub redundancy_role: String,
+    #[serde(default)]
+    pub priority: u32,
+}
+```
+
+`RedundancyConfig` 增加字段与默认函数：
+
+```rust
+#[serde(default = "default_plugin_unhealthy_threshold")]
+pub plugin_unhealthy_threshold: u32,
+#[serde(default = "default_plugin_promotion_cooldown_ms")]
+pub plugin_promotion_cooldown_ms: u64,
+#[serde(default = "default_instance_failover_threshold")]
+pub instance_failover_threshold: u32,
+#[serde(default = "default_instance_failback_enabled")]
+pub instance_failback_enabled: bool,
+#[serde(default = "default_instance_failback_delay_ms")]
+pub instance_failback_delay_ms: u64,
+#[serde(default = "default_instance_switch_cooldown_ms")]
+pub instance_switch_cooldown_ms: u64,
+```
+
+```rust
+fn default_plugin_unhealthy_threshold() -> u32 { 3 }
+fn default_plugin_promotion_cooldown_ms() -> u64 { 60_000 }
+fn default_instance_failover_threshold() -> u32 { 3 }
+fn default_instance_failback_enabled() -> bool { true }
+fn default_instance_failback_delay_ms() -> u64 { 30_000 }
+fn default_instance_switch_cooldown_ms() -> u64 { 60_000 }
+```
+
+`Default` impl 同步补全；`from_repo_sync` 的 `PluginInstance` 构造补：
+
+```rust
+redundancy_group: pw.plugin.redundancy_group.clone(),
+redundancy_role: pw.plugin.redundancy_role.clone(),
+priority: pw.plugin.priority,
+```
+
+`validate()` 末尾（节点级校验之后）加实例组校验：
+
+```rust
+// ---- 实例级组校验 ----
+let mut group_primary: std::collections::HashMap<&str, &PluginInstance> = std::collections::HashMap::new();
+let mut group_backups: std::collections::HashMap<&str, Vec<&PluginInstance>> = std::collections::HashMap::new();
+for inst in &self.plugins.instances {
+    let g = inst.redundancy_group.trim();
+    let r = inst.redundancy_role.trim();
+    if g.is_empty() && r.is_empty() {
+        continue;
+    }
+    if g.is_empty() || r.is_empty() {
+        anyhow::bail!(
+            "instance '{}': redundancy_group and redundancy_role must be set together",
+            inst.name
+        );
+    }
+    match r {
+        "primary" => {
+            if inst.priority != 0 {
+                anyhow::bail!("instance '{}': primary must not set priority", inst.name);
+            }
+            if group_primary.insert(g, inst).is_some() {
+                anyhow::bail!("group '{}' has multiple primary instances", g);
+            }
+        }
+        "backup" => {
+            if inst.priority == 0 {
+                anyhow::bail!("instance '{}': backup must set priority >= 1", inst.name);
+            }
+            group_backups.entry(g).or_default().push(inst);
+        }
+        _ => anyhow::bail!(
+            "instance '{}': redundancy_role must be 'primary' or 'backup'",
+            inst.name
+        ),
+    }
+}
+for (g, backups) in &group_backups {
+    let primary = match group_primary.get(g) {
+        Some(p) => *p,
+        None => anyhow::bail!("group '{}' has backups but no primary", g),
+    };
+    let primary_ids: std::collections::HashSet<&str> =
+        primary.points.iter().map(|p| p.id.as_str()).collect();
+    let mut seen = std::collections::HashSet::new();
+    for b in backups {
+        if !seen.insert(b.priority) {
+            anyhow::bail!("group '{}' has duplicate backup priority {}", g, b.priority);
+        }
+        let ids: std::collections::HashSet<&str> =
+            b.points.iter().map(|p| p.id.as_str()).collect();
+        if ids != primary_ids {
+            anyhow::bail!(
+                "group '{}': backup '{}' point ids must match primary exactly",
+                g,
+                b.name
+            );
+        }
+    }
+}
+```
+
+- [ ] **Step 4: 运行确认通过**
+
+Run: `cargo test -p hmi-io-config`
+Expected: 新测试 + 既有测试全绿。
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add io-backend/crates/config/src/lib.rs
+git commit -m "feat(config): add instance redundancy groups and validation"
+```
+
+---
+
+## Task 21: PointManager 组逻辑映射
+
+**Files:**
+- Modify: `io-backend/crates/point/src/manager.rs`
+
+- [ ] **Step 1: 写失败测试**
+
+在 `io-backend/crates/point/src/manager.rs` 的 `mod tests` 中加入：
+
+```rust
+fn group_config() -> AppConfig {
+    let mut cfg = AppConfig::default_config();
+    cfg.plugins.instances = vec![
+        PluginInstanceConfig {
+            name: "mb1".into(),
+            wasm_file: "modbus.wasm".into(),
+            config: serde_json::json!({}),
+            points: vec![make_mapping("P1")],
+            redundancy_group: "mb-link".into(),
+            redundancy_role: "primary".into(),
+            priority: 0,
+        },
+        PluginInstanceConfig {
+            name: "mb2".into(),
+            wasm_file: "modbus.wasm".into(),
+            config: serde_json::json!({}),
+            points: vec![make_mapping("P1")],
+            redundancy_group: "mb-link".into(),
+            redundancy_role: "backup".into(),
+            priority: 1,
+        },
+    ];
+    cfg
+}
+
+#[test]
+fn group_active_member_broadcasts_logical_id() {
+    let mut mgr = PointManager::from_config(&group_config());
+    assert_eq!(mgr.count(), 1); // 组内同名点只算一个逻辑点
+    let r = mgr
+        .update(PointValue::new(&point_key("mb1", "P1"), 10.0, "good", 1000))
+        .unwrap();
+    assert_eq!(r.id, "mb-link:P1");
+    // 非活跃备成员的值被丢弃
+    assert!(mgr
+        .update(PointValue::new(&point_key("mb2", "P1"), 99.0, "good", 2000))
+        .is_none());
+}
+
+#[test]
+fn group_switch_keeps_logical_id_stable() {
+    let mut mgr = PointManager::from_config(&group_config());
+    mgr.update(PointValue::new(&point_key("mb1", "P1"), 10.0, "good", 1000));
+    mgr.set_active_instance("mb-link", "mb2");
+    let r = mgr
+        .update(PointValue::new(&point_key("mb2", "P1"), 20.0, "good", 3000))
+        .unwrap();
+    assert_eq!(r.id, "mb-link:P1");
+    let vals = mgr.get_all_values();
+    assert_eq!(vals.len(), 1);
+    assert_eq!(vals[0].id, "mb-link:P1");
+}
+```
+
+既有 `make_mapping` 不变；既有两实例测试构造的 `PluginInstanceConfig` 需补三个新字段（空组/0）。
+
+- [ ] **Step 2: 运行确认失败**
+
+Run: `cargo test -p hmi-io-point`
+Expected: 编译失败（字段/方法不存在）。
+
+- [ ] **Step 3: 实现**
+
+`PointManager` 增加字段：
+
+```rust
+pub struct PointManager {
+    points: HashMap<String, CachedPoint>,
+    active: bool,
+    instance_to_logical: HashMap<String, String>,
+    active_group_instance: HashMap<String, String>,
+}
+```
+
+`from_config` 改为：
+
+```rust
+pub fn from_config(config: &AppConfig) -> Self {
+    let mut points = HashMap::new();
+    let mut instance_to_logical = HashMap::new();
+    let mut active_group_instance = HashMap::new();
+    for inst in &config.plugins.instances {
+        let group = inst.redundancy_group.trim();
+        let logical_prefix = if group.is_empty() {
+            inst.name.clone()
+        } else {
+            group.to_string()
+        };
+        for pt in &inst.points {
+            let logical_key = point_key(&logical_prefix, &pt.id);
+            points.insert(
+                logical_key.clone(),
+                CachedPoint {
+                    mapping: pt.clone(),
+                    last_value: None,
+                },
+            );
+            if !group.is_empty() {
+                instance_to_logical.insert(point_key(&inst.name, &pt.id), logical_key);
+            }
+        }
+        if !group.is_empty() && inst.redundancy_role == "primary" {
+            active_group_instance.insert(group.to_string(), inst.name.clone());
+        }
+    }
+    log::info!("PointManager: {} points configured", points.len());
+    Self {
+        points,
+        active: true,
+        instance_to_logical,
+        active_group_instance,
+    }
+}
+```
+
+`update` 改为（替换原函数体）：
+
+```rust
+pub fn update(&mut self, raw: PointValue) -> Option<PointValue> {
+    let id = raw.id.clone();
+    // 组点：解析逻辑键并做活跃成员门控
+    let logical_id = self
+        .instance_to_logical
+        .get(&id)
+        .cloned()
+        .unwrap_or_else(|| id.clone());
+    if let Some(logical) = self.instance_to_logical.get(&id) {
+        if let Some((group, _)) = logical.split_once(':') {
+            if let Some(active_inst) = self.active_group_instance.get(group) {
+                if let Some((inst_name, _)) = id.split_once(':') {
+                    if inst_name != active_inst {
+                        return None; // 非活跃成员数据丢弃
+                    }
+                }
+            }
+        }
+    }
+    let Some(cached) = self.points.get_mut(&logical_id) else {
+        return Some(raw);
+    };
+    let scale = cached.mapping.scale;
+    let offset = cached.mapping.offset;
+    let mut scaled = apply_scaling(raw, scale, offset);
+    scaled.id = logical_id.clone();
+    let is_new = cached.last_value.is_none();
+    let is_changed = match &cached.last_value {
+        Some(prev) => prev.value != scaled.value,
+        None => true,
+    };
+    if is_new || is_changed {
+        cached.last_value = Some(scaled.clone());
+        Some(scaled)
+    } else {
+        None
+    }
+}
+```
+
+新增方法：
+
+```rust
+/// Registry 实例级切换后同步组的活跃成员。
+pub fn set_active_instance(&mut self, group: &str, instance: &str) {
+    self.active_group_instance
+        .insert(group.to_string(), instance.to_string());
+}
+```
+
+`insert_test_point` 的构造补 `instance_to_logical: HashMap::new(), active_group_instance: HashMap::new()`。
+
+- [ ] **Step 4: 运行确认通过**
+
+Run: `cargo test -p hmi-io-point`
+Expected: 新测试 + 既有测试全绿。
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add io-backend/crates/point/src/manager.rs
+git commit -m "feat(point): map instance groups to stable logical ids"
+```
+
+---
+
+## Task 22: redundancy 状态增加不健康计数与决策函数
+
+**Files:**
+- Modify: `io-backend/crates/point/src/redundancy/state.rs`
+- Modify: `io-backend/crates/point/src/redundancy/mod.rs`
+
+- [ ] **Step 1: 写失败测试**
+
+在 `state.rs` 的 `mod tests` 中加入：
+
+```rust
+#[test]
+fn unhealthy_reports_count_and_reset() {
+    let s = RedundancyState::new(true, "node-a".into(), NodeRole::Primary);
+    s.record_unhealthy_report();
+    s.record_unhealthy_report();
+    assert_eq!(s.unhealthy_reports(), 2);
+    s.reset_unhealthy_reports();
+    assert_eq!(s.unhealthy_reports(), 0);
+}
+
+#[test]
+fn should_promote_unhealthy_requires_threshold_and_cooldown() {
+    assert!(!should_promote_unhealthy(2, 3, true));
+    assert!(should_promote_unhealthy(3, 3, true));
+    assert!(!should_promote_unhealthy(3, 3, false));
+}
+
+#[test]
+fn promotion_records_timestamp() {
+    let s = RedundancyState::new(true, "node-a".into(), NodeRole::Primary);
+    assert_eq!(s.last_promotion_ms(), 0);
+    s.increment_failover_count();
+    assert!(s.last_promotion_ms() > 0);
+}
+```
+
+- [ ] **Step 2: 运行确认失败**
+
+Run: `cargo test -p hmi-io-point`
+Expected: 编译失败。
+
+- [ ] **Step 3: 实现**
+
+`RedundancyStateInner` 增加：
+
+```rust
+unhealthy_reports: u32,
+last_promotion_ms: u64,
+```
+
+初始化 0；`set_state` 中同时 `inner.unhealthy_reports = 0;`。
+
+新增纯函数与方法：
+
+```rust
+/// 采集不健康触发升主的决策：需达到阈值且冷却期已过。
+pub fn should_promote_unhealthy(unhealthy_reports: u32, threshold: u32, cooldown_ok: bool) -> bool {
+    cooldown_ok && unhealthy_reports >= threshold.max(1)
+}
+```
+
+```rust
+pub fn record_unhealthy_report(&self) {
+    self.inner.lock().unwrap().unhealthy_reports += 1;
+}
+
+pub fn reset_unhealthy_reports(&self) {
+    self.inner.lock().unwrap().unhealthy_reports = 0;
+}
+
+pub fn unhealthy_reports(&self) -> u32 {
+    self.inner.lock().unwrap().unhealthy_reports
+}
+
+pub fn last_promotion_ms(&self) -> u64 {
+    self.inner.lock().unwrap().last_promotion_ms
+}
+```
+
+`increment_failover_count` 改为同时记录时间：
+
+```rust
+pub fn increment_failover_count(&self) {
+    let mut inner = self.inner.lock().unwrap();
+    inner.failover_count += 1;
+    inner.last_promotion_ms = now_ms();
+}
+```
+
+`RedundancyStatus` 增加 `pub unhealthy_reports: u32,`，`get_status` 填充。
+
+`mod.rs` 导出追加 `should_promote_unhealthy`。
+
+- [ ] **Step 4: 运行确认通过**
+
+Run: `cargo test -p hmi-io-point`
+Expected: 全绿。
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add io-backend/crates/point/src/redundancy
+git commit -m "feat(point): track unhealthy reports and promotion cooldown"
+```
+
+---
+
+## Task 23: 引擎采集健康触发与 claim 角色规则
+
+**Files:**
+- Modify: `io-backend/crates/point/src/redundancy/engine.rs`
+
+- [ ] **Step 1: 更新测试**
+
+既有测试的 `ClaimBody` 构造补 `role`；`engine()` 辅助函数改为：
+
+```rust
+fn engine(enabled: bool, role: NodeRole) -> (Arc<RedundancyEngine>, Arc<Mutex<PointManager>>) {
+    let mut cfg = RedundancyConfig::default();
+    cfg.enabled = enabled;
+    cfg.node_id = "node-a".into();
+    cfg.role = role;
+    cfg.peer_url = "http://127.0.0.1:9".into();
+    let pm = Arc::new(Mutex::new(PointManager::from_config(&AppConfig::default_config())));
+    let (tx, _rx) = tokio::sync::broadcast::channel::<String>(16);
+    let (role_tx, _role_rx) = tokio::sync::mpsc::unbounded_channel::<RoleCommand>();
+    let e = RedundancyEngine::new(cfg, pm.clone(), tx.subscribe(), tx, 8080);
+    e.set_role_tx(role_tx);
+    e.set_health_provider(Box::new(|| (1, 1, true))); // 默认健康
+    (e, pm)
+}
+```
+
+新增测试：
+
+```rust
+#[test]
+fn claim_rejected_when_active_healthy_and_claimant_backup() {
+    let (e, pm) = engine(true, NodeRole::Primary);
+    e.state().set_state(NodeState::Active);
+    pm.lock().unwrap().set_active(true);
+    let res = e.handle_claim(&ClaimBody {
+        node_id: "node-b".into(),
+        role: "backup".into(),
+    });
+    assert!(!res.accepted);
+    assert_eq!(e.state().state(), NodeState::Active);
+}
+
+#[test]
+fn claim_accepted_when_active_unhealthy() {
+    let (e, pm) = engine(true, NodeRole::Primary);
+    e.set_health_provider(Box::new(|| (1, 0, false)));
+    e.state().set_state(NodeState::Active);
+    pm.lock().unwrap().set_active(true);
+    let res = e.handle_claim(&ClaimBody {
+        node_id: "node-b".into(),
+        role: "backup".into(),
+    });
+    assert!(res.accepted);
+    assert_eq!(e.state().state(), NodeState::Standby);
+}
+
+#[test]
+fn claim_from_primary_accepted_when_healthy() {
+    let (e, pm) = engine(true, NodeRole::Backup);
+    e.state().set_state(NodeState::Active);
+    pm.lock().unwrap().set_active(true);
+    let res = e.handle_claim(&ClaimBody {
+        node_id: "node-a".into(),
+        role: "primary".into(),
+    });
+    assert!(res.accepted);
+    assert_eq!(e.state().state(), NodeState::Standby);
+}
+```
+
+既有 `claim_demotes_active_node` 中 `ClaimBody` 补 `role: "primary".into()`。
+
+- [ ] **Step 2: 运行确认失败**
+
+Run: `cargo test -p hmi-io-point`
+Expected: 编译失败（`role` 字段、`set_health_provider` 不存在）。
+
+- [ ] **Step 3: 实现**
+
+`HeartbeatInfo` 增加：
+
+```rust
+pub struct HeartbeatInfo {
+    pub node_id: String,
+    pub role: String,
+    pub state: String,
+    pub config_version: u64,
+    pub uptime_ms: u64,
+    pub data_healthy: bool,
+    pub plugins_total: usize,
+    pub plugins_connected: usize,
+}
+```
+
+`ClaimBody` 增加 `pub role: String`。
+
+`RedundancyEngine` 增加字段与方法：
+
+```rust
+health_provider: Mutex<Option<Box<dyn Fn() -> (usize, usize, bool) + Send + Sync>>>,
+```
+
+`new()` 中初始化 `health_provider: Mutex::new(None)`。
+
+```rust
+/// 注入本机插件健康评估闭包：(总实例数, 已连接数, data_healthy)。
+pub fn set_health_provider(&self, f: Box<dyn Fn() -> (usize, usize, bool) + Send + Sync>) {
+    *self.health_provider.lock().unwrap() = Some(f);
+}
+
+fn data_health(&self) -> (usize, usize, bool) {
+    self.health_provider
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|f| f())
+        .unwrap_or((0, 0, true))
+}
+```
+
+`heartbeat_info` 填充三个新字段：
+
+```rust
+let (total, connected, healthy) = self.data_health();
+HeartbeatInfo {
+    node_id: self.state.node_id(),
+    role: self.config.role.as_str().to_string(),
+    state: /* 不变 */,
+    config_version: self.state.config_version(),
+    uptime_ms: self.started.elapsed().as_millis() as u64,
+    data_healthy: healthy,
+    plugins_total: total,
+    plugins_connected: connected,
+}
+```
+
+`on_tick` 的 Standby 分支改为：
+
+```rust
+NodeState::Standby => {
+    let start = Instant::now();
+    match self.probe_peer().await {
+        Some(hb) => {
+            let rtt = start.elapsed().as_millis() as u64;
+            self.state.record_heartbeat_ok(rtt, hb.clone());
+            if self.config.role == NodeRole::Primary && hb.state == "active" {
+                let beats = required_stable_beats(
+                    self.config.failback_delay_ms,
+                    self.config.heartbeat_interval_ms,
+                );
+                if self.state.stable_heartbeats() >= beats {
+                    self.claim_and_promote().await;
+                }
+            } else if !hb.data_healthy {
+                // 节点级采集健康触发：对端整机取不到数据
+                self.state.record_unhealthy_report();
+                let cooldown_ok = now_ms().saturating_sub(self.state.last_promotion_ms())
+                    >= self.config.plugin_promotion_cooldown_ms;
+                if should_promote_unhealthy(
+                    self.state.unhealthy_reports(),
+                    self.config.plugin_unhealthy_threshold,
+                    cooldown_ok,
+                ) {
+                    self.claim_and_promote().await;
+                }
+            } else {
+                self.state.reset_unhealthy_reports();
+            }
+        }
+        None => {
+            self.state.record_heartbeat_failure();
+            let failures = self.state.heartbeat_failures();
+            if failures >= self.config.failover_threshold.max(1)
+                && !self.probe_peer_tcp().await
+            {
+                self.promote();
+            }
+        }
+    }
+}
+```
+
+导入追加 `should_promote_unhealthy`。
+
+`claim_and_promote` 的 body 补角色，失败分支重置不健康计数：
+
+```rust
+let body = ClaimBody {
+    node_id: self.config.node_id.clone(),
+    role: self.config.role.as_str().to_string(),
+};
+```
+
+```rust
+_ => {
+    self.state.record_event("claim", "failback claim rejected");
+    self.state.reset_stable_heartbeats();
+    self.state.reset_unhealthy_reports();
+}
+```
+
+```rust
+_ => {
+    self.state.record_event("claim", "failback claim failed (peer unreachable)");
+    self.state.reset_stable_heartbeats();
+    self.state.reset_unhealthy_reports();
+}
+```
+
+`handle_claim` 改为：
+
+```rust
+pub fn handle_claim(&self, body: &ClaimBody) -> ClaimResult {
+    if !self.config.enabled || body.node_id.is_empty() || body.node_id == self.config.node_id {
+        return ClaimResult { accepted: false };
+    }
+    if self.state.state() == NodeState::Active {
+        let (_, _, healthy) = self.data_health();
+        let claimant_is_primary = body.role == "primary";
+        let self_unhealthy = !healthy;
+        if !(claimant_is_primary || self_unhealthy) {
+            return ClaimResult { accepted: false };
+        }
+        self.demote(&format!("claim accepted from node '{}'", body.node_id));
+    }
+    ClaimResult { accepted: true }
+}
+```
+
+- [ ] **Step 4: 运行确认通过**
+
+Run: `cargo test -p hmi-io-point`
+Expected: 全绿。
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add io-backend/crates/point/src/redundancy/engine.rs
+git commit -m "feat(point): add plugin-health promotion trigger and claim rules"
+```
+
+---
+
+## Task 24: Registry 实例组监督器
+
+**Files:**
+- Modify: `io-backend/crates/plugin/src/registry.rs`
+
+- [ ] **Step 1: 写失败测试**
+
+在 `io-backend/crates/plugin/src/registry.rs` 的 `mod tests` 中加入：
+
+```rust
+#[test]
+fn next_member_follows_order_and_wraps() {
+    let members = vec![
+        MemberRef { name: "p".into(), role: "primary".into(), priority: 0 },
+        MemberRef { name: "b1".into(), role: "backup".into(), priority: 1 },
+        MemberRef { name: "b2".into(), role: "backup".into(), priority: 2 },
+    ];
+    assert_eq!(next_member(&members, "p"), Some("b1".to_string()));
+    assert_eq!(next_member(&members, "b1"), Some("b2".to_string()));
+    assert_eq!(next_member(&members, "b2"), Some("p".to_string()));
+}
+
+#[test]
+fn rebuild_groups_orders_primary_first_then_priority() {
+    let mut cfg = AppConfig::default_config();
+    cfg.plugins.instances = vec![
+        PluginInstanceConfig {
+            name: "b2".into(),
+            wasm_file: "p.wasm".into(),
+            config: serde_json::json!({}),
+            points: vec![mapping("P1")],
+            redundancy_group: "mb-link".into(),
+            redundancy_role: "backup".into(),
+            priority: 2,
+        },
+        PluginInstanceConfig {
+            name: "p".into(),
+            wasm_file: "p.wasm".into(),
+            config: serde_json::json!({}),
+            points: vec![mapping("P1")],
+            redundancy_group: "mb-link".into(),
+            redundancy_role: "primary".into(),
+            priority: 0,
+        },
+        PluginInstanceConfig {
+            name: "b1".into(),
+            wasm_file: "p.wasm".into(),
+            config: serde_json::json!({}),
+            points: vec![mapping("P1")],
+            redundancy_group: "mb-link".into(),
+            redundancy_role: "backup".into(),
+            priority: 1,
+        },
+    ];
+    let reg = PluginRegistry::new(MonitorCollector::new()).unwrap();
+    reg.rebuild_groups(&cfg);
+    let groups = reg.groups.lock().unwrap();
+    let g = groups.get("mb-link").unwrap();
+    let names: Vec<&str> = g.members.iter().map(|m| m.name.as_str()).collect();
+    assert_eq!(names, vec!["p", "b1", "b2"]);
+    assert_eq!(g.active, "p");
+}
+```
+
+既有 `mapping()` 辅助保持不变；既有 `config_with_two_instances` 的 `PluginInstanceConfig` 构造补三个新字段。
+
+- [ ] **Step 2: 运行确认失败**
+
+Run: `cargo test -p hmi-io-plugin`
+Expected: 编译失败。
+
+- [ ] **Step 3: 实现**
+
+顶部导入与类型：
+
+```rust
+use hmi_io_point::manager::PointManager;
+use serde::Serialize;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InstanceGroupStatus {
+    pub group: String,
+    pub members: Vec<InstanceMemberStatus>,
+    pub active_instance: String,
+    pub consecutive_failures: u32,
+    pub last_switch_ms: u64,
+    pub last_switch_reason: String,
+    pub switch_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InstanceMemberStatus {
+    pub name: String,
+    pub role: String,
+    pub priority: u32,
+    pub is_active: bool,
+    pub connection_state: i32,
+    pub connection_label: String,
+}
+
+#[derive(Debug, Clone)]
+struct MemberRef {
+    name: String,
+    role: String,
+    priority: u32,
+}
+
+#[derive(Debug, Clone)]
+struct GroupStateInner {
+    group: String,
+    members: Vec<MemberRef>,
+    active: String,
+    failures: u32,
+    probe_ticks: u32,
+    last_switch_ms: u64,
+    last_switch_reason: String,
+    switch_count: u64,
+}
+
+fn next_member(members: &[MemberRef], active: &str) -> Option<String> {
+    let idx = members.iter().position(|m| m.name == active)?;
+    Some(members[(idx + 1) % members.len()].name.clone())
+}
+```
+
+`PluginRegistry` 增加字段：
+
+```rust
+groups: Mutex<HashMap<String, GroupStateInner>>,
+instance_redundancy: Mutex<hmi_io_config::RedundancyConfig>,
+point_manager: Mutex<Option<Arc<Mutex<PointManager>>>>,
+```
+
+`new()` 初始化（`instance_redundancy: Mutex::new(Default::default())`，其余空）。
+
+`prepare()` 末尾调用 `self.rebuild_groups(config);` 并保存阈值：
+
+```rust
+*self.instance_redundancy.lock().unwrap() = config.redundancy.clone();
+```
+
+`rebuild_groups`（`fn rebuild_groups(&self, config: &AppConfig)`）：
+
+```rust
+fn rebuild_groups(&self, config: &AppConfig) {
+    let mut raw: HashMap<String, Vec<&PluginInstanceConfig>> = HashMap::new();
+    for inst in &config.plugins.instances {
+        if inst.redundancy_group.is_empty() {
+            continue;
+        }
+        raw.entry(inst.redundancy_group.clone()).or_default().push(inst);
+    }
+    let mut inner_map = HashMap::new();
+    for (group, mut members) in raw {
+        members.sort_by_key(|m| match m.redundancy_role.as_str() {
+            "primary" => (0, 0),
+            _ => (1, m.priority),
+        });
+        let member_refs: Vec<MemberRef> = members
+            .iter()
+            .map(|m| MemberRef {
+                name: m.name.clone(),
+                role: m.redundancy_role.clone(),
+                priority: m.priority,
+            })
+            .collect();
+        let active = members
+            .iter()
+            .find(|m| m.redundancy_role == "primary")
+            .map(|m| m.name.clone())
+            .unwrap_or_default();
+        inner_map.insert(
+            group.clone(),
+            GroupStateInner {
+                group,
+                members: member_refs,
+                active,
+                failures: 0,
+                probe_ticks: 0,
+                last_switch_ms: 0,
+                last_switch_reason: String::new(),
+                switch_count: 0,
+            },
+        );
+    }
+    *self.groups.lock().unwrap() = inner_map;
+}
+```
+
+`start_instances` 改为只启动每组活跃成员：
+
+```rust
+pub async fn start_instances(&self, config: &AppConfig) -> anyhow::Result<()> {
+    if !self.plugins.lock().unwrap().is_empty() {
+        return Ok(());
+    }
+    self.rebuild_groups(config);
+    let start_list: Vec<&PluginInstanceConfig> = {
+        let groups = self.groups.lock().unwrap();
+        config
+            .plugins
+            .instances
+            .iter()
+            .filter(|inst| {
+                inst.redundancy_group.is_empty()
+                    || groups
+                        .get(&inst.redundancy_group)
+                        .map(|g| g.active == inst.name)
+                        .unwrap_or(false)
+            })
+            .collect()
+    };
+    for inst in start_list {
+        match self.load_and_start(inst, config.plugins.scan_interval_ms).await {
+            Ok(()) => log::info!("Loaded plugin: {}", inst.name),
+            Err(e) => log::error!("Failed to load plugin '{}': {}", inst.name, e),
+        }
+    }
+    Ok(())
+}
+```
+
+新增公开方法：
+
+```rust
+pub fn set_point_manager(&self, pm: Arc<Mutex<PointManager>>) {
+    *self.point_manager.lock().unwrap() = Some(pm);
+}
+
+pub fn instance_groups_status(&self) -> Vec<InstanceGroupStatus> {
+    let snap = self.monitor.get_snapshot();
+    let statuses: HashMap<&str, &hmi_io_monitor::types::PluginStatus> = snap
+        .plugins
+        .iter()
+        .map(|p| (p.name.as_str(), p))
+        .collect();
+    let groups = self.groups.lock().unwrap();
+    let mut out = Vec::new();
+    for g in groups.values() {
+        let members = g
+            .members
+            .iter()
+            .map(|m| {
+                let s = statuses.get(m.name.as_str());
+                InstanceMemberStatus {
+                    name: m.name.clone(),
+                    role: m.role.clone(),
+                    priority: m.priority,
+                    is_active: m.name == g.active,
+                    connection_state: s.map(|p| p.connection_state).unwrap_or(0),
+                    connection_label: s
+                        .map(|p| p.connection_label.clone())
+                        .unwrap_or_else(|| "disconnected".into()),
+                }
+            })
+            .collect();
+        out.push(InstanceGroupStatus {
+            group: g.group.clone(),
+            members,
+            active_instance: g.active.clone(),
+            consecutive_failures: g.failures,
+            last_switch_ms: g.last_switch_ms,
+            last_switch_reason: g.last_switch_reason.clone(),
+            switch_count: g.switch_count,
+        });
+    }
+    out
+}
+
+pub fn spawn_instance_supervisor(
+    self: &Arc<Self>,
+    scan_interval_ms: u64,
+) -> Option<tokio::task::JoinHandle<()>> {
+    if self.groups.lock().unwrap().is_empty() {
+        return None;
+    }
+    let this = self.clone();
+    Some(tokio::spawn(async move {
+        let dur = Duration::from_millis(scan_interval_ms.max(100));
+        let mut tick = tokio::time::interval(dur);
+        loop {
+            tick.tick().await;
+            this.supervise_groups(scan_interval_ms).await;
+        }
+    }))
+}
+```
+
+私有方法（放在 `resolve_write_target` 之前）：
+
+```rust
+async fn supervise_groups(&self, scan_interval_ms: u64) {
+    let Some(config) = self.config_cache.lock().unwrap().clone() else {
+        return;
+    };
+    let settings = self.instance_redundancy.lock().unwrap().clone();
+    let snap = self.monitor.get_snapshot();
+    let statuses: HashMap<&str, &hmi_io_monitor::types::PluginStatus> = snap
+        .plugins
+        .iter()
+        .map(|p| (p.name.as_str(), p))
+        .collect();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let threshold = settings.instance_failover_threshold.max(1);
+    let cooldown = settings.instance_switch_cooldown_ms;
+    let fresh_window = scan_interval_ms.max(100) * 3;
+
+    // 1) 活跃成员健康检查与切换
+    let mut switch_ops: Vec<(String, String, String)> = Vec::new();
+    {
+        let mut groups = self.groups.lock().unwrap();
+        for g in groups.values_mut() {
+            let active = g.active.clone();
+            let healthy = statuses
+                .get(active.as_str())
+                .map(|s| {
+                    s.connection_state == 2
+                        && snap.server_uptime_ms.saturating_sub(s.last_scan_time_ms)
+                            < fresh_window
+                })
+                .unwrap_or(false);
+            if healthy {
+                g.failures = 0;
+                continue;
+            }
+            g.failures += 1;
+            if g.failures < threshold || now.saturating_sub(g.last_switch_ms) < cooldown {
+                continue;
+            }
+            if let Some(next) = next_member(&g.members, &active) {
+                if next != active {
+                    switch_ops.push((g.group.clone(), next, "active instance unhealthy".into()));
+                }
+            }
+        }
+    }
+    for (group, next, reason) in switch_ops {
+        self.switch_group(&config, &group, &next, &reason, scan_interval_ms)
+            .await;
+    }
+
+    // 2) 回切探测
+    if settings.instance_failback_enabled {
+        let failback_interval = settings.instance_failback_delay_ms.max(scan_interval_ms.max(100));
+        let mut probe_ops: Vec<(String, String)> = Vec::new();
+        {
+            let mut groups = self.groups.lock().unwrap();
+            for g in groups.values_mut() {
+                let Some(primary) = g.members.first().map(|m| m.name.clone()) else {
+                    continue;
+                };
+                if g.active != primary {
+                    g.probe_ticks += 1;
+                    if g.probe_ticks * scan_interval_ms.max(100) >= failback_interval {
+                        g.probe_ticks = 0;
+                        probe_ops.push((g.group.clone(), primary));
+                    }
+                }
+            }
+        }
+        for (group, primary) in probe_ops {
+            self.probe_primary_and_takeover(&config, &group, &primary, scan_interval_ms)
+                .await;
+        }
+    }
+}
+
+async fn switch_group(
+    &self,
+    config: &AppConfig,
+    group: &str,
+    next: &str,
+    reason: &str,
+    scan_interval_ms: u64,
+) {
+    let old = { self.groups.lock().unwrap().get(group).map(|g| g.active.clone()) };
+    let Some(old) = old else { return };
+    if old == next {
+        return;
+    }
+    self.shutdown_instance(&old).await;
+    if let Some(inst) = config
+        .plugins
+        .instances
+        .iter()
+        .find(|i| i.name == next)
+        .cloned()
+    {
+        match self.load_and_start(&inst, scan_interval_ms).await {
+            Ok(()) => {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                {
+                    let mut groups = self.groups.lock().unwrap();
+                    if let Some(g) = groups.get_mut(group) {
+                        g.active = next.to_string();
+                        g.failures = 0;
+                        g.last_switch_ms = now;
+                        g.last_switch_reason = reason.to_string();
+                        g.switch_count += 1;
+                    }
+                }
+                if let Some(pm) = self.point_manager.lock().unwrap().as_ref() {
+                    pm.lock().unwrap().set_active_instance(group, next);
+                }
+                log::warn!(
+                    "Instance group '{}': switched {} -> {} ({})",
+                    group,
+                    old,
+                    next,
+                    reason
+                );
+            }
+            Err(e) => log::error!(
+                "Instance group '{}': failed to start '{}': {}",
+                group,
+                next,
+                e
+            ),
+        }
+    }
+}
+
+async fn shutdown_instance(&self, name: &str) {
+    let cmd = {
+        self.plugins
+            .lock()
+            .unwrap()
+            .get(name)
+            .map(|h| h.cmd_tx.clone())
+    };
+    if let Some(tx) = cmd {
+        let _ = tx.send(PluginCommand::Shutdown);
+    }
+    self.plugins.lock().unwrap().remove(name);
+}
+
+async fn probe_primary_and_takeover(
+    &self,
+    config: &AppConfig,
+    group: &str,
+    primary: &str,
+    scan_interval_ms: u64,
+) {
+    if self.plugins.lock().unwrap().contains_key(primary) {
+        return;
+    }
+    let Some(inst) = config
+        .plugins
+        .instances
+        .iter()
+        .find(|i| i.name == primary)
+        .cloned()
+    else {
+        return;
+    };
+    if let Err(e) = self.load_and_start(&inst, scan_interval_ms).await {
+        log::warn!("Instance group '{}': primary probe failed: {}", group, e);
+        return;
+    }
+    let connected = self
+        .monitor
+        .get_plugin_status(primary)
+        .map(|s| s.connection_state == 2)
+        .unwrap_or(false);
+    if connected {
+        let backup = {
+            self.groups
+                .lock()
+                .unwrap()
+                .get(group)
+                .map(|g| g.active.clone())
+        };
+        if let Some(backup) = backup {
+            if backup != primary {
+                self.shutdown_instance(&backup).await;
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                {
+                    let mut groups = self.groups.lock().unwrap();
+                    if let Some(g) = groups.get_mut(group) {
+                        g.active = primary.to_string();
+                        g.failures = 0;
+                        g.probe_ticks = 0;
+                        g.last_switch_ms = now;
+                        g.last_switch_reason = "primary recovered".into();
+                        g.switch_count += 1;
+                    }
+                }
+                if let Some(pm) = self.point_manager.lock().unwrap().as_ref() {
+                    pm.lock().unwrap().set_active_instance(group, primary);
+                }
+                log::info!("Instance group '{}': failback to '{}'", group, primary);
+            }
+        }
+    } else {
+        // 探测失败：立即关闭探测实例，避免与活跃备份双跑
+        self.shutdown_instance(primary).await;
+        log::warn!("Instance group '{}': primary probe not connected, probe shut down", group);
+    }
+}
+```
+
+`write_point` 的解析改为带组状态：
+
+```rust
+pub async fn write_point(&self, point_name: &str, value: f64) -> anyhow::Result<()> {
+    let target = {
+        let cache = self.config_cache.lock().unwrap();
+        let groups = self.groups.lock().unwrap();
+        cache
+            .as_ref()
+            .and_then(|cfg| resolve_write_target(cfg, &groups, point_name))
+    };
+    // 其余不变
+```
+
+`resolve_write_target` 改为：
+
+```rust
+fn resolve_write_target(
+    config: &AppConfig,
+    groups: &HashMap<String, GroupStateInner>,
+    point_name: &str,
+) -> Option<(String, String)> {
+    config.plugins.instances.iter().find_map(|inst| {
+        inst.points.iter().find_map(|pt| {
+            let logical = if inst.redundancy_group.is_empty() {
+                point_key(&inst.name, &pt.id)
+            } else {
+                point_key(&inst.redundancy_group, &pt.id)
+            };
+            if logical != point_name {
+                return None;
+            }
+            let target = if inst.redundancy_group.is_empty() {
+                inst.name.clone()
+            } else {
+                groups
+                    .get(&inst.redundancy_group)
+                    .map(|g| g.active.clone())
+                    .unwrap_or_else(|| inst.name.clone())
+            };
+            Some((target, pt.id.clone()))
+        })
+    })
+}
+```
+
+既有 `resolve_write_target` 测试调用处改为传 `&HashMap::new()`；新增组路由测试：
+
+```rust
+#[test]
+fn resolve_write_target_routes_to_active_group_member() {
+    let mut cfg = config_with_two_instances();
+    cfg.plugins.instances[1].redundancy_group = "mb-link".into();
+    cfg.plugins.instances[1].redundancy_role = "primary".into();
+    cfg.plugins.instances.push(PluginInstanceConfig {
+        name: "mb1b".into(),
+        wasm_file: "modbus.wasm".into(),
+        config: serde_json::json!({}),
+        points: vec![mapping("P1")],
+        redundancy_group: "mb-link".into(),
+        redundancy_role: "backup".into(),
+        priority: 1,
+    });
+    let mut groups = HashMap::new();
+    groups.insert(
+        "mb-link".into(),
+        GroupStateInner {
+            group: "mb-link".into(),
+            members: vec![
+                MemberRef { name: "mb2".into(), role: "primary".into(), priority: 0 },
+                MemberRef { name: "mb1b".into(), role: "backup".into(), priority: 1 },
+            ],
+            active: "mb2".into(),
+            failures: 0,
+            probe_ticks: 0,
+            last_switch_ms: 0,
+            last_switch_reason: String::new(),
+            switch_count: 0,
+        },
+    );
+    assert_eq!(
+        resolve_write_target(&cfg, &groups, "mb-link:P1"),
+        Some(("mb2".to_string(), "P1".to_string()))
+    );
+}
+```
+
+注意：`config_with_two_instances` 中 mb1 未配组，`mb1:P1` 仍按原逻辑路由。
+
+- [ ] **Step 4: 运行确认通过**
+
+Run: `cargo test -p hmi-io-plugin`
+Expected: 全绿。
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add io-backend/crates/plugin/src/registry.rs
+git commit -m "feat(plugin): add per-instance group supervisor with failover"
+```
+
+---
+
+## Task 25: web API 增量（插件字段、include_backup、实例组端点）
+
+**Files:**
+- Modify: `io-backend/crates/web/src/api.rs`
+- Modify: `io-backend/crates/web/src/server.rs`
+
+- [ ] **Step 1: 更新测试并新增**
+
+既有 `list_points` 测试的 `PluginQuery` 构造补 `include_backup: None`。新增：
+
+```rust
+#[tokio::test]
+async fn list_points_uses_group_logical_id_and_hides_backups() {
+    let repo = Arc::new(Repo::new(":memory:").unwrap());
+    let p1 = repo
+        .insert_plugin_full("mb1", "mb.wasm", "{}", "mb-link", "primary", 0)
+        .unwrap();
+    let p2 = repo
+        .insert_plugin_full("mb2", "mb.wasm", "{}", "mb-link", "backup", 1)
+        .unwrap();
+    repo.insert_point(p1, "P1", "a", "bool", "big_endian", 1.0, 0.0, "DI", "")
+        .unwrap();
+    repo.insert_point(p2, "P1", "b", "bool", "big_endian", 1.0, 0.0, "DI", "")
+        .unwrap();
+
+    let mut cfg = AppConfig::default_config();
+    cfg.plugins.instances = vec![
+        PluginInstance {
+            name: "mb1".into(),
+            wasm_file: "mb.wasm".into(),
+            config: serde_json::json!({}),
+            points: vec![mapping("P1")],
+            redundancy_group: "mb-link".into(),
+            redundancy_role: "primary".into(),
+            priority: 0,
+        },
+        PluginInstance {
+            name: "mb2".into(),
+            wasm_file: "mb.wasm".into(),
+            config: serde_json::json!({}),
+            points: vec![mapping("P1")],
+            redundancy_group: "mb-link".into(),
+            redundancy_role: "backup".into(),
+            priority: 1,
+        },
+    ];
+    let pm = Arc::new(Mutex::new(PointManager::from_config(&cfg)));
+
+    let res = list_points(
+        State(repo.clone()),
+        Extension(pm.clone()),
+        Query(PluginQuery { plugin_id: None, include_backup: None }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(res.0.len(), 1);
+    assert_eq!(res.0[0].hmi_id, "mb-link:P1");
+
+    let res = list_points(
+        State(repo),
+        Extension(pm),
+        Query(PluginQuery { plugin_id: None, include_backup: Some(true) }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(res.0.len(), 2);
+}
+```
+
+- [ ] **Step 2: 运行确认失败**
+
+Run: `cargo test -p hmi-io-web`
+Expected: 编译失败。
+
+- [ ] **Step 3: 实现 api.rs**
+
+`UpsertPlugin` 增加：
+
+```rust
+#[serde(default)]
+pub redundancy_group: String,
+#[serde(default)]
+pub redundancy_role: String,
+#[serde(default)]
+pub priority: u32,
+```
+
+`create_plugin` 改为调用 `repo.insert_plugin_full(&p.name, &p.wasm_file, &p.config_json, &p.redundancy_group, &p.redundancy_role, p.priority)`；`update_plugin` 改为 `repo.update_plugin_full(id, ..., p.redundancy_group, p.redundancy_role, p.priority, p.enabled)`。写入前调用校验：
+
+```rust
+fn validate_group_edit(repo: &Repo, candidate: &UpsertPlugin, edit_id: Option<i64>) -> Result<(), StatusCode> {
+    let mut plugins = repo.list_plugins().map_err(|e| {
+        log::error!("{}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    if let Some(id) = edit_id {
+        plugins.retain(|p| p.id != id);
+    }
+    plugins.push(PluginRow {
+        id: edit_id.unwrap_or(0),
+        name: candidate.name.clone(),
+        wasm_file: candidate.wasm_file.clone(),
+        config_json: candidate.config_json.clone(),
+        enabled: candidate.enabled,
+        redundancy_group: candidate.redundancy_group.clone(),
+        redundancy_role: candidate.redundancy_role.clone(),
+        priority: candidate.priority,
+    });
+    let instances: Vec<PluginInstance> = plugins
+        .into_iter()
+        .map(|p| {
+            let points = repo
+                .list_points(Some(p.id))
+                .unwrap_or_default()
+                .into_iter()
+                .map(|pt| PointMapping {
+                    id: pt.variable_id,
+                    address: pt.address,
+                    data_type: pt.data_type,
+                    byte_order: pt.byte_order,
+                    scale: pt.scale,
+                    offset: pt.offset_val,
+                    var_type: pt.var_type,
+                })
+                .collect();
+            PluginInstance {
+                name: p.name,
+                wasm_file: p.wasm_file,
+                config: serde_json::from_str(&p.config_json).unwrap_or(serde_json::json!({})),
+                points,
+                redundancy_group: p.redundancy_group,
+                redundancy_role: p.redundancy_role,
+                priority: p.priority,
+            }
+        })
+        .collect();
+    let mut cfg = AppConfig::default_config();
+    cfg.plugins.instances = instances;
+    cfg.validate().map_err(|e| {
+        log::warn!("group validation failed: {}", e);
+        StatusCode::BAD_REQUEST
+    })
+}
+```
+
+`PluginQuery` 增加 `pub include_backup: Option<bool>`；`list_points` 过滤与 `hmi_id` 改为：
+
+```rust
+fn hmi_id_for_point(p: &PointRow) -> String {
+    if p.redundancy_group.is_empty() {
+        point_key(&p.plugin_name, &p.variable_id)
+    } else {
+        point_key(&p.redundancy_group, &p.variable_id)
+    }
+}
+```
+
+```rust
+let include_backup = q.include_backup.unwrap_or(false);
+let pm = point_manager.lock().unwrap();
+let filtered: Vec<PointView> = all_points
+    .into_iter()
+    .filter(|p| {
+        if !include_backup && p.redundancy_role == "backup" {
+            return false;
+        }
+        pm.has_point(&hmi_id_for_point(p))
+    })
+    .map(PointView::from)
+    .collect();
+```
+
+`PointView` 增加 `redundancy_group`、`plugin_role` 字段并在 `From<PointRow>` 填充（`row.redundancy_group.clone()` / `row.redundancy_role.clone()`）。
+
+`build_config_snapshot` 的 `SnapshotPlugin` 构造补：
+
+```rust
+redundancy_group: pw.plugin.redundancy_group.clone(),
+redundancy_role: pw.plugin.redundancy_role.clone(),
+priority: pw.plugin.priority,
+```
+
+新增端点 handler：
+
+```rust
+pub async fn redundancy_instance_groups(
+    Extension(registry): Extension<Arc<hmi_io_plugin::registry::PluginRegistry>>,
+) -> Json<Vec<hmi_io_plugin::registry::InstanceGroupStatus>> {
+    Json(registry.instance_groups_status())
+}
+```
+
+`server.rs`：`run_web_server` 参数 `_registry` 改名 `registry`；路由加：
+
+```rust
+.route("/api/redundancy/instance-groups", get(super::api::redundancy_instance_groups))
+```
+
+`web` crate 依赖补 `hmi-io-config`（已在 Task 7 移入 dependencies）。
+
+- [ ] **Step 4: 运行确认通过**
+
+Run: `cargo test -p hmi-io-web`
+Expected: 新测试 + 既有测试全绿。
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add io-backend/crates/web/src/api.rs io-backend/crates/web/src/server.rs
+git commit -m "feat(web): plugin group fields, include_backup points, instance-groups api"
+```
+
+---
+
+## Task 26: bin 接线（健康提供者、实例监督器、迁移）
+
+**Files:**
+- Modify: `io-backend/crates/bin/src/main.rs`
+
+- [ ] **Step 1: 实现**
+
+`prepare` 之后（`start_instances` 前后均可）加：
+
+```rust
+registry.set_point_manager(point_manager.clone());
+
+redundancy.set_health_provider(Box::new({
+    let mon = monitor.clone();
+    let scan = app_config.plugins.scan_interval_ms.max(100);
+    move || {
+        let snap = mon.get_snapshot();
+        let total = snap.plugins.len();
+        let connected = snap
+            .plugins
+            .iter()
+            .filter(|p| p.connection_state == 2)
+            .count();
+        let fresh = snap.plugins.iter().any(|p| {
+            p.connection_state == 2
+                && snap.server_uptime_ms.saturating_sub(p.last_scan_time_ms) < scan * 3
+        });
+        (total, connected, fresh)
+    }
+}));
+
+if let Some(h) = registry.spawn_instance_supervisor(app_config.plugins.scan_interval_ms) {
+    let _ = h;
+}
+```
+
+`migrate_yaml_to_db` 的 `insert_plugin` 调用改为：
+
+```rust
+match repo.insert_plugin_full(
+    &inst.name,
+    &inst.wasm_file,
+    &cj,
+    &inst.redundancy_group,
+    &inst.redundancy_role,
+    inst.priority,
+) {
+    Ok(pid) => { /* 原逻辑不变 */ }
+    Err(e) => log::warn!("  Skip '{}': {}", inst.name, e),
+}
+```
+
+- [ ] **Step 2: 验证编译**
+
+Run: `cargo check`
+Expected: 全 workspace 编译通过。
+
+- [ ] **Step 3: 提交**
+
+```bash
+git add io-backend/crates/bin/src/main.rs
+git commit -m "feat(bin): wire health provider and instance supervisor"
+```
+
+---
+
+## Task 27: web-ui 类型/客户端与插件、点位页
+
+**Files:**
+- Modify: `io-backend/web-ui/src/api/types.ts`
+- Modify: `io-backend/web-ui/src/api/client.ts`
+- Modify: `io-backend/web-ui/src/pages/Plugins.tsx`
+- Modify: `io-backend/web-ui/src/pages/Points.tsx`
+
+- [ ] **Step 1: 实现 types.ts**
+
+`PluginRow` 增加：
+
+```ts
+redundancy_group: string;
+redundancy_role: string;
+priority: number;
+```
+
+`PointRow` 增加 `redundancy_group: string; plugin_role: string;`（对应 PointView）。
+
+`RedundancyConfig` 增加：
+
+```ts
+plugin_unhealthy_threshold: number;
+plugin_promotion_cooldown_ms: number;
+instance_failover_threshold: number;
+instance_failback_enabled: boolean;
+instance_failback_delay_ms: number;
+instance_switch_cooldown_ms: number;
+```
+
+新增：
+
+```ts
+export interface InstanceMemberStatus {
+  name: string;
+  role: string;
+  priority: number;
+  is_active: boolean;
+  connection_state: number;
+  connection_label: string;
+}
+
+export interface InstanceGroupStatus {
+  group: string;
+  members: InstanceMemberStatus[];
+  active_instance: string;
+  consecutive_failures: number;
+  last_switch_ms: number;
+  last_switch_reason: string;
+  switch_count: number;
+}
+```
+
+- [ ] **Step 2: 实现 client.ts**
+
+`listPoints` 改为：
+
+```ts
+listPoints: (pluginId: number, includeBackup = false) =>
+  request<PointRow[]>(
+    "GET",
+    `/api/points?plugin_id=${pluginId}&include_backup=${includeBackup}`,
+  ),
+```
+
+`createPlugin`/`updatePlugin` 的 payload 增加 `redundancy_group/redundancy_role/priority`。新增：
+
+```ts
+getInstanceGroups: () =>
+  request<InstanceGroupStatus[]>("GET", "/api/redundancy/instance-groups"),
+```
+
+- [ ] **Step 3: 实现 Plugins.tsx**
+
+`PluginFormValues` 增加 `redundancy_group: string; redundancy_role: string; priority: number;`。
+
+表格列追加：
+
+```tsx
+{
+  title: "冗余组",
+  dataIndex: "redundancy_group",
+  width: 110,
+  render: (v: string) => (v ? <Tag color="blue">{v}</Tag> : <span style={{ opacity: 0.35 }}>-</span>),
+},
+{
+  title: "角色",
+  dataIndex: "redundancy_role",
+  width: 100,
+  render: (v: string) =>
+    v === "primary" ? <Tag color="green">主</Tag> : v === "backup" ? <Tag color="orange">备</Tag> : <span style={{ opacity: 0.35 }}>-</span>,
+},
+{
+  title: "优先级",
+  dataIndex: "priority",
+  width: 80,
+  render: (v: number) => (v > 0 ? <span className="mono">{v}</span> : <span style={{ opacity: 0.35 }}>-</span>),
+},
+```
+
+表单追加（保存时并入 payload）：
+
+```tsx
+<Form.Item name="redundancy_group" label="冗余组（可选）">
+  <Input placeholder="如 mb-link" />
+</Form.Item>
+<Form.Item name="redundancy_role" label="组内角色">
+  <Select
+    options={[
+      { value: "", label: "无" },
+      { value: "primary", label: "主 primary" },
+      { value: "backup", label: "备 backup" },
+    ]}
+  />
+</Form.Item>
+<Form.Item noStyle shouldUpdate>
+  {({ getFieldValue }) =>
+    getFieldValue("redundancy_role") === "backup" ? (
+      <Form.Item name="priority" label="切换优先级（越小越先）" rules={[{ required: true, message: "请输入优先级" }]}>
+        <InputNumber min={1} style={{ width: "100%" }} />
+      </Form.Item>
+    ) : null
+  }
+</Form.Item>
+```
+
+`openCreate`/`openEdit` 的 `setFieldsValue` 同步补三个字段。
+
+- [ ] **Step 4: 实现 Points.tsx**
+
+`loadPoints` 调用改为 `api.listPoints(pid, includeBackup)`；新增 `const [includeBackup, setIncludeBackup] = useState(false);`，工具栏加 `Switch checkedChildren="含备实例" unCheckedChildren="仅主实例" onChange={setIncludeBackup}`，并在 `useEffect` 依赖中加入 `includeBackup`。表格加“角色”列（`plugin_role` 与 `redundancy_group` 标签）。
+
+- [ ] **Step 5: 验证**
+
+Run: `npm run build`（工作目录 `io-backend/web-ui`）
+Expected: tsc + vite 通过。
+
+- [ ] **Step 6: 提交**
+
+```bash
+git add io-backend/web-ui/src/api/types.ts io-backend/web-ui/src/api/client.ts io-backend/web-ui/src/pages/Plugins.tsx io-backend/web-ui/src/pages/Points.tsx
+git commit -m "feat(web-ui): plugin group fields and backup point views"
+```
+
+---
+
+## Task 28: web-ui 冗余配置/监控页增量
+
+**Files:**
+- Modify: `io-backend/web-ui/src/pages/RedundancyConfig.tsx`
+- Modify: `io-backend/web-ui/src/pages/RedundancyMonitor.tsx`
+
+- [ ] **Step 1: 实现 RedundancyConfig.tsx**
+
+`FormValues` 与表单各增加六个字段：
+
+```tsx
+<Form.Item name="plugin_unhealthy_threshold" label="采集不健康升主阈值（次）">
+  <InputNumber style={{ width: "100%" }} min={1} max={20} />
+</Form.Item>
+<Form.Item name="plugin_promotion_cooldown_ms" label="健康触发升主冷却 (ms)">
+  <InputNumber style={{ width: "100%" }} min={1000} step={1000} />
+</Form.Item>
+<Form.Item name="instance_failover_threshold" label="实例切换阈值（连续失败）">
+  <InputNumber style={{ width: "100%" }} min={1} max={20} />
+</Form.Item>
+<Form.Item name="instance_failback_enabled" label="实例自动回切" valuePropName="checked">
+  <Switch checkedChildren="开" unCheckedChildren="关" />
+</Form.Item>
+<Form.Item name="instance_failback_delay_ms" label="实例回切探测间隔 (ms)">
+  <InputNumber style={{ width: "100%" }} min={1000} step={1000} />
+</Form.Item>
+<Form.Item name="instance_switch_cooldown_ms" label="实例切换冷却 (ms)">
+  <InputNumber style={{ width: "100%" }} min={1000} step={1000} />
+</Form.Item>
+```
+
+`useEffect` 的 `setFieldsValue` 同步补全。
+
+- [ ] **Step 2: 实现 RedundancyMonitor.tsx**
+
+新增轮询与表格：
+
+```tsx
+const groups = usePolling(() => api.getInstanceGroups(), 1000);
+```
+
+在“同步点位”卡片之前加：
+
+```tsx
+<Card
+  size="small"
+  title="实例冗余组"
+  extra={<Tag color="blue">{groups.data?.length ?? 0} 组</Tag>}
+>
+  <Table
+    rowKey="group"
+    size="small"
+    columns={groupColumns}
+    dataSource={groups.data ?? []}
+    loading={groups.loading && !groups.data}
+    pagination={false}
+    locale={{ emptyText: <Empty description="未配置实例冗余组" /> }}
+  />
+</Card>
+```
+
+列定义（展开成员，用 `render` 渲染组内成员标签）：
+
+```tsx
+const groupColumns: ColumnsType<InstanceGroupStatus> = [
+  { title: "组名", dataIndex: "group", render: (v: string) => <Typography.Text strong>{v}</Typography.Text> },
+  {
+    title: "成员",
+    dataIndex: "members",
+    render: (members: InstanceMemberStatus[]) => (
+      <Space size={4} wrap>
+        {members.map((m) => (
+          <Tag key={m.name} color={m.is_active ? "green" : m.role === "primary" ? "blue" : "default"}>
+            {m.name}（{m.role === "primary" ? "主" : `备${m.priority}`}）
+            {m.is_active ? " ●" : ""}
+          </Tag>
+        ))}
+      </Space>
+    ),
+  },
+  { title: "活跃实例", dataIndex: "active_instance", width: 140, render: (v: string) => <span className="mono">{v}</span> },
+  { title: "连续失败", dataIndex: "consecutive_failures", width: 90, render: (v: number) => (v > 0 ? <Tag color="red">{v}</Tag> : <span>{v}</span>) },
+  { title: "切换次数", dataIndex: "switch_count", width: 90 },
+  { title: "上次切换", dataIndex: "last_switch_reason", ellipsis: { showTitle: true } },
+];
+```
+
+`api/types.ts` 已含 `InstanceGroupStatus`（Task 27）。
+
+- [ ] **Step 3: 验证**
+
+Run: `npm run build`（工作目录 `io-backend/web-ui`）
+Expected: tsc + vite 通过。
+
+- [ ] **Step 4: 提交**
+
+```bash
+git add io-backend/web-ui/src/pages/RedundancyConfig.tsx io-backend/web-ui/src/pages/RedundancyMonitor.tsx
+git commit -m "feat(web-ui): redundancy config thresholds and instance group monitor"
+```
+
+---
+
+## Task 29: 全量构建验证
+
+- [ ] **Step 1: 后端测试**
+
+Run: `cargo test`（工作目录 `io-backend`）
+Expected: 全部 PASS。
+
+- [ ] **Step 2: web-ui 构建**
+
+Run: `npm run build`（工作目录 `io-backend/web-ui`）
+Expected: 通过。
+
+- [ ] **Step 3: HMI 前端构建**
+
+Run: `npm run build`（仓库根目录）
+Expected: 通过。
+
+- [ ] **Step 4: 提交修复（如有）**
+
+---
+
+## Task 30: E2E 补充（实例级 + 节点级健康触发）
+
+- [ ] **Step 1: 单机实例级切换**
+
+准备 `config-instance.yaml`（`redundancy.enabled: false`）：
+
+```yaml
+server: { host: 0.0.0.0, port: 8080, path: /iscs/data, batch_interval_ms: 100 }
+plugins:
+  directory: ./plugins
+  scan_interval_ms: 500
+  instances:
+    - name: iec104
+      redundancy_group: dual-link
+      redundancy_role: primary
+      wasm_file: iec104.wasm
+      config: { host: "127.0.0.1", port: 2404, common_address: 1 }
+      points:
+        - { id: "STA1_211_IA", address: "1003", data_type: "float32", var_type: "AI" }
+        - { id: "STA1_BUS_VOLTAGE", address: "1005", data_type: "float32", var_type: "AI" }
+    - name: opc_ua_backup
+      redundancy_group: dual-link
+      redundancy_role: backup
+      priority: 1
+      wasm_file: opc_ua.wasm
+      config: { endpoint: "opc.tcp://127.0.0.1:4840" }
+      points:
+        - { id: "STA1_211_IA", address: "ns=2;s=Temperature.Zone1", var_type: "AI" }
+        - { id: "STA1_BUS_VOLTAGE", address: "ns=2;s=Temperature.Zone2", var_type: "AI" }
+redundancy:
+  enabled: false
+  instance_failover_threshold: 3
+  instance_failback_enabled: true
+  instance_failback_delay_ms: 10000
+  instance_switch_cooldown_ms: 5000
+```
+
+启动两个测试服务（`cargo run -p iec104-slave`、`cargo run -p opcua-server`）与后端 `cargo run -- config-instance.yaml`。
+
+Expected：
+- 初始 `GET /api/redundancy/instance-groups`：活跃 = `iec104`，HMI 变量 `dual-link:STA1_211_IA` 有值；
+- 停止 iec104-slave → 约 3 次扫描后切到 `opc_ua_backup`，变量 ID 仍为 `dual-link:STA1_211_IA`，值来自 OPC UA；
+- 重启 iec104-slave → 约 10s 后回切 `iec104`；
+- 写命令 `dual-link:STA1_BUS_VOLTAGE` 路由到当前活跃实例。
+
+- [ ] **Step 2: 节点级健康触发**
+
+复用 Task 18 的双进程配置，主节点用 iec104 实例（从站 2404）。停掉主节点对端的从站（且主节点无其他插件）→ 主节点 `data_healthy=false` 连续 3 次心跳 → 备机 claim 接管并升主。
+
+Expected：备机日志 `claim accepted` / `promoted to ACTIVE`；`GET /api/redundancy/status` 两端状态正确；恢复从站后按原回切流程回切。
+
+- [ ] **Step 3: 清理临时配置**
+
+删除 `config-instance.yaml` 等临时文件（确认路径后执行）。
+
+---
+
+## Part B 自审记录
+
+- **Spec 覆盖**：节点级采集健康触发（Task 22/23/26/30）、实例级组配置与校验（Task 19/20）、PointManager 逻辑映射（Task 21）、Registry 监督器与切换/回切（Task 24）、web API 与 UI（Task 25/27/28）、bin 接线（Task 26）、E2E（Task 30）。无缺口。
+- **类型一致性**：`PluginRow.redundancy_group/redundancy_role/priority` 贯穿 db/config/web/TS；`PluginInstance` 新字段贯穿 config/registry/web；`HeartbeatInfo` 三字段与 `ClaimBody.role` 在 engine/web 一致；`InstanceGroupStatus` 与 TS 类型逐字段对齐。
+- **占位符扫描**：无 TBD/TODO；所有修改点均给出完整代码或精确位置。
