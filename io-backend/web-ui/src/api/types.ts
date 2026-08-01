@@ -1,4 +1,4 @@
-// API types mirroring the Rust serde structs (io-backend/src/db/repo.rs, src/monitor/types.rs)
+// API types mirroring the Rust serde structs (io-backend/crates/db/src/repo.rs, io-backend/crates/monitor/src/types.rs)
 
 export interface PluginRow {
   id: number;
