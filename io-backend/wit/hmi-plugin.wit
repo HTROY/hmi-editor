@@ -1,0 +1,24 @@
+// HMI plugin contract: lifecycle exports + events imports.
+// This file is the single source of truth shared by host and guests.
+package hmi:plugin;
+
+interface lifecycle {
+    init: async func(config-json: string) -> u32;
+    connect: async func() -> u32;
+    disconnect: async func() -> u32;
+    scan-points: async func() -> u32;
+    write-point: async func(name: string, value: f64) -> u32;
+    get-name: async func() -> string;
+    get-status: async func() -> u32;
+}
+
+interface events {
+    log: async func(level: u32, message: string);
+    on-point: async func(name: string, value: f64, quality: string, timestamp: u64);
+    on-packet: async func(direction: string, protocol: string, hex: string, summary: string);
+}
+
+world hmi-plugin {
+    export lifecycle;
+    import events;
+}

@@ -5,7 +5,7 @@ Contributor guide for HMI Editor, a rail-transit HMI configuration tool with a R
 ## Project Structure & Module Organization
 
 - Frontend in `src/`: `core/` holds framework-agnostic engines (shapes, scene, variables, bindings, io, alarm, historian, auth, script, report); `editor/` holds React components (canvas, toolbar, panels); `store/editorStore.ts` is the Zustand hub. Entry: `index.html` + `src/main.tsx`; output: `dist/` (gitignored).
-- Backend in `io-backend/`: Rust modules in `src/` (bridge, db, monitor, plugin, point, server, web), compiled plugins in `plugins/`, sources in `plugins-src/<plugin>/`.
+- Backend in `io-backend/`: Rust modules in `src/` (bridge, db, monitor, plugin, point, server, web), compiled plugins in `plugins/`, sources in `plugins-src/<plugin>/`. Plugins are WASIp2 components built with `wit-bindgen` against the shared contract `io-backend/wit/hmi-plugin.wit` and run on wasmtime 47 (`wasmtime` + `wasmtime-wasi` crates); the host implements the `events` import (log / on-point / on-packet) in `src/plugin/host.rs`.
 - `ARCHITECTURE.md` documents the architecture; `config.yaml` files hold runtime configuration.
 
 ## Build, Test, and Development Commands
@@ -19,9 +19,17 @@ Frontend (repo root):
 
 Backend (`io-backend/`):
 
-- `.\build.ps1 -Release` — build WASM plugins and the Rust binary; `-PluginsOnly` / `-BackendOnly` split the steps
+- `.\build.ps1 -Release` — build WASM plugins (target `wasm32-wasip2`) and the Rust binary; `-PluginsOnly` / `-BackendOnly` split the steps
 - `cargo run -- config.yaml` — start the backend (WebSocket :8080, web API :8081)
 - `cargo test` — run Rust unit tests
+
+## WASM Plugin Contract
+
+- Single source of truth: `io-backend/wit/hmi-plugin.wit` — package `hmi:plugin`, exports `lifecycle` (init/connect/disconnect/scan-points/write-point/get-name/get-status), imports `events` (log/on-point/on-packet); all functions are `async`.
+- Guests (`plugins-src/<plugin>/`): `wit_bindgen::generate!({ world: "hmi-plugin", path: "../../wit" })`, implement `crate::exports::hmi::plugin::lifecycle::Guest` (methods have no `&self`), `export!(Plugin)`, and `await` the `hmi::plugin::events` imports directly inside the async exports.
+- Host (`io-backend/src/plugin/`): `bindgen!({ world: "hmi-plugin", path: "wit" })`; store data must implement `wasmtime::component::HasData` plus `events::Host` and `events::HostWithStore` (async import methods take `&Accessor<T, D>` and return `impl Future<Output = ()>`); link with `wasmtime_wasi::p2::add_to_linker_async` and `HmiPlugin::add_to_linker::<S, S>`, instantiate with `HmiPlugin::instantiate_async`, call exports via `store.run_concurrent(...)`. Generated export instance type: `exports::hmi::plugin::lifecycle::Guest`.
+- Config requirements: `config.concurrency_support(true)` (not `async_support`), WasiCtx built with `.inherit_network()` (TCP connect fails with "Permission denied" without it).
+- Plugins use `std::net::TcpStream` directly (host_tcp_* APIs from the old Extism era no longer exist).
 
 ## Coding Style & Naming Conventions
 

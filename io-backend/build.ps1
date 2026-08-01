@@ -1,33 +1,37 @@
 ﻿# HMI I/O Backend Build Script
 # =============================
-# Builds WASM plugins (Extism PDK) and the Rust backend service.
+# Builds WASM plugins (wasip2 components) and the Rust backend service.
 
 param(
     [switch]$Release,
     [switch]$PluginsOnly,
-    [switch]$BackendOnly,
-    [switch]$InstallExtismCli
+    [switch]$BackendOnly
 )
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $PluginDir = Join-Path $ScriptDir "plugins-src"
 $OutputDir = Join-Path $ScriptDir "plugins"
-$WasmTarget = "wasm32-wasip1"
+$WasmTarget = "wasm32-wasip2"
 
 Write-Host "=== HMI I/O Backend Build ===" -ForegroundColor Cyan
 
-# Check for wasm target
-$targets = rustup target list --installed 2>&1
-if ($targets -notmatch "wasm32-wasip1") {
-    Write-Host "Installing wasm32-wasip1 target..." -ForegroundColor Yellow
-    rustup target add wasm32-wasip1
+# Check for wasm target.
+# NOTE: do not merge stderr via 2>&1 on native commands here - under
+# $ErrorActionPreference="Stop" PowerShell 5.1 converts redirected stderr
+# lines into terminating NativeCommandError exceptions.
+$targets = rustup target list --installed
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: 'rustup' failed - is the Rust toolchain installed?" -ForegroundColor Red
+    exit 1
 }
-
-# Optional: install extism-cli for convenience
-if ($InstallExtismCli) {
-    Write-Host "Installing extism-cli..." -ForegroundColor Yellow
-    cargo install extism-cli 2>&1
+if (($targets -join "`n") -notmatch "wasm32-wasip2") {
+    Write-Host "Installing wasm32-wasip2 target..." -ForegroundColor Yellow
+    rustup target add wasm32-wasip2
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: could not install wasm32-wasip2 target" -ForegroundColor Red
+        exit 1
+    }
 }
 
 # Ensure plugins output directory exists
@@ -35,11 +39,14 @@ if (-not (Test-Path $OutputDir)) {
     New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 }
 
-$buildFlag = if ($Release) { "--release" } else { "" }
+$pluginArgs = @("--target", $WasmTarget)
+if ($Release) { $pluginArgs += "--release" }
+$backendArgs = @()
+if ($Release) { $backendArgs += "--release" }
 
 # Build WASM plugins
 if (-not $BackendOnly) {
-    Write-Host "`n[1/2] Building WASM plugins (Extism PDK)..." -ForegroundColor Yellow
+    Write-Host "`n[1/2] Building WASM plugins (wasip2 components)..." -ForegroundColor Yellow
 
     $plugins = @("modbus-tcp", "opc-ua", "iec104")
     foreach ($plugin in $plugins) {
@@ -47,15 +54,15 @@ if (-not $BackendOnly) {
         Write-Host "  Building $plugin (target: $WasmTarget)..." -ForegroundColor Gray
         Push-Location $pluginPath
         try {
-            # Build with cargo directly (extism-pdk uses standard wasm build)
-            cargo build --target $WasmTarget $buildFlag 2>&1
+            cargo build @pluginArgs
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "    ERROR: Build failed for $plugin" -ForegroundColor Red
                 continue
             }
             $profile = if ($Release) { "release" } else { "debug" }
-            $wasmSrc = Join-Path $pluginPath "target" $WasmTarget $profile "$plugin-plugin.wasm"
-            $wasmDst = Join-Path $OutputDir "$plugin.wasm"
+            $crateName = $plugin.Replace("-", "_")
+            $wasmSrc = Join-Path $pluginPath ("target\{0}\{1}\{2}_plugin.wasm" -f $WasmTarget, $profile, $crateName)
+            $wasmDst = Join-Path $OutputDir "${crateName}.wasm"
             if (Test-Path $wasmSrc) {
                 Copy-Item $wasmSrc $wasmDst -Force
                 $size = (Get-Item $wasmDst).Length
@@ -72,15 +79,17 @@ if (-not $BackendOnly) {
 
 # Build Rust backend
 if (-not $PluginsOnly) {
-    Write-Host "`n[2/2] Building Rust backend (Extism runtime)..." -ForegroundColor Yellow
+    Write-Host "`n[2/2] Building Rust backend (wasmtime runtime)..." -ForegroundColor Yellow
     Push-Location $ScriptDir
     try {
-        cargo build $buildFlag 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  Backend built successfully!" -ForegroundColor Green
-            $exePath = if ($Release) { "target\release\hmi-io-backend.exe" } else { "target\debug\hmi-io-backend.exe" }
-            Write-Host "  Binary: $(Join-Path $ScriptDir $exePath)" -ForegroundColor Gray
+        cargo build @backendArgs
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: Backend build failed" -ForegroundColor Red
+            exit 1
         }
+        Write-Host "  Backend built successfully!" -ForegroundColor Green
+        $exePath = if ($Release) { "target\release\hmi-io-backend.exe" } else { "target\debug\hmi-io-backend.exe" }
+        Write-Host "  Binary: $(Join-Path $ScriptDir $exePath)" -ForegroundColor Gray
     }
     finally {
         Pop-Location

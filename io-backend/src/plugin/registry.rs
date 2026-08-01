@@ -150,33 +150,33 @@ impl PluginRegistry {
         let wasm_path_str = wasm_path.to_string_lossy().to_string();
         let mut plugin =
             self.host
-                .load_plugin(&wasm_path_str, point_tx, monitor.clone(), &plugin_name)?;
+                .load_plugin(&wasm_path_str, point_tx, monitor.clone(), &plugin_name).await?;
 
-        let init_ok = plugin.init(&config_json)?;
+        let init_ok = plugin.init(&config_json).await?;
         if init_ok != 0 {
             anyhow::bail!("plugin_init returned: {}", init_ok);
         }
 
-        let conn_ok = plugin.connect()?;
+        let conn_ok = plugin.connect().await?;
         if conn_ok != 0 {
             log::warn!("plugin_connect returned: {} (continuing)", conn_ok);
         }
 
-        let status_code = plugin.get_status()?;
+        let status_code = plugin.get_status().await?;
         log::info!(
             "Plugin '{}' connected, status: {}",
             plugin_name,
             status_code
         );
-        monitor.set_connection_state(&plugin_name, status_code);
+        monitor.set_connection_state(&plugin_name, status_code as i32);
 
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
         let scan_dur = Duration::from_millis(scan_interval_ms);
         let actor_name = plugin_name.clone();
         let mon = monitor.clone();
 
-        let handle = tokio::task::spawn_blocking(move || {
-            run_plugin_actor(actor_name, plugin, cmd_rx, scan_dur, mon);
+        let handle = tokio::task::spawn(async move {
+            run_plugin_actor(actor_name, plugin, cmd_rx, scan_dur, mon).await;
         });
 
         self.plugins.lock().unwrap().insert(
@@ -300,65 +300,59 @@ impl PluginRegistry {
 
 // ── Plugin Actor Loop ──────────────────────────────────────
 
-fn run_plugin_actor(
+async fn run_plugin_actor(
     name: String,
     mut plugin: PluginInstance,
-    cmd_rx: mpsc::UnboundedReceiver<PluginCommand>,
+    mut cmd_rx: mpsc::UnboundedReceiver<PluginCommand>,
     scan_interval: Duration,
     monitor: Arc<MonitorCollector>,
 ) {
-    let mut cmd_rx = cmd_rx;
-    let mut next_scan = std::time::Instant::now();
-
+    let mut interval = tokio::time::interval(scan_interval);
     loop {
-        let now = std::time::Instant::now();
-        if now >= next_scan {
-            match plugin.scan_points() {
-                Ok(0) => {
-                    monitor.record_scan(&name);
-                    if let Ok(s) = plugin.get_status() {
-                        monitor.set_connection_state(&name, s);
+        tokio::select! {
+            _ = interval.tick() => {
+                match plugin.scan_points().await {
+                    Ok(0) => {
+                        monitor.record_scan(&name);
+                        if let Ok(s) = plugin.get_status().await {
+                            monitor.set_connection_state(&name, s as i32);
+                        }
+                    }
+                    Ok(code) => {
+                        monitor.record_error(&name, &format!("scan_points returned code {}", code));
+                        log::warn!("[{}] scan_points: {}", name, code);
+                    }
+                    Err(e) => {
+                        monitor.record_error(&name, &e.to_string());
+                        log::error!("[{}] scan_points error: {}", name, e);
                     }
                 }
-                Ok(code) => {
-                    monitor.record_error(&name, &format!("scan_points returned code {}", code));
-                    log::warn!("[{}] scan_points: {}", name, code);
+            }
+            cmd = cmd_rx.recv() => match cmd {
+                Some(PluginCommand::WritePoint {
+                    name: pt,
+                    value,
+                    reply,
+                }) => {
+                    let r = match plugin.write_point(&pt, value).await {
+                        Ok(0) => Ok(()),
+                        Ok(c) => Err(format!("code:{}", c)),
+                        Err(e) => Err(e.to_string()),
+                    };
+                    let _ = reply.send(r);
                 }
-                Err(e) => {
-                    monitor.record_error(&name, &e.to_string());
-                    log::error!("[{}] scan_points error: {}", name, e);
+                Some(PluginCommand::GetStatus { reply }) => {
+                    let s = plugin.get_status().await.unwrap_or(u32::MAX) as i32;
+                    monitor.set_connection_state(&name, s);
+                    let _ = reply.send(s);
                 }
-            }
-            next_scan = now + scan_interval;
-        }
-
-        match cmd_rx.try_recv() {
-            Ok(PluginCommand::WritePoint {
-                name: pt,
-                value,
-                reply,
-            }) => {
-                let r = match plugin.write_point(&pt, value) {
-                    Ok(0) => Ok(()),
-                    Ok(c) => Err(format!("code:{}", c)),
-                    Err(e) => Err(e.to_string()),
-                };
-                let _ = reply.send(r);
-            }
-            Ok(PluginCommand::GetStatus { reply }) => {
-                let s = plugin.get_status().unwrap_or(-1);
-                monitor.set_connection_state(&name, s);
-                let _ = reply.send(s);
-            }
-            Ok(PluginCommand::Shutdown) => {
-                let _ = plugin.disconnect();
-                monitor.set_connection_state(&name, 0);
-                break;
-            }
-            Err(mpsc::error::TryRecvError::Empty) => {
-                std::thread::sleep(Duration::from_millis(10));
-            }
-            Err(mpsc::error::TryRecvError::Disconnected) => break,
+                Some(PluginCommand::Shutdown) => {
+                    let _ = plugin.disconnect().await;
+                    monitor.set_connection_state(&name, 0);
+                    break;
+                }
+                None => break,
+            },
         }
     }
     log::info!("Plugin '{}' actor stopped", name);

@@ -4,5 +4,8 @@ io-backend/*.log
 tsconfig.tsbuildinfo
 io-backend/plugins-src/*/target/
 *.bak
+hmi_io.db
 io-backend/hmi_io.db
+io-backend/hmi_io.db-shm
+io-backend/hmi_io.db-wal
 dist/
