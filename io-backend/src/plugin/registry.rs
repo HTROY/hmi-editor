@@ -16,6 +16,9 @@ use crate::config::{AppConfig, PluginInstance as PluginInstanceConfig};
 use crate::monitor::collector::MonitorCollector;
 use crate::point::types::PointValue;
 
+/// Minimum time between automatic reconnect attempts after a link loss.
+const RECONNECT_MIN_INTERVAL: Duration = Duration::from_secs(5);
+
 // ── Commands sent to plugin actor ──────────────────────────
 
 enum PluginCommand {
@@ -33,9 +36,7 @@ enum PluginCommand {
 // ── Handle to a running plugin actor ───────────────────────
 
 struct PluginHandle {
-    name: String,
     cmd_tx: mpsc::UnboundedSender<PluginCommand>,
-    abort_handle: tokio::task::AbortHandle,
 }
 
 // ── PluginRegistry ─────────────────────────────────────────
@@ -179,38 +180,13 @@ impl PluginRegistry {
         let handle = tokio::task::spawn(async move {
             run_plugin_actor(actor_name, plugin, cmd_rx, scan_dur, mon).await;
         });
+        let _ = handle;
 
         self.plugins.lock().unwrap().insert(
             plugin_name,
-            PluginHandle {
-                name: inst_cfg.name.clone(),
-                cmd_tx,
-                abort_handle: handle.abort_handle(),
-            },
+            PluginHandle { cmd_tx },
         );
         Ok(())
-    }
-
-    pub async fn reload_plugin(&self, plugin_name: &str) -> anyhow::Result<()> {
-        {
-            let mut plugins = self.plugins.lock().unwrap();
-            if let Some(handle) = plugins.remove(plugin_name) {
-                let _ = handle.cmd_tx.send(PluginCommand::Shutdown);
-                handle.abort_handle.abort();
-                log::info!("Plugin '{}' shut down for reload", plugin_name);
-            }
-        }
-
-        let config = self.config_cache.lock().unwrap();
-        if let Some(ref cfg) = *config {
-            if let Some(inst) = cfg.plugins.instances.iter().find(|i| i.name == plugin_name) {
-                self.load_and_start(inst, cfg.plugins.scan_interval_ms)
-                    .await?;
-                log::info!("Plugin '{}' reloaded successfully", plugin_name);
-                return Ok(());
-            }
-        }
-        anyhow::bail!("Plugin '{}' not found in config", plugin_name)
     }
 
     pub async fn write_point(&self, point_name: &str, value: f64) -> anyhow::Result<()> {
@@ -309,6 +285,7 @@ async fn run_plugin_actor(
     monitor: Arc<MonitorCollector>,
 ) {
     let mut interval = tokio::time::interval(scan_interval);
+    let mut last_reconnect = std::time::Instant::now();
     loop {
         tokio::select! {
             _ = interval.tick() => {
@@ -322,6 +299,25 @@ async fn run_plugin_actor(
                     Ok(code) => {
                         monitor.record_error(&name, &format!("scan_points returned code {}", code));
                         log::warn!("[{}] scan_points: {}", name, code);
+                        let connected = plugin.get_status().await.unwrap_or(0) == 2;
+                        if !connected && last_reconnect.elapsed() >= RECONNECT_MIN_INTERVAL {
+                            last_reconnect = std::time::Instant::now();
+                            log::info!("[{}] link lost, attempting reconnect...", name);
+                            match plugin.connect().await {
+                                Ok(0) => {
+                                    monitor.set_connection_state(&name, 2);
+                                    log::info!("[{}] reconnected", name);
+                                }
+                                Ok(r) => {
+                                    monitor.record_error(&name, &format!("reconnect failed code {}", r));
+                                    log::warn!("[{}] reconnect failed: {}", name, r);
+                                }
+                                Err(e) => {
+                                    monitor.record_error(&name, &format!("reconnect error: {}", e));
+                                    log::warn!("[{}] reconnect error: {}", name, e);
+                                }
+                            }
+                        }
                     }
                     Err(e) => {
                         monitor.record_error(&name, &e.to_string());

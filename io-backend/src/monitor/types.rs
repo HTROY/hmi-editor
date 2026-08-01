@@ -57,17 +57,6 @@ pub struct MonitorSnapshot {
     pub active_ws_clients: usize,
 }
 
-/// WebSocket status message for live updates
-#[derive(Debug, Clone, Serialize)]
-pub struct WsMonitorMessage {
-    #[serde(rename = "type")]
-    pub msg_type: String,
-    pub plugin_name: String,
-    pub status: Option<PluginStatus>,
-    pub points: Option<Vec<LivePointInfo>>,
-    pub packet: Option<PacketLogEntry>,
-}
-
 /// Per-plugin counters captured in a single history sample
 #[derive(Debug, Clone, Serialize)]
 pub struct PluginHistorySample {

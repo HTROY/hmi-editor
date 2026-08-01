@@ -100,6 +100,7 @@ version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
+ "ua-core",
  "wit-bindgen",
 ]
 
@@ -200,6 +201,13 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "ua-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

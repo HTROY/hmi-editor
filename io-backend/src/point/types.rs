@@ -1,49 +1,5 @@
 ﻿use serde::{Deserialize, Serialize};
 
-/// I/O point definition — mirrors the frontend VariableDef
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub struct IoPoint {
-//     /// Variable ID matching frontend VariableDef.id (e.g. "STA1_211_ACB_STATUS")
-//     pub id: String,
-//     /// Protocol-specific address (e.g. "coil:0", "ns=2;s=Temp", "1001")
-//     pub address: String,
-//     /// Data type hint
-//     #[serde(default = "default_data_type")]
-//     pub data_type: String,
-//     /// Byte order for multi-byte values
-//     #[serde(default = "default_byte_order")]
-//     pub byte_order: String,
-//     /// Scale factor applied to raw value
-//     #[serde(default = "default_scale")]
-//     pub scale: f64,
-//     /// Offset applied after scale
-//     #[serde(default)]
-//     pub offset: f64,
-//     /// Variable type: AI/DI/AO/DO
-//     #[serde(default = "default_var_type")]
-//     pub var_type: String,
-// }
-
-// #[allow(dead_code)]
-// fn default_data_type() -> String {
-//     "uint16".into()
-// }
-
-// #[allow(dead_code)]
-// fn default_byte_order() -> String {
-//     "big_endian".into()
-// }
-
-// #[allow(dead_code)]
-// fn default_scale() -> f64 {
-//     1.0
-// }
-
-// #[allow(dead_code)]
-// fn default_var_type() -> String {
-//     "AI".into()
-// }
-
 /// Runtime value of an I/O point — mirrors the frontend VariableValue
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PointValue {
@@ -61,15 +17,6 @@ impl PointValue {
                 serde_json::Number::from_f64((value * 100.0).round() / 100.0)
                     .unwrap_or(serde_json::Number::from(0)),
             ),
-            quality: quality.to_string(),
-            timestamp,
-        }
-    }
-
-    pub fn new_bool(id: &str, value: bool, quality: &str, timestamp: u64) -> Self {
-        Self {
-            id: id.to_string(),
-            value: serde_json::Value::Bool(value),
             quality: quality.to_string(),
             timestamp,
         }
@@ -120,13 +67,4 @@ impl WsConfigChangeMessage {
             plugin_id,
         }
     }
-}
-
-/// WebSocket incoming control command
-#[derive(Debug, Clone, Deserialize)]
-pub struct WsControlCommand {
-    pub command: String,
-    #[serde(rename = "variableId")]
-    pub variable_id: String,
-    pub value: serde_json::Value,
 }

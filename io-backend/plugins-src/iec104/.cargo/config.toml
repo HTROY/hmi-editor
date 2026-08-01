@@ -1,3 +1,0 @@
-﻿# WASIp2 component builds need no custom rustflags:
-# rustc links cdylibs into components via wasm-component-ld automatically.
-# (wasm32-wasip1 settings removed; build.ps1 targets wasm32-wasip2 only.)

@@ -63,10 +63,6 @@ impl PointManager {
         );
     }
 
-    pub fn point_ids(&self) -> Vec<String> {
-        self.points.keys().cloned().collect()
-    }
-
     pub fn get_all_values(&self) -> Vec<PointValue> {
         self.points
             .values()

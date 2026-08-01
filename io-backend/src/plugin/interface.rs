@@ -61,14 +61,6 @@ impl PluginInstance {
         r.map_err(|e| anyhow::anyhow!("plugin_write_point failed: {}", e))
     }
 
-    pub async fn get_name(&mut self) -> anyhow::Result<String> {
-        let r = self
-            .store
-            .run_concurrent(async |accessor| self.lifecycle.call_get_name(accessor).await)
-            .await?;
-        r.map_err(|e| anyhow::anyhow!("plugin_get_name failed: {}", e))
-    }
-
     pub async fn get_status(&mut self) -> anyhow::Result<u32> {
         let r = self
             .store
