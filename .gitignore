@@ -9,3 +9,4 @@ io-backend/hmi_io.db
 io-backend/hmi_io.db-shm
 io-backend/hmi_io.db-wal
 dist/
+.worktrees/
