@@ -31,6 +31,14 @@ impl PointValue {
     }
 }
 
+/// Build the HMI-facing unique point key for a plugin instance point.
+///
+/// Format: `{plugin_name}:{variable_id}`. Plugin names are unique in the
+/// database, so the same variable name in different instances stays distinct.
+pub fn point_key(plugin_name: &str, variable_id: &str) -> String {
+    format!("{}:{}", plugin_name, variable_id)
+}
+
 /// WebSocket outgoing data message — compatible with frontend WebSocketClient
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WsDataMessage {
@@ -66,5 +74,18 @@ impl WsConfigChangeMessage {
             variable_id: variable_id.to_string(),
             plugin_id,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::point_key;
+
+    #[test]
+    fn point_key_combines_plugin_instance_and_variable() {
+        assert_eq!(
+            point_key("modbus_1", "STA1_TEMP_ZONE1"),
+            "modbus_1:STA1_TEMP_ZONE1"
+        );
     }
 }
