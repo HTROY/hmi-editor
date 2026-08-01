@@ -17,6 +17,10 @@ Frontend (repo root):
 - `npm run build` — type-check (`tsc -b`) then build (`vite build`)
 - `npm run format` — format with Prettier (not yet a devDependency; install separately)
 
+Full stack:
+
+- `.\scripts\dev.ps1` — one-command dev startup: opens the frontend (Vite :5173) and the backend (`cargo run -- config.yaml` in `io-backend/`) in two separate terminal windows; `-SkipFrontend` / `-SkipBackend` launch only one side
+
 Backend (from repo root unless noted):
 
 - `.\scripts\build.ps1 -Release` — build WASM plugins (target `wasm32-wasip2`) and the Rust binary; `-PluginsOnly` / `-BackendOnly` split the steps
