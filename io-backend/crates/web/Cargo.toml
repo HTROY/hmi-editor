@@ -17,3 +17,6 @@ calamine.workspace = true
 rust_xlsxwriter.workspace = true
 anyhow.workspace = true
 log.workspace = true
+
+[dev-dependencies]
+hmi-io-config.workspace = true

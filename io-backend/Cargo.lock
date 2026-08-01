@@ -1092,6 +1092,7 @@ dependencies = [
  "anyhow",
  "axum",
  "calamine",
+ "hmi-io-config",
  "hmi-io-db",
  "hmi-io-monitor",
  "hmi-io-plugin",

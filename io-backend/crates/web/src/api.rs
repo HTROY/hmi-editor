@@ -5,6 +5,7 @@ use hmi_io_monitor::collector::MonitorCollector;
 use hmi_io_monitor::types::*;
 use hmi_io_point::manager::PointManager;
 use hmi_io_point::types::WsConfigChangeMessage;
+use hmi_io_point::point_key;
 use axum::{
     extract::{Extension, Multipart, Path, Query, State},
     http::StatusCode,
@@ -89,11 +90,47 @@ pub async fn delete_plugin(State(repo): State<AppState>, Path(id): Path<i64>) ->
         .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
 
+#[derive(Serialize)]
+pub struct PointView {
+    pub id: i64,
+    pub plugin_id: i64,
+    pub variable_id: String,
+    pub address: String,
+    pub data_type: String,
+    pub byte_order: String,
+    pub scale: f64,
+    pub offset_val: f64,
+    pub var_type: String,
+    pub description: String,
+    pub plugin_name: String,
+    pub hmi_id: String,
+}
+
+impl From<PointRow> for PointView {
+    fn from(row: PointRow) -> Self {
+        let hmi_id = point_key(&row.plugin_name, &row.variable_id);
+        Self {
+            id: row.id,
+            plugin_id: row.plugin_id,
+            variable_id: row.variable_id,
+            address: row.address,
+            data_type: row.data_type,
+            byte_order: row.byte_order,
+            scale: row.scale,
+            offset_val: row.offset_val,
+            var_type: row.var_type,
+            description: row.description,
+            plugin_name: row.plugin_name,
+            hmi_id,
+        }
+    }
+}
+
 pub async fn list_points(
     State(repo): State<AppState>,
     Extension(point_manager): Extension<Arc<Mutex<PointManager>>>,
     Query(q): Query<PluginQuery>,
-) -> Result<Json<Vec<PointRow>>, StatusCode> {
+) -> Result<Json<Vec<PointView>>, StatusCode> {
     let all_points = repo.list_points(q.plugin_id).map_err(|e| {
         log::error!("{}", e);
         StatusCode::INTERNAL_SERVER_ERROR
@@ -101,9 +138,10 @@ pub async fn list_points(
     let total_in_db = all_points.len();
     // 以 PointManager 为准：只返回实际在管理范围内的点位
     let pm = point_manager.lock().unwrap();
-    let filtered: Vec<PointRow> = all_points
+    let filtered: Vec<PointView> = all_points
         .into_iter()
-        .filter(|p| pm.has_point(&p.variable_id))
+        .filter(|p| pm.has_point(&point_key(&p.plugin_name, &p.variable_id)))
+        .map(PointView::from)
         .collect();
     if filtered.len() != total_in_db {
         log::warn!(
@@ -497,3 +535,95 @@ pub async fn monitor_history(
 const MAX_HISTORY_LIMIT: usize = 900;
 
 // ============================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hmi_io_config::{AppConfig, PluginInstance, PointMapping};
+
+    fn mapping(id: &str) -> PointMapping {
+        PointMapping {
+            id: id.into(),
+            address: "coil:0".into(),
+            data_type: "bool".into(),
+            byte_order: "big_endian".into(),
+            scale: 1.0,
+            offset: 0.0,
+            var_type: "DI".into(),
+        }
+    }
+
+    fn point_manager_with_two_instances() -> Arc<Mutex<PointManager>> {
+        let mut cfg = AppConfig::default_config();
+        cfg.plugins.instances = vec![
+            PluginInstance {
+                name: "mb1".into(),
+                wasm_file: "modbus.wasm".into(),
+                config: serde_json::json!({}),
+                points: vec![mapping("P1")],
+            },
+            PluginInstance {
+                name: "mb2".into(),
+                wasm_file: "modbus.wasm".into(),
+                config: serde_json::json!({}),
+                points: vec![mapping("P1")],
+            },
+        ];
+        Arc::new(Mutex::new(PointManager::from_config(&cfg)))
+    }
+
+    #[tokio::test]
+    async fn list_points_returns_composite_hmi_id() {
+        let repo = Arc::new(Repo::new(":memory:").unwrap());
+        let pid = repo
+            .insert_plugin("modbus_tcp", "modbus_tcp.wasm", "{}")
+            .unwrap();
+        repo.insert_point(pid, "P1", "coil:0", "bool", "big_endian", 1.0, 0.0, "DI", "")
+            .unwrap();
+
+        let mut cfg = AppConfig::default_config();
+        cfg.plugins.instances = vec![PluginInstance {
+            name: "modbus_tcp".into(),
+            wasm_file: "modbus_tcp.wasm".into(),
+            config: serde_json::json!({}),
+            points: vec![mapping("P1")],
+        }];
+        let pm = Arc::new(Mutex::new(PointManager::from_config(&cfg)));
+
+        let res = list_points(
+            State(repo),
+            Extension(pm),
+            Query(PluginQuery { plugin_id: None }),
+        )
+        .await
+        .unwrap();
+        let points = res.0;
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].plugin_name, "modbus_tcp");
+        assert_eq!(points[0].hmi_id, "modbus_tcp:P1");
+    }
+
+    #[tokio::test]
+    async fn list_points_keeps_same_name_across_instances() {
+        let repo = Arc::new(Repo::new(":memory:").unwrap());
+        let p1 = repo.insert_plugin("mb1", "modbus.wasm", "{}").unwrap();
+        let p2 = repo.insert_plugin("mb2", "modbus.wasm", "{}").unwrap();
+        repo.insert_point(p1, "P1", "coil:0", "bool", "big_endian", 1.0, 0.0, "DI", "")
+            .unwrap();
+        repo.insert_point(p2, "P1", "coil:1", "bool", "big_endian", 1.0, 0.0, "DI", "")
+            .unwrap();
+
+        let res = list_points(
+            State(repo),
+            Extension(point_manager_with_two_instances()),
+            Query(PluginQuery { plugin_id: None }),
+        )
+        .await
+        .unwrap();
+        let points = res.0;
+        assert_eq!(points.len(), 2);
+        let ids: Vec<&str> = points.iter().map(|p| p.hmi_id.as_str()).collect();
+        assert!(ids.contains(&"mb1:P1"));
+        assert!(ids.contains(&"mb2:P1"));
+    }
+}
