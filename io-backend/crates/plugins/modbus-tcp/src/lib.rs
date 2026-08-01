@@ -1,7 +1,7 @@
 //! Modbus TCP Protocol Plugin (wasip2 component)
 wit_bindgen::generate!({
     world: "hmi-plugin",
-    path: "../../wit",
+    path: "../../../wit",
 });
 
 use crate::exports::hmi::plugin::lifecycle::Guest;

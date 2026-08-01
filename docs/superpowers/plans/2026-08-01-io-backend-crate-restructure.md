@@ -14,9 +14,9 @@
 
 ## Environment Notes (this machine)
 
-- `CARGO_HOME=E:\packages\cargo` config sets `[build] build-dir = "E:\packages\rust-targets"`. All cargo artifacts (native and wasm) land in `E:\packages\rust-targets`, NOT `io-backend/target`. Adjust artifact-path checks accordingly (e.g. `E:\packages\rust-targets\wasm32-wasip2\release\<crate>_plugin.wasm`).
-- `scripts/build.ps1` must resolve the cargo target directory dynamically from `cargo metadata --format-version 1` (field `target_directory`) instead of hardcoding `io-backend/target` (see Task 4).
-- Cargo commands write outside the sandbox; run them with escalated permissions (the `["cargo"]` prefix rule is already approved).
+- Normal (escalated) cargo builds use the local `target/` directory of the package/workspace; the sandbox may redirect cargo to `E:\packages\rust-targets`, so run cargo commands with escalated permissions (the `["cargo"]` prefix rule is already approved).
+- `scripts/build.ps1` resolves the cargo target directory dynamically from `cargo metadata --format-version 1` (field `target_directory`) instead of hardcoding `io-backend/target`; this is robust whether the target dir is local or redirected (see Task 4).
+- Standalone cargo builds under `crates/plugins/*/` and `crates/test-servers/` create local `target/` dirs; they are ignored via `io-backend/crates/**/target/`.
 - Node.js is managed by fnm: `E:\packages\fnm\node-versions\v24.16.0\installation\npm.cmd` (add the installation dir to `$env:PATH` before invoking npm). `node_modules` for the repo root and `io-backend/web-ui` were copied from the main checkout; no network npm install is needed.
 - Git commits require escalated permissions in this environment.
 
@@ -167,7 +167,7 @@ iec104-core = { path = "../shared/iec104-core" }
 to:
 
 ```toml
-iec104-core = { path = "../../../shared/iec104-core" }
+iec104-core = { path = "../../shared/iec104-core" }
 ```
 
 `io-backend/crates/plugins/opc-ua/Cargo.toml` — change:
@@ -179,7 +179,7 @@ ua-core = { path = "../shared/ua-core" }
 to:
 
 ```toml
-ua-core = { path = "../../../shared/ua-core" }
+ua-core = { path = "../../shared/ua-core" }
 ```
 
 `modbus-tcp` has no shared path dependency; its Cargo.toml is unchanged in this task.
@@ -210,8 +210,8 @@ ua-core = { path = "../plugins-src/shared/ua-core" }
 to:
 
 ```toml
-iec104-core = { path = "../../shared/iec104-core" }
-ua-core = { path = "../../shared/ua-core" }
+iec104-core = { path = "../shared/iec104-core" }
+ua-core = { path = "../shared/ua-core" }
 ```
 
 - [ ] **Step 7: Verify the moved standalone crates still build**

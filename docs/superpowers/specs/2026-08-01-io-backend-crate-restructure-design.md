@@ -109,8 +109,8 @@ bin → 全部主机 crate
 
 - 宿主 `hmi-io-plugin`：`bindgen!({ path: "../../wit" })`（原 `"wit"`）；
 - 三个插件 guest：`wit_bindgen::generate!({ path: "../../../wit" })`（原 `"../../wit"`）；
-- 插件引用共享 crate：`path = "../../../shared/iec104-core"` 等（原 `"../shared/..."`）；
-- 测试服务引用共享 crate：`path = "../../shared/iec104-core"` 等（原 `"../plugins-src/shared/..."`）。
+- 插件引用共享 crate：`path = "../../shared/iec104-core"` 等（原 `"../shared/..."`）；
+- 测试服务引用共享 crate：`path = "../shared/iec104-core"` 等（原 `"../plugins-src/shared/..."`）。
 
 ## 脚本与文档更新
 

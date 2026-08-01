@@ -3,8 +3,8 @@ members = ["iec104-slave", "opcua-server"]
 resolver = "2"
 
 [workspace.dependencies]
-iec104-core = { path = "../plugins-src/shared/iec104-core" }
-ua-core = { path = "../plugins-src/shared/ua-core" }
+iec104-core = { path = "../shared/iec104-core" }
+ua-core = { path = "../shared/ua-core" }
 
 [profile.release]
 opt-level = "s"

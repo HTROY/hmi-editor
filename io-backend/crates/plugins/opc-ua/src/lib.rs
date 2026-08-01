@@ -7,7 +7,7 @@
 //! (C chunks accumulated until F) is supported on the receive path.
 wit_bindgen::generate!({
     world: "hmi-plugin",
-    path: "../../wit",
+    path: "../../../wit",
 });
 
 use crate::exports::hmi::plugin::lifecycle::Guest;

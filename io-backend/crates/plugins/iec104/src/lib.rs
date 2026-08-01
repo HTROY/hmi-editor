@@ -6,7 +6,7 @@
 //! command tracking (C_SC_NA_1 / C_SE_NC_1) against activation confirms.
 wit_bindgen::generate!({
     world: "hmi-plugin",
-    path: "../../wit",
+    path: "../../../wit",
 });
 
 use crate::exports::hmi::plugin::lifecycle::Guest;
