@@ -191,6 +191,8 @@ export class DataBridge {
         offset_val: number;
         var_type: string;
         description?: string;
+        plugin_name?: string;
+        hmi_id?: string;
       }> = await resp.json();
 
       console.log(`[DataBridge] 后端返回 ${points.length} 个点`);
@@ -199,10 +201,8 @@ export class DataBridge {
       this.pointIdToVarId.clear();
       this.varIdToPointId.clear();
 
-      // 同一个 variable_id 可能被多个插件共享（多协议冗余采集同一逻辑点位）。
-      // 所有后端点位（DB id / variable_id）都映射到该逻辑变量，保证任意
-      // 协议推来的数据都能路由；但变量定义只导入一次，避免点表出现重复变量。
-      const seenVarIds = new Set<string>();
+      // HMI 变量 ID 使用后端计算的 hmi_id（插件实例名:变量名）。
+      // 不同插件实例中的同名变量是不同变量，不再按 variable_id 去重合并。
       const defs: Array<{
         id: string;
         name: string;
@@ -225,25 +225,26 @@ export class DataBridge {
           ? (p.var_type as VariableType)
           : "AI";
         const backendPointId = String(p.id);
+        const hmiId =
+          p.hmi_id ??
+          (p.plugin_name ? `${p.plugin_name}:${p.variable_id}` : p.variable_id);
+        const groupName = p.plugin_name ?? `plugin ${p.plugin_id}`;
 
-        // 建立双向映射：后端 DB id 和 variable_id 都映射到逻辑变量 ID
-        this.pointIdToVarId.set(backendPointId, p.variable_id);
-        this.pointIdToVarId.set(p.variable_id, p.variable_id);
-        // 反向映射：逻辑变量 ID → 后端 DB id（控制命令用）
-        this.varIdToPointId.set(p.variable_id, backendPointId);
-
-        if (seenVarIds.has(p.variable_id)) continue;
-        seenVarIds.add(p.variable_id);
+        // 双向映射：后端 DB id / hmi_id 都指向同一个 HMI 变量；
+        // 控制命令以 hmi_id 为准，由后端路由到对应插件实例。
+        this.pointIdToVarId.set(backendPointId, hmiId);
+        this.pointIdToVarId.set(hmiId, hmiId);
+        this.varIdToPointId.set(hmiId, hmiId);
 
         defs.push({
-          id: p.variable_id,
+          id: hmiId,
           name: p.variable_id,
           type: varType,
           address: p.address,
           defaultValue: 0,
           unit: "",
           description: p.description ?? p.data_type + " / " + p.byte_order,
-          group: "IO Backend (plugin " + p.plugin_id + ")",
+          group: `IO Backend (${groupName})`,
           min: 0,
           max: varType === "AI" || varType === "AO" ? 100 : 1,
           alarmHigh: 0,
@@ -261,7 +262,7 @@ export class DataBridge {
       }
 
       console.log(
-        `[DataBridge] 变量列表已导入: ${defs.length} 个（去重前 ${points.length} 条）, 映射表: ${this.pointIdToVarId.size} 条`,
+        `[DataBridge] 变量列表已导入: ${defs.length} 个（后端返回 ${points.length} 条）, 映射表: ${this.pointIdToVarId.size} 条`,
       );
       this.onVarsRefreshed?.();
       return defs.length;
