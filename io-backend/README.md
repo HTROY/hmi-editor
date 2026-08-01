@@ -34,16 +34,19 @@
 
 ### 前置条件
 
-- Rust 1.70+ (with wasm32-unknown-unknown target)
+- Rust 1.82+（`wasm32-wasip2` 目标为 Tier 2）
   ```
-  rustup target add wasm32-unknown-unknown
+  rustup target add wasm32-wasip2
   ```
+- wasmtime 47 由后端 `Cargo.toml` 引入，无需单独安装
 
 ### 构建所有组件
 
 ```powershell
 .\scripts\build.ps1 -Release
 ```
+
+（脚本位于仓库根 `scripts/`，从仓库根或 `io-backend/` 下运行均可。）
 
 或分步构建：
 
@@ -58,15 +61,15 @@
 ### 手动构建
 
 ```bash
-# 构建 WASM 插件
-cd plugins-src/modbus-tcp && cargo build --target wasm32-unknown-unknown --release
-cp target/wasm32-unknown-unknown/release/modbus-tcp-plugin.wasm ../../plugins/modbus_tcp.wasm
+# 构建 WASM 插件（wasip2 组件，产物名 = crate 名 + _plugin.wasm）
+cd plugins-src/modbus-tcp && cargo build --target wasm32-wasip2 --release
+cp target/wasm32-wasip2/release/modbus_tcp_plugin.wasm ../../plugins/modbus_tcp.wasm
 
-cd ../opc-ua && cargo build --target wasm32-unknown-unknown --release
-cp target/wasm32-unknown-unknown/release/opc-ua-plugin.wasm ../../plugins/opc_ua.wasm
+cd ../opc-ua && cargo build --target wasm32-wasip2 --release
+cp target/wasm32-wasip2/release/opc_ua_plugin.wasm ../../plugins/opc_ua.wasm
 
-cd ../iec104 && cargo build --target wasm32-unknown-unknown --release
-cp target/wasm32-unknown-unknown/release/iec104-plugin.wasm ../../plugins/iec104.wasm
+cd ../iec104 && cargo build --target wasm32-wasip2 --release
+cp target/wasm32-wasip2/release/iec104_plugin.wasm ../../plugins/iec104.wasm
 
 # 构建后端
 cd ../.. && cargo build --release
@@ -80,11 +83,12 @@ cargo run -- config.yaml
 ```
 
 服务启动后会：
-1. 从 `config.yaml` 加载配置（点位映射表）
+1. 首次启动将 `config.yaml` 迁移进本地 SQLite（`hmi_io.db`，此后配置改从数据库加载；删除 `hmi_io.db` 即可重新迁移）
 2. 扫描 `plugins/` 目录加载 .wasm 插件
 3. 初始化并连接所有协议插件
 4. 启动周期性扫描（默认 500ms）
-5. 在 `ws://0.0.0.0:8080/iscs/data` 监听 WebSocket 连接
+5. 在 `ws://0.0.0.0:8080/iscs/data` 监听 WebSocket 数据推送（批量 100ms）
+6. 在 `:8081` 提供管理 Web UI 与监控 API（见下方「监控与调试」）
 
 ## 配置
 
@@ -110,6 +114,27 @@ plugins:
           address: "coil:0"
           data_type: "bool"
           var_type: "DI"
+        - id: "STA1_211_ACB_CUR_A"      # 32 位浮点示例
+          address: "holding_register:2"
+          data_type: "float32"
+          byte_order: "ABCD"            # ABCD/BADC/CDAB/DCBA（默认 ABCD）
+          scale: 0.1
+          var_type: "AI"
+```
+
+- `data_type`：`bool` / `int16` / `uint16` / `int32` / `uint32` / `float32`（默认 `uint16`）
+- `byte_order`：`ABCD` / `BADC` / `CDAB` / `DCBA`（仅 modbus-tcp，默认 `ABCD`）
+- 插件解码完成后统一应用 `scale`、`offset`
+
+## 监控与调试
+
+- 点值：`GET http://localhost:8081/api/monitor/plugins/<name>/points`
+- 状态总览：`GET http://localhost:8081/api/monitor/overview`
+- 报文追踪：`GET http://localhost:8081/api/monitor/plugins/<name>/packets`
+- WebSocket 写点（`ws://localhost:8080/iscs/data` 发送控制消息）：
+
+```json
+{"command":"control","variableId":"STA1_211_ACB_CTRL","value":1}
 ```
 
 ## 前端连接
@@ -121,40 +146,52 @@ plugins:
 
 ## WASM 插件接口
 
-每个 .wasm 插件需实现：
+插件是 WASIp2 组件（target `wasm32-wasip2`），契约的单一来源是 `io-backend/wit/hmi-plugin.wit`（package `hmi:plugin`）。
 
-**导出函数 (Host → Plugin):**
-- `plugin_init(config_ptr, config_len) → i32`
-- `plugin_connect() → i32`
-- `plugin_disconnect() → i32`
-- `plugin_scan_points() → i32`
-- `plugin_write_point(name_ptr, name_len, value_ptr, value_len) → i32`
-- `plugin_get_name(ptr, max_len) → i32`
-- `plugin_get_status() → i32`
-- `plugin_alloc(size) → *mut u8`
-- `plugin_free(ptr, size)`
+**插件导出（Host → Plugin，均为 async）：**
 
-**导入函数 (Plugin → Host):**
-- `host_on_point(name_ptr, name_len, value, quality_ptr, quality_len, timestamp)`
-- `host_log(level, msg_ptr, msg_len)`
-- `host_now_ms() → i64`
+- `init(config-json)` — 接收插件配置 JSON（含实例 config 与点位映射表）
+- `connect()` / `disconnect()`
+- `scan-points()` — 周期扫描全部点位
+- `write-point(name, value)`
+- `get-name()` / `get-status()`
+
+**插件导入（Plugin → Host）：**
+
+- `log(level, message)` — 日志
+- `on-point(name, value, quality, timestamp)` — 上报点位值
+- `on-packet(direction, protocol, hex, summary)` — 上报原始报文追踪
+
+**Guest 侧写法**（`plugins-src/<plugin>/`）：
+
+```rust
+wit_bindgen::generate!({ world: "hmi-plugin", path: "../../wit" });
+// 实现 crate::exports::hmi::plugin::lifecycle::Guest，导出 export!(Plugin)
+// 在 async 导出函数内直接 await 导入的 events::log / on_point / on_packet
+```
+
+**Host 侧**（`io-backend/src/plugin/`）：`bindgen!` + `wasmtime::component`，存储类型实现 `events::Host`（async import 返回 `Future<Output = ()>`），链接 `wasmtime_wasi::p2::add_to_linker_async`，经 `run_concurrent` 调用插件导出。
+
+**modbus-tcp 插件**使用 `modbus` crate（v1.1）做协议编解码：`bool` 走线圈、16 位走单寄存器、32 位走连续双寄存器（按 `byte_order` 组字），解码后应用 `scale`/`offset`。
 
 ## 目录结构
 
 ```
 io-backend/
-├── config.yaml              # 默认配置
+├── config.yaml              # 默认配置（首次启动迁移进 hmi_io.db）
+├── wit/hmi-plugin.wit       # WASM 插件契约（单一来源）
 ├── Cargo.toml               # 后端依赖
 ├── src/                     # Rust 后端源码
 │   ├── main.rs
 │   ├── config.rs
-│   ├── plugin/              # WASM 插件宿主
-│   │   ├── host.rs          # wasmtime 引擎封装
-│   │   ├── interface.rs     # 插件接口定义
+│   ├── plugin/              # WASM 插件宿主（wasmtime component）
+│   │   ├── host.rs          # wasmtime 引擎 + events 导入实现
+│   │   ├── interface.rs     # bindgen! 契约生成
 │   │   └── registry.rs      # 插件生命周期管理
 │   ├── point/               # 点位管理
 │   │   ├── types.rs
 │   │   └── manager.rs
+│   ├── monitor/             # 监控 API（:8081）
 │   ├── bridge/              # 桥接层
 │   │   └── bridge.rs
 │   └── server/              # WebSocket 服务

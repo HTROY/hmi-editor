@@ -17,11 +17,12 @@ Frontend (repo root):
 - `npm run build` — type-check (`tsc -b`) then build (`vite build`)
 - `npm run format` — format with Prettier (not yet a devDependency; install separately)
 
-Backend (`io-backend/`):
+Backend (from repo root unless noted):
 
 - `.\scripts\build.ps1 -Release` — build WASM plugins (target `wasm32-wasip2`) and the Rust binary; `-PluginsOnly` / `-BackendOnly` split the steps
-- `cargo run -- config.yaml` — start the backend (WebSocket :8080, web API :8081)
-- `cargo test` — run Rust unit tests
+- `cargo run -- config.yaml` (in `io-backend/`) — start the backend (WebSocket :8080, web API :8081); first start migrates `config.yaml` into SQLite `hmi_io.db`
+- `cargo test` (in `io-backend/`) — run backend unit tests
+- `cargo test` (in `plugins-src/<plugin>/`) — run plugin unit tests (e.g. encode/decode helpers in modbus-tcp)
 
 ## WASM Plugin Contract
 
@@ -29,7 +30,8 @@ Backend (`io-backend/`):
 - Guests (`plugins-src/<plugin>/`): `wit_bindgen::generate!({ world: "hmi-plugin", path: "../../wit" })`, implement `crate::exports::hmi::plugin::lifecycle::Guest` (methods have no `&self`), `export!(Plugin)`, and `await` the `hmi::plugin::events` imports directly inside the async exports.
 - Host (`io-backend/src/plugin/`): `bindgen!({ world: "hmi-plugin", path: "wit" })`; store data must implement `wasmtime::component::HasData` plus `events::Host` and `events::HostWithStore` (async import methods take `&Accessor<T, D>` and return `impl Future<Output = ()>`); link with `wasmtime_wasi::p2::add_to_linker_async` and `HmiPlugin::add_to_linker::<S, S>`, instantiate with `HmiPlugin::instantiate_async`, call exports via `store.run_concurrent(...)`. Generated export instance type: `exports::hmi::plugin::lifecycle::Guest`.
 - Config requirements: `config.concurrency_support(true)` (not `async_support`), WasiCtx built with `.inherit_network()` (TCP connect fails with "Permission denied" without it).
-- Plugins use `std::net::TcpStream` directly (host_tcp_* APIs from the old Extism era no longer exist).
+- Guests get no host network API: they use `std::net::TcpStream` directly (host_tcp_* APIs from the old Extism era no longer exist). `modbus-tcp` delegates protocol framing to the `modbus` crate (v1.1, `tcp::Transport`); `opc-ua` and `iec104` build their own protocol frames over `TcpStream`.
+- `modbus-tcp` point decoding honors per-point config fields: `data_type` (`bool`/`int16`/`uint16`/`int32`/`uint32`/`float32`, default `uint16`) and `byte_order` (`ABCD`/`BADC`/`CDAB`/`DCBA`, default `ABCD`), then applies `scale`/`offset`. The same fields exist on the host as `PointMapping` (`io-backend/src/config.rs`) and in the plugin as `Pc`.
 
 ## Coding Style & Naming Conventions
 
