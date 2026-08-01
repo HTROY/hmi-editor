@@ -62,17 +62,18 @@
 
 ```bash
 # 构建 WASM 插件（wasip2 组件，产物名 = crate 名 + _plugin.wasm）
-cd plugins-src/modbus-tcp && cargo build --target wasm32-wasip2 --release
-cp target/wasm32-wasip2/release/modbus_tcp_plugin.wasm ../../plugins/modbus_tcp.wasm
+# 在 io-backend/（workspace 根）执行
+cargo build --target wasm32-wasip2 -p modbus-tcp-plugin --release
+cp target/wasm32-wasip2/release/modbus_tcp_plugin.wasm plugins/modbus_tcp.wasm
 
-cd ../opc-ua && cargo build --target wasm32-wasip2 --release
-cp target/wasm32-wasip2/release/opc_ua_plugin.wasm ../../plugins/opc_ua.wasm
+cargo build --target wasm32-wasip2 -p opc-ua-plugin --release
+cp target/wasm32-wasip2/release/opc_ua_plugin.wasm plugins/opc_ua.wasm
 
-cd ../iec104 && cargo build --target wasm32-wasip2 --release
-cp target/wasm32-wasip2/release/iec104_plugin.wasm ../../plugins/iec104.wasm
+cargo build --target wasm32-wasip2 -p iec104-plugin --release
+cp target/wasm32-wasip2/release/iec104_plugin.wasm plugins/iec104.wasm
 
 # 构建后端
-cd ../.. && cargo build --release
+cargo build --release
 ```
 
 ## 运行
@@ -163,15 +164,15 @@ plugins:
 - `on-point(name, value, quality, timestamp)` — 上报点位值
 - `on-packet(direction, protocol, hex, summary)` — 上报原始报文追踪
 
-**Guest 侧写法**（`plugins-src/<plugin>/`）：
+**Guest 侧写法**（`crates/plugins/<plugin>/`）：
 
 ```rust
-wit_bindgen::generate!({ world: "hmi-plugin", path: "../../wit" });
+wit_bindgen::generate!({ world: "hmi-plugin", path: "../../../wit" });
 // 实现 crate::exports::hmi::plugin::lifecycle::Guest，导出 export!(Plugin)
 // 在 async 导出函数内直接 await 导入的 events::log / on_point / on_packet
 ```
 
-**Host 侧**（`io-backend/src/plugin/`）：`bindgen!` + `wasmtime::component`，存储类型实现 `events::Host`（async import 返回 `Future<Output = ()>`），链接 `wasmtime_wasi::p2::add_to_linker_async`，经 `run_concurrent` 调用插件导出。
+**Host 侧**（`crates/plugin/`）：`bindgen!` + `wasmtime::component`，存储类型实现 `events::Host`（async import 返回 `Future<Output = ()>`），链接 `wasmtime_wasi::p2::add_to_linker_async`，经 `run_concurrent` 调用插件导出。
 
 **modbus-tcp 插件**使用 `modbus` crate（v1.1）做协议编解码：`bool` 走线圈、16 位走单寄存器、32 位走连续双寄存器（按 `byte_order` 组字），解码后应用 `scale`/`offset`。
 
@@ -181,28 +182,32 @@ wit_bindgen::generate!({ world: "hmi-plugin", path: "../../wit" });
 io-backend/
 ├── config.yaml              # 默认配置（首次启动迁移进 hmi_io.db）
 ├── wit/hmi-plugin.wit       # WASM 插件契约（单一来源）
-├── Cargo.toml               # 后端依赖
-├── src/                     # Rust 后端源码
-│   ├── main.rs
-│   ├── config.rs
-│   ├── plugin/              # WASM 插件宿主（wasmtime component）
+├── Cargo.toml               # Cargo workspace 根
+├── crates/                  # 全部 Rust crate
+│   ├── bin/                 # hmi-io-backend（可执行文件）
+│   ├── config/              # hmi-io-config
+│   ├── db/                  # hmi-io-db
+│   ├── point/               # hmi-io-point
+│   ├── monitor/             # hmi-io-monitor
+│   ├── plugin/              # hmi-io-plugin（WASM 插件宿主）
 │   │   ├── host.rs          # wasmtime 引擎 + events 导入实现
 │   │   ├── interface.rs     # bindgen! 契约生成
 │   │   └── registry.rs      # 插件生命周期管理
-│   ├── point/               # 点位管理
-│   │   ├── types.rs
-│   │   └── manager.rs
-│   ├── monitor/             # 监控 API（:8081）
-│   ├── bridge/              # 桥接层
-│   │   └── bridge.rs
-│   └── server/              # WebSocket 服务
-│       └── ws.rs
+│   ├── bridge/              # hmi-io-bridge
+│   ├── server/              # hmi-io-server（WebSocket 服务）
+│   ├── web/                 # hmi-io-web（管理 API + UI 托管）
+│   ├── plugins/             # 插件源码（WASM 组件）
+│   │   ├── modbus-tcp/
+│   │   ├── opc-ua/
+│   │   └── iec104/
+│   ├── shared/              # 共享协议 codec
+│   │   ├── iec104-core/
+│   │   └── ua-core/
+│   └── test-servers/        # 本地测试服务器
+│       ├── iec104-slave/
+│       └── opcua-server/
 ├── plugins/                 # .wasm 编译产物
 │   ├── modbus_tcp.wasm
 │   ├── opc_ua.wasm
 │   └── iec104.wasm
-└── plugins-src/             # 插件源码
-    ├── modbus-tcp/
-    ├── opc-ua/
-    └── iec104/
 ```
