@@ -12,6 +12,16 @@
 
 ---
 
+## Environment Notes (this machine)
+
+- `CARGO_HOME=E:\packages\cargo` config sets `[build] build-dir = "E:\packages\rust-targets"`. All cargo artifacts (native and wasm) land in `E:\packages\rust-targets`, NOT `io-backend/target`. Adjust artifact-path checks accordingly (e.g. `E:\packages\rust-targets\wasm32-wasip2\release\<crate>_plugin.wasm`).
+- `scripts/build.ps1` must resolve the cargo target directory dynamically from `cargo metadata --format-version 1` (field `target_directory`) instead of hardcoding `io-backend/target` (see Task 4).
+- Cargo commands write outside the sandbox; run them with escalated permissions (the `["cargo"]` prefix rule is already approved).
+- Node.js is managed by fnm: `E:\packages\fnm\node-versions\v24.16.0\installation\npm.cmd` (add the installation dir to `$env:PATH` before invoking npm). `node_modules` for the repo root and `io-backend/web-ui` were copied from the main checkout; no network npm install is needed.
+- Git commits require escalated permissions in this environment.
+
+---
+
 ## File Structure
 
 New/changed files (all paths relative to repo root unless noted):
@@ -1110,7 +1120,9 @@ with:
             }
             $profile = if ($Release) { "release" } else { "debug" }
             $crateName = $plugin.Replace("-", "_")
-            $wasmSrc = Join-Path $BackendDir ("target\{0}\{1}\{2}_plugin.wasm" -f $WasmTarget, $profile, $crateName)
+            $meta = cargo metadata --format-version 1 | ConvertFrom-Json
+            $targetDir = $meta.target_directory
+            $wasmSrc = Join-Path $targetDir ("{0}\{1}\{2}_plugin.wasm" -f $WasmTarget, $profile, $crateName)
             $wasmDst = Join-Path $OutputDir "${crateName}.wasm"
             if (Test-Path $wasmSrc) {
                 Copy-Item $wasmSrc $wasmDst -Force
