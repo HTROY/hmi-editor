@@ -10,8 +10,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$PluginDir = Join-Path $ScriptDir "plugins-src"
-$OutputDir = Join-Path $ScriptDir "plugins"
+$RepoRoot = Split-Path -Parent $ScriptDir
+$BackendDir = Join-Path $RepoRoot "io-backend"
+$PluginDir = Join-Path $BackendDir "plugins-src"
+$OutputDir = Join-Path $BackendDir "plugins"
 $WasmTarget = "wasm32-wasip2"
 
 Write-Host "=== HMI I/O Backend Build ===" -ForegroundColor Cyan
@@ -80,7 +82,7 @@ if (-not $BackendOnly) {
 # Build Rust backend
 if (-not $PluginsOnly) {
     Write-Host "`n[2/2] Building Rust backend (wasmtime runtime)..." -ForegroundColor Yellow
-    Push-Location $ScriptDir
+    Push-Location $BackendDir
     try {
         cargo build @backendArgs
         if ($LASTEXITCODE -ne 0) {
@@ -89,7 +91,7 @@ if (-not $PluginsOnly) {
         }
         Write-Host "  Backend built successfully!" -ForegroundColor Green
         $exePath = if ($Release) { "target\release\hmi-io-backend.exe" } else { "target\debug\hmi-io-backend.exe" }
-        Write-Host "  Binary: $(Join-Path $ScriptDir $exePath)" -ForegroundColor Gray
+        Write-Host "  Binary: $(Join-Path $BackendDir $exePath)" -ForegroundColor Gray
     }
     finally {
         Pop-Location
@@ -97,4 +99,4 @@ if (-not $PluginsOnly) {
 }
 
 Write-Host "`n=== Build Complete ===" -ForegroundColor Cyan
-Write-Host "Run: cd io-backend && cargo run" -ForegroundColor Gray
+Write-Host "Run: cd io-backend && cargo run -- config.yaml" -ForegroundColor Gray

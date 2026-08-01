@@ -42,19 +42,17 @@
 ### 构建所有组件
 
 ```powershell
-cd io-backend
-.\build.ps1 -Release
+.\scripts\build.ps1 -Release
 ```
 
 或分步构建：
 
 ```powershell
 # 1. 构建 WASM 协议插件
-cd io-backend
-.\build.ps1 -Release -PluginsOnly
+.\scripts\build.ps1 -Release -PluginsOnly
 
 # 2. 构建 Rust 后端
-.\build.ps1 -Release -BackendOnly
+.\scripts\build.ps1 -Release -BackendOnly
 ```
 
 ### 手动构建
@@ -146,7 +144,6 @@ plugins:
 ```
 io-backend/
 ├── config.yaml              # 默认配置
-├── build.ps1                # 构建脚本
 ├── Cargo.toml               # 后端依赖
 ├── src/                     # Rust 后端源码
 │   ├── main.rs

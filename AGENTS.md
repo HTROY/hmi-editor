@@ -19,7 +19,7 @@ Frontend (repo root):
 
 Backend (`io-backend/`):
 
-- `.\build.ps1 -Release` — build WASM plugins (target `wasm32-wasip2`) and the Rust binary; `-PluginsOnly` / `-BackendOnly` split the steps
+- `.\scripts\build.ps1 -Release` — build WASM plugins (target `wasm32-wasip2`) and the Rust binary; `-PluginsOnly` / `-BackendOnly` split the steps
 - `cargo run -- config.yaml` — start the backend (WebSocket :8080, web API :8081)
 - `cargo test` — run Rust unit tests
 
