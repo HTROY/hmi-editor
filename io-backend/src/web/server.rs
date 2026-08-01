@@ -7,9 +7,10 @@ use axum::{
     Extension, Router,
 };
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 
 pub async fn run_web_server(
     repo: Arc<Repo>,
@@ -19,6 +20,18 @@ pub async fn run_web_server(
     point_manager: Arc<Mutex<PointManager>>,
     port: u16,
 ) -> anyhow::Result<()> {
+    // Sampler task: keep the trend history continuous regardless of UI clients
+    {
+        let monitor = monitor.clone();
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(1));
+            loop {
+                tick.tick().await;
+                monitor.sample();
+            }
+        });
+    }
+
     let app = Router::new()
         // Plugin CRUD
         .route(
@@ -65,8 +78,15 @@ pub async fn run_web_server(
             "/api/monitor/plugins/{name}/packets",
             get(super::api::monitor_plugin_packets),
         )
-        // Static files
-        .fallback_service(ServeDir::new("web-ui"))
+        .route(
+            "/api/monitor/history",
+            get(super::api::monitor_history),
+        )
+        // Static files (SPA fallback to index.html)
+        .fallback_service(
+            ServeDir::new("web-ui/dist")
+                .fallback(ServeFile::new("web-ui/dist/index.html")),
+        )
         .layer(CorsLayer::permissive())
         .layer(Extension(monitor))
         .layer(Extension(_registry))

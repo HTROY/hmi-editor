@@ -475,4 +475,25 @@ pub async fn monitor_plugin_packets(
     Json(monitor.get_packets(&name, limit))
 }
 
+/// GET /api/monitor/history?limit=300
+#[derive(Deserialize)]
+pub struct HistoryQuery {
+    pub limit: Option<usize>,
+}
+
+pub async fn monitor_history(
+    Extension(monitor): Extension<Arc<MonitorCollector>>,
+    State(repo): State<AppState>,
+    Query(q): Query<HistoryQuery>,
+) -> Json<MonitorHistory> {
+    let scan_interval_ms: u64 = repo
+        .get_config("scan_interval_ms")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(500);
+    let limit = q.limit.unwrap_or(300).min(MAX_HISTORY_LIMIT);
+    Json(monitor.get_history(limit, scan_interval_ms))
+}
+
+const MAX_HISTORY_LIMIT: usize = 900;
+
 // ============================================================

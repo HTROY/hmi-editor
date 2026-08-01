@@ -1,11 +1,13 @@
 ﻿# HMI I/O Backend Build Script
 # =============================
-# Builds WASM plugins (wasip2 components) and the Rust backend service.
+# Builds WASM plugins (wasip2 components), the Rust backend service and the
+# management Web UI (React/Vite).
 
 param(
     [switch]$Release,
     [switch]$PluginsOnly,
-    [switch]$BackendOnly
+    [switch]$BackendOnly,
+    [switch]$SkipFrontend
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,7 +50,7 @@ if ($Release) { $backendArgs += "--release" }
 
 # Build WASM plugins
 if (-not $BackendOnly) {
-    Write-Host "`n[1/2] Building WASM plugins (wasip2 components)..." -ForegroundColor Yellow
+    Write-Host "`n[1/3] Building WASM plugins (wasip2 components)..." -ForegroundColor Yellow
 
     $plugins = @("modbus-tcp", "opc-ua", "iec104")
     foreach ($plugin in $plugins) {
@@ -81,7 +83,7 @@ if (-not $BackendOnly) {
 
 # Build Rust backend
 if (-not $PluginsOnly) {
-    Write-Host "`n[2/2] Building Rust backend (wasmtime runtime)..." -ForegroundColor Yellow
+    Write-Host "`n[2/3] Building Rust backend (wasmtime runtime)..." -ForegroundColor Yellow
     Push-Location $BackendDir
     try {
         cargo build @backendArgs
@@ -92,6 +94,33 @@ if (-not $PluginsOnly) {
         Write-Host "  Backend built successfully!" -ForegroundColor Green
         $exePath = if ($Release) { "target\release\hmi-io-backend.exe" } else { "target\debug\hmi-io-backend.exe" }
         Write-Host "  Binary: $(Join-Path $BackendDir $exePath)" -ForegroundColor Gray
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+# Build management Web UI
+if (-not ($PluginsOnly -or $SkipFrontend)) {
+    Write-Host "`n[3/3] Building management Web UI (React/Vite)..." -ForegroundColor Yellow
+    $WebUiDir = Join-Path $BackendDir "web-ui"
+    Push-Location $WebUiDir
+    try {
+        if (-not (Test-Path "node_modules")) {
+            Write-Host "  Installing npm dependencies..." -ForegroundColor Gray
+            npm install
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "ERROR: npm install failed" -ForegroundColor Red
+                exit 1
+            }
+        }
+        npm run build
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: Web UI build failed" -ForegroundColor Red
+            exit 1
+        }
+        $distDir = Join-Path $WebUiDir "dist"
+        Write-Host "  Web UI built successfully: $distDir" -ForegroundColor Green
     }
     finally {
         Pop-Location

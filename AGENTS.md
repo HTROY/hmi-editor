@@ -6,6 +6,7 @@ Contributor guide for HMI Editor, a rail-transit HMI configuration tool with a R
 
 - Frontend in `src/`: `core/` holds framework-agnostic engines (shapes, scene, variables, bindings, io, alarm, historian, auth, script, report); `editor/` holds React components (canvas, toolbar, panels); `store/editorStore.ts` is the Zustand hub. Entry: `index.html` + `src/main.tsx`; output: `dist/` (gitignored).
 - Backend in `io-backend/`: Rust modules in `src/` (bridge, db, monitor, plugin, point, server, web), compiled plugins in `plugins/`, sources in `plugins-src/<plugin>/`. Plugins are WASIp2 components built with `wit-bindgen` against the shared contract `io-backend/wit/hmi-plugin.wit` and run on wasmtime 47 (`wasmtime` + `wasmtime-wasi` crates); the host implements the `events` import (log / on-point / on-packet) in `src/plugin/host.rs`.
+- Management Web UI in `io-backend/web-ui/`: React/Vite/TypeScript SPA (Ant Design 5, ECharts, react-router), built to `web-ui/dist/` and served by the backend on :8081 (SPA fallback to `index.html`); dev mode proxies `/api` to the backend via Vite on :5174. All deps are bundled (no CDN) so the console works offline.
 - `ARCHITECTURE.md` documents the architecture; `config.yaml` files hold runtime configuration.
 
 ## Build, Test, and Development Commands
@@ -17,14 +18,20 @@ Frontend (repo root):
 - `npm run build` — type-check (`tsc -b`) then build (`vite build`)
 - `npm run format` — format with Prettier (not yet a devDependency; install separately)
 
+Management Web UI (io-backend/web-ui, React/Vite/Ant Design, served by the backend from `web-ui/dist`):
+
+- `npm install` — install dependencies
+- `npm run dev` — Vite dev server on :5174, proxies `/api` to the backend on :8081
+- `npm run build` — type-check then build to `dist/` (consumed by `cargo run`)
+
 Full stack:
 
 - `.\scripts\dev.ps1` — one-command dev startup: opens the frontend (Vite :5173) and the backend (`cargo run -- config.yaml` in `io-backend/`) in two separate terminal windows; `-SkipFrontend` / `-SkipBackend` launch only one side
 
 Backend (from repo root unless noted):
 
-- `.\scripts\build.ps1 -Release` — build WASM plugins (target `wasm32-wasip2`) and the Rust binary; `-PluginsOnly` / `-BackendOnly` split the steps
-- `cargo run -- config.yaml` (in `io-backend/`) — start the backend (WebSocket :8080, web API :8081); first start migrates `config.yaml` into SQLite `hmi_io.db`
+- `.\scripts\build.ps1 -Release` — build WASM plugins (target `wasm32-wasip2`), the Rust binary and the Web UI (`web-ui/dist`); `-PluginsOnly` / `-BackendOnly` / `-SkipFrontend` split the steps
+- `cargo run -- config.yaml` (in `io-backend/`) — start the backend (WebSocket :8080, web API + management UI :8081); first start migrates `config.yaml` into SQLite `hmi_io.db`; the management UI at `http://localhost:8081` requires `web-ui/dist` built first
 - `cargo test` (in `io-backend/`) — run backend unit tests
 - `cargo test` (in `plugins-src/<plugin>/`) — run plugin unit tests (e.g. encode/decode helpers in modbus-tcp)
 

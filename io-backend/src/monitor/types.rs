@@ -67,3 +67,30 @@ pub struct WsMonitorMessage {
     pub points: Option<Vec<LivePointInfo>>,
     pub packet: Option<PacketLogEntry>,
 }
+
+/// Per-plugin counters captured in a single history sample
+#[derive(Debug, Clone, Serialize)]
+pub struct PluginHistorySample {
+    pub name: String,
+    pub scans: u64,
+    pub errors: u64,
+}
+
+/// One timestamped snapshot of the collector state, used for trend charts
+#[derive(Debug, Clone, Serialize)]
+pub struct HistorySample {
+    /// Epoch milliseconds of the sample
+    pub timestamp_ms: u64,
+    pub total_scans: u64,
+    pub total_errors: u64,
+    pub per_plugin: Vec<PluginHistorySample>,
+}
+
+/// History series returned by GET /api/monitor/history
+#[derive(Debug, Clone, Serialize)]
+pub struct MonitorHistory {
+    /// Newest-first samples
+    pub samples: Vec<HistorySample>,
+    /// Configured scan interval, so the UI can show the expected rate
+    pub scan_interval_ms: u64,
+}

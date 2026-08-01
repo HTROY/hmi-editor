@@ -1,0 +1,9 @@
+server:
+  host: 0.0.0.0
+  port: 8080
+  path: /iscs/data
+  batch_interval_ms: 100
+plugins:
+  directory: ./plugins
+  scan_interval_ms: 500
+  instances: []

@@ -98,10 +98,8 @@ impl events::HostWithStore<HostState> for HostState {
         async move {
             accessor.with(|mut access| {
                 let s: &mut HostState = access.get();
-                if !hex.is_empty() {
-                    s.monitor
-                        .log_packet(&s.plugin_name, &direction, &protocol, &hex, &summary);
-                }
+                s.monitor
+                    .log_packet(&s.plugin_name, &direction, &protocol, &hex, &summary);
             });
         }
     }
