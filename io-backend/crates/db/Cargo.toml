@@ -1,0 +1,10 @@
+[package]
+name = "hmi-io-db"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rusqlite.workspace = true
+serde.workspace = true
+anyhow.workspace = true
+log.workspace = true

@@ -13,14 +13,14 @@ use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 use super::interface::PluginInstance;
-use crate::monitor::collector::MonitorCollector;
-use crate::point::types::PointValue;
+use hmi_io_monitor::collector::MonitorCollector;
+use hmi_io_point::types::PointValue;
 
 use hmi::plugin::events;
 
 bindgen!({
     world: "hmi-plugin",
-    path: "wit",
+    path: "../../wit",
 });
 
 pub type Lifecycle = exports::hmi::plugin::lifecycle::Guest;

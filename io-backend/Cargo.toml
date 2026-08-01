@@ -1,17 +1,45 @@
-﻿[package]
-name = "hmi-io-backend"
+[workspace]
+resolver = "2"
+members = [
+    "crates/bin",
+    "crates/bridge",
+    "crates/config",
+    "crates/db",
+    "crates/monitor",
+    "crates/plugin",
+    "crates/point",
+    "crates/server",
+    "crates/web",
+    "crates/plugins/iec104",
+    "crates/plugins/modbus-tcp",
+    "crates/plugins/opc-ua",
+    "crates/shared/iec104-core",
+    "crates/shared/ua-core",
+    "crates/test-servers/iec104-slave",
+    "crates/test-servers/opcua-server",
+]
+default-members = [
+    "crates/bin",
+    "crates/bridge",
+    "crates/config",
+    "crates/db",
+    "crates/monitor",
+    "crates/plugin",
+    "crates/point",
+    "crates/server",
+    "crates/web",
+]
+
+[workspace.package]
 version = "0.3.0"
 edition = "2021"
 
-[dependencies]
-wasmtime = "47.0.2"
-wasmtime-wasi = "47.0.2"
+[workspace.dependencies]
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = "0.24"
 futures-util = "0.3"
 axum = { version = "0.8", features = ["ws", "multipart"] }
 tower-http = { version = "0.6", features = ["fs", "cors"] }
-tower = "0.5"
 rusqlite = { version = "0.34", features = ["bundled"] }
 calamine = "0.26"
 rust_xlsxwriter = "0.80"
@@ -21,9 +49,24 @@ serde_yaml = "0.9"
 log = "0.4"
 env_logger = "0.11"
 anyhow = "1"
-thiserror = "2"
+wasmtime = "47.0.2"
+wasmtime-wasi = "47.0.2"
+wit-bindgen = "0.58"
+hmi-io-bridge = { path = "crates/bridge" }
+hmi-io-config = { path = "crates/config" }
+hmi-io-db = { path = "crates/db" }
+hmi-io-monitor = { path = "crates/monitor" }
+hmi-io-plugin = { path = "crates/plugin" }
+hmi-io-point = { path = "crates/point" }
+hmi-io-server = { path = "crates/server" }
+hmi-io-web = { path = "crates/web" }
+iec104-core = { path = "crates/shared/iec104-core" }
+ua-core = { path = "crates/shared/ua-core" }
 
 [profile.release]
 opt-level = "s"
 lto = true
+strip = false
+
+[profile.release.package.hmi-io-backend]
 strip = true

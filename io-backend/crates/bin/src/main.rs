@@ -1,18 +1,9 @@
-mod bridge;
-mod config;
-mod db;
-mod monitor;
-mod plugin;
-mod point;
-mod server;
-mod web;
-
-use bridge::bridge::Bridge;
-use config::AppConfig;
-use db::repo::Repo;
-use monitor::collector::MonitorCollector;
-use plugin::registry::PluginRegistry;
-use point::manager::PointManager;
+use hmi_io_bridge::bridge::Bridge;
+use hmi_io_config::AppConfig;
+use hmi_io_db::repo::Repo;
+use hmi_io_monitor::collector::MonitorCollector;
+use hmi_io_plugin::registry::PluginRegistry;
+use hmi_io_point::manager::PointManager;
 use std::sync::{Arc, Mutex};
 
 fn main() -> anyhow::Result<()> {
@@ -72,7 +63,7 @@ fn main() -> anyhow::Result<()> {
         }
 
         let repo_arc = Arc::new(repo);
-        let ws_cfg = config::ServerConfig {
+let ws_cfg = hmi_io_config::ServerConfig {
             host: repo_arc
                 .get_config("ws_host")
                 .unwrap_or_else(|| "0.0.0.0".into()),
@@ -97,7 +88,7 @@ fn main() -> anyhow::Result<()> {
                 ws_cfg.path
             );
             if let Err(e) =
-                crate::server::ws::run_server(&ws_cfg, bc_ws, reg_ws, pm_ws, mon_ws).await
+        hmi_io_server::ws::run_server(&ws_cfg, bc_ws, reg_ws, pm_ws, mon_ws).await
             {
                 log::error!("WS fatal: {}", e);
             }
@@ -110,7 +101,7 @@ fn main() -> anyhow::Result<()> {
         let pm_web = point_manager.clone();
         tokio::spawn(async move {
             log::info!("Web UI starting on port {}...", web_port_clone);
-            match crate::web::server::run_web_server(
+            match hmi_io_web::server::run_web_server(
                 repo_arc,
                 web_monitor,
                 reg_web,

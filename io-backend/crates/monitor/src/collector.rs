@@ -1,7 +1,7 @@
 //! MonitorCollector - thread-safe shared state for all plugin monitoring data
 
-use crate::monitor::types::*;
-use crate::point::types::PointValue;
+use crate::types::*;
+use hmi_io_point::types::PointValue;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;

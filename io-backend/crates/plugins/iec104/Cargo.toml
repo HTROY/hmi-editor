@@ -1,18 +1,13 @@
-﻿[package]
+[package]
 name = "iec104-plugin"
 version = "0.3.0"
-edition = "2021"
+edition.workspace = true
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-wit-bindgen = "0.58"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-iec104-core = { path = "../../shared/iec104-core" }
-
-[profile.release]
-opt-level = "s"
-lto = true
-strip = false
+wit-bindgen.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+iec104-core.workspace = true

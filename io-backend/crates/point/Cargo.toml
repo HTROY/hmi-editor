@@ -1,0 +1,10 @@
+[package]
+name = "hmi-io-point"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+hmi-io-config.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true

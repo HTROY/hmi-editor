@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::db::repo::Repo;
+use hmi_io_db::repo::Repo;
 
 /// Top-level configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

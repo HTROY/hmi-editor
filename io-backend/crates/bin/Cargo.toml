@@ -1,0 +1,20 @@
+[package]
+name = "hmi-io-backend"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+hmi-io-bridge.workspace = true
+hmi-io-config.workspace = true
+hmi-io-db.workspace = true
+hmi-io-monitor.workspace = true
+hmi-io-plugin.workspace = true
+hmi-io-point.workspace = true
+hmi-io-server.workspace = true
+hmi-io-web.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+env_logger.workspace = true
+log.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true

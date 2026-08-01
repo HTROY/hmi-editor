@@ -13,11 +13,11 @@ use tokio::net::TcpStream;
 use tokio::sync::broadcast;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
-use crate::config::ServerConfig;
-use crate::monitor::collector::MonitorCollector;
-use crate::plugin::registry::PluginRegistry;
-use crate::point::manager::PointManager;
-use crate::point::types::{PointValue, WsDataMessage};
+use hmi_io_config::ServerConfig;
+use hmi_io_monitor::collector::MonitorCollector;
+use hmi_io_plugin::registry::PluginRegistry;
+use hmi_io_point::manager::PointManager;
+use hmi_io_point::types::{PointValue, WsDataMessage};
 
 pub async fn run_server(
     config: &ServerConfig,

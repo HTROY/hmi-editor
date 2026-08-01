@@ -1,12 +1,7 @@
 [package]
 name = "ua-core"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-
-[profile.release]
-opt-level = "s"
-lto = true
-strip = false
+serde.workspace = true

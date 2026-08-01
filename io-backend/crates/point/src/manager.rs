@@ -1,5 +1,5 @@
-use crate::config::{AppConfig, PointMapping};
-use crate::point::types::PointValue;
+use hmi_io_config::{AppConfig, PointMapping};
+use crate::types::PointValue;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]

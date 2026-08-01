@@ -1,7 +1,7 @@
-use crate::db::repo::Repo;
-use crate::monitor::collector::MonitorCollector;
-use crate::plugin::registry::PluginRegistry;
-use crate::point::manager::PointManager;
+use hmi_io_db::repo::Repo;
+use hmi_io_monitor::collector::MonitorCollector;
+use hmi_io_plugin::registry::PluginRegistry;
+use hmi_io_point::manager::PointManager;
 use axum::{
     routing::{get, post, put},
     Extension, Router,

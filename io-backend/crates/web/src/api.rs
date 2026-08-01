@@ -1,10 +1,10 @@
 //! REST API handlers for plugin/point management
 
-use crate::db::repo::{PluginRow, PointRow, Repo};
-use crate::monitor::collector::MonitorCollector;
-use crate::monitor::types::*;
-use crate::point::manager::PointManager;
-use crate::point::types::WsConfigChangeMessage;
+use hmi_io_db::repo::{PluginRow, PointRow, Repo};
+use hmi_io_monitor::collector::MonitorCollector;
+use hmi_io_monitor::types::*;
+use hmi_io_point::manager::PointManager;
+use hmi_io_point::types::WsConfigChangeMessage;
 use axum::{
     extract::{Extension, Multipart, Path, Query, State},
     http::StatusCode,

@@ -12,9 +12,9 @@ use tokio::sync::{mpsc, oneshot};
 
 use super::host::PluginHost;
 use super::interface::PluginInstance;
-use crate::config::{AppConfig, PluginInstance as PluginInstanceConfig};
-use crate::monitor::collector::MonitorCollector;
-use crate::point::types::PointValue;
+use hmi_io_config::{AppConfig, PluginInstance as PluginInstanceConfig};
+use hmi_io_monitor::collector::MonitorCollector;
+use hmi_io_point::types::PointValue;
 
 /// Minimum time between automatic reconnect attempts after a link loss.
 const RECONNECT_MIN_INTERVAL: Duration = Duration::from_secs(5);

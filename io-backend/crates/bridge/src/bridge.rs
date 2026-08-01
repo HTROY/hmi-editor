@@ -4,8 +4,8 @@
 //! Receives PointValues from plugins, filters them via PointManager,
 //! and publishes changed values to all connected WebSocket clients.
 
-use crate::point::manager::PointManager;
-use crate::point::types::{PointValue, WsDataMessage};
+use hmi_io_point::manager::PointManager;
+use hmi_io_point::types::{PointValue, WsDataMessage};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{broadcast, mpsc};
 
