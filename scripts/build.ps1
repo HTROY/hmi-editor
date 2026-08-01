@@ -14,7 +14,7 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptDir
 $BackendDir = Join-Path $RepoRoot "io-backend"
-$PluginDir = Join-Path $BackendDir "plugins-src"
+$PluginDir = Join-Path $BackendDir "crates\plugins"
 $OutputDir = Join-Path $BackendDir "plugins"
 $WasmTarget = "wasm32-wasip2"
 
@@ -52,20 +52,21 @@ if ($Release) { $backendArgs += "--release" }
 if (-not $BackendOnly) {
     Write-Host "`n[1/3] Building WASM plugins (wasip2 components)..." -ForegroundColor Yellow
 
-    $plugins = @("modbus-tcp", "opc-ua", "iec104")
+    $plugins = @("modbus-tcp-plugin", "opc-ua-plugin", "iec104-plugin")
     foreach ($plugin in $plugins) {
-        $pluginPath = Join-Path $PluginDir $plugin
         Write-Host "  Building $plugin (target: $WasmTarget)..." -ForegroundColor Gray
-        Push-Location $pluginPath
+        Push-Location $BackendDir
         try {
-            cargo build @pluginArgs
+            cargo build @pluginArgs @("-p", $plugin)
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "    ERROR: Build failed for $plugin" -ForegroundColor Red
                 continue
             }
             $profile = if ($Release) { "release" } else { "debug" }
-            $crateName = $plugin.Replace("-", "_")
-            $wasmSrc = Join-Path $pluginPath ("target\{0}\{1}\{2}_plugin.wasm" -f $WasmTarget, $profile, $crateName)
+            $crateName = $plugin.Replace("-plugin", "").Replace("-", "_")
+            $meta = cargo metadata --format-version 1 | ConvertFrom-Json
+            $targetDir = $meta.target_directory
+            $wasmSrc = Join-Path $targetDir ("{0}\{1}\{2}_plugin.wasm" -f $WasmTarget, $profile, $crateName)
             $wasmDst = Join-Path $OutputDir "${crateName}.wasm"
             if (Test-Path $wasmSrc) {
                 Copy-Item $wasmSrc $wasmDst -Force
