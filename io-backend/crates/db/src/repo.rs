@@ -16,6 +16,7 @@ pub struct PluginRow {
 pub struct PointRow {
     pub id: i64,
     pub plugin_id: i64,
+    pub plugin_name: String,
     pub variable_id: String,
     pub address: String,
     pub data_type: String,
@@ -48,6 +49,7 @@ fn map_point(row: &rusqlite::Row) -> rusqlite::Result<PointRow> {
     Ok(PointRow {
         id: row.get(0)?,
         plugin_id: row.get(1)?,
+        plugin_name: row.get(10)?,
         variable_id: row.get(2)?,
         address: row.get(3)?,
         data_type: row.get(4)?,
@@ -141,7 +143,12 @@ impl Repo {
     }
     pub fn list_points(&self, plugin_id: Option<i64>) -> anyhow::Result<Vec<PointRow>> {
         let conn = self.conn.lock().unwrap();
-        let mut sql = conn.prepare("SELECT id,plugin_id,variable_id,address,data_type,byte_order,scale,offset_val,var_type,description FROM points WHERE (?1 IS NULL OR plugin_id = ?1) ORDER BY plugin_id,id")?;
+        let mut sql = conn.prepare(
+            "SELECT p.id, p.plugin_id, p.variable_id, p.address, p.data_type, p.byte_order, p.scale, p.offset_val, p.var_type, p.description, pl.name
+             FROM points p JOIN plugins pl ON pl.id = p.plugin_id
+             WHERE (?1 IS NULL OR p.plugin_id = ?1)
+             ORDER BY p.plugin_id, p.id",
+        )?;
         let rows: Vec<PointRow> = sql
             .query_map(params![plugin_id], |r| map_point(r))?
             .collect::<Result<Vec<_>, _>>()?;
@@ -149,7 +156,11 @@ impl Repo {
     }
     pub fn get_point(&self, id: i64) -> anyhow::Result<Option<PointRow>> {
         let conn = self.conn.lock().unwrap();
-        let mut sql = conn.prepare("SELECT id,plugin_id,variable_id,address,data_type,byte_order,scale,offset_val,var_type,description FROM points WHERE id=?1")?;
+        let mut sql = conn.prepare(
+            "SELECT p.id, p.plugin_id, p.variable_id, p.address, p.data_type, p.byte_order, p.scale, p.offset_val, p.var_type, p.description, pl.name
+             FROM points p JOIN plugins pl ON pl.id = p.plugin_id
+             WHERE p.id=?1",
+        )?;
         let mut rows = sql.query_map(params![id], |r| map_point(r))?;
         match rows.next() {
             Some(Ok(r)) => Ok(Some(r)),
@@ -206,5 +217,24 @@ impl Repo {
                 })
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn list_points_includes_plugin_name() {
+        let repo = Repo::new(":memory:").unwrap();
+        let pid = repo
+            .insert_plugin("modbus_tcp", "modbus_tcp.wasm", "{}")
+            .unwrap();
+        repo.insert_point(pid, "P1", "coil:0", "bool", "big_endian", 1.0, 0.0, "DI", "")
+            .unwrap();
+        let points = repo.list_points(None).unwrap();
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].plugin_name, "modbus_tcp");
+        assert_eq!(points[0].variable_id, "P1");
     }
 }
