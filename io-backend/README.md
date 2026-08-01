@@ -83,6 +83,7 @@ cargo run -- config.yaml
 ```
 
 服务启动后会：
+
 1. 首次启动将 `config.yaml` 迁移进本地 SQLite（`hmi_io.db`，此后配置改从数据库加载；删除 `hmi_io.db` 即可重新迁移）
 2. 扫描 `plugins/` 目录加载 .wasm 插件
 3. 初始化并连接所有协议插件
@@ -110,14 +111,14 @@ plugins:
         port: 502
         slave_id: 1
       points:
-        - id: "STA1_211_ACB_STATUS"     # 必须与前端 VariableDef.id 一致
+        - id: "STA1_211_ACB_STATUS" # 必须与前端 VariableDef.id 一致
           address: "coil:0"
           data_type: "bool"
           var_type: "DI"
-        - id: "STA1_211_ACB_CUR_A"      # 32 位浮点示例
+        - id: "STA1_211_ACB_CUR_A" # 32 位浮点示例
           address: "holding_register:2"
           data_type: "float32"
-          byte_order: "ABCD"            # ABCD/BADC/CDAB/DCBA（默认 ABCD）
+          byte_order: "ABCD" # ABCD/BADC/CDAB/DCBA（默认 ABCD）
           scale: 0.1
           var_type: "AI"
 ```
@@ -134,7 +135,7 @@ plugins:
 - WebSocket 写点（`ws://localhost:8080/iscs/data` 发送控制消息）：
 
 ```json
-{"command":"control","variableId":"STA1_211_ACB_CTRL","value":1}
+{ "command": "control", "variableId": "STA1_211_ACB_CTRL", "value": 1 }
 ```
 
 ## 前端连接

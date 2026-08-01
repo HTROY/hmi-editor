@@ -88,7 +88,9 @@ export class DataBridge {
     if (this.activeSource === "simulation") {
       this.variableManager.startSimulation(800);
     } else {
-      this.connectSource(this.activeSource === "io_backend" ? "websocket" : this.activeSource);
+      this.connectSource(
+        this.activeSource === "io_backend" ? "websocket" : this.activeSource,
+      );
     }
   }
 
@@ -217,7 +219,11 @@ export class DataBridge {
       }> = [];
 
       for (const p of points) {
-        const varType: VariableType = (["AI","DI","AO","DO"].includes(p.var_type) ? p.var_type as VariableType : "AI");
+        const varType: VariableType = ["AI", "DI", "AO", "DO"].includes(
+          p.var_type,
+        )
+          ? (p.var_type as VariableType)
+          : "AI";
         const backendPointId = String(p.id);
 
         // 建立双向映射：后端 DB id 和 variable_id 都映射到逻辑变量 ID
@@ -236,10 +242,10 @@ export class DataBridge {
           address: p.address,
           defaultValue: 0,
           unit: "",
-          description: p.description ?? (p.data_type + " / " + p.byte_order),
+          description: p.description ?? p.data_type + " / " + p.byte_order,
           group: "IO Backend (plugin " + p.plugin_id + ")",
           min: 0,
-          max: (varType === "AI" || varType === "AO") ? 100 : 1,
+          max: varType === "AI" || varType === "AO" ? 100 : 1,
           alarmHigh: 0,
           alarmLow: 0,
         });
@@ -254,7 +260,9 @@ export class DataBridge {
         this.variableManager.setValue(id, p.value, p.quality);
       }
 
-      console.log(`[DataBridge] 变量列表已导入: ${defs.length} 个（去重前 ${points.length} 条）, 映射表: ${this.pointIdToVarId.size} 条`);
+      console.log(
+        `[DataBridge] 变量列表已导入: ${defs.length} 个（去重前 ${points.length} 条）, 映射表: ${this.pointIdToVarId.size} 条`,
+      );
       this.onVarsRefreshed?.();
       return defs.length;
     } catch (err) {
@@ -284,7 +292,16 @@ export class DataBridge {
         // 将后端点 ID 转换为内部变量 ID
         const varId = this.pointIdToVarId.get(String(point.id)) ?? point.id;
         const mapping = this.pointIdToVarId.get(String(point.id));
-        console.log("[DataBridge] Data point:", point.id, "val:", point.value, "mapped to:", varId, "hasMapping:", !!mapping);
+        console.log(
+          "[DataBridge] Data point:",
+          point.id,
+          "val:",
+          point.value,
+          "mapped to:",
+          varId,
+          "hasMapping:",
+          !!mapping,
+        );
         // 先缓存再写入：若变量尚未导入，setValue 会被丢弃，导入完成后需要重放
         this.lastValues.set(varId, point);
         this.variableManager.setValue(varId, point.value, point.quality);
@@ -309,7 +326,11 @@ export class DataBridge {
   /** 监听 WebSocket 的 config_change 事件，自动刷新变量列表 */
   private setupConfigChangeWatcher(): void {
     this.configChangeUnsub = this.wsClient.onConfigChange((event) => {
-      console.log("[DataBridge] Config change detected:", event.action, event.variableId);
+      console.log(
+        "[DataBridge] Config change detected:",
+        event.action,
+        event.variableId,
+      );
       // 防抖：2 秒内的多次变更合并为一次刷新
       if (this.configRefreshTimer) {
         clearTimeout(this.configRefreshTimer);
@@ -333,7 +354,8 @@ export class DataBridge {
 
   private getActiveDataSource(): DataSource | undefined {
     if (this.activeSource === "iec104") return this.iec104Simulator;
-    if (this.activeSource === "websocket" || this.activeSource === "io_backend") return this.wsClient;
+    if (this.activeSource === "websocket" || this.activeSource === "io_backend")
+      return this.wsClient;
     return undefined;
   }
 

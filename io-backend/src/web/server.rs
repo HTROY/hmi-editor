@@ -1,7 +1,7 @@
 use crate::db::repo::Repo;
-use crate::point::manager::PointManager;
 use crate::monitor::collector::MonitorCollector;
 use crate::plugin::registry::PluginRegistry;
+use crate::point::manager::PointManager;
 use axum::{
     routing::{get, post, put},
     Extension, Router,
@@ -78,14 +78,10 @@ pub async fn run_web_server(
             "/api/monitor/plugins/{name}/packets",
             get(super::api::monitor_plugin_packets),
         )
-        .route(
-            "/api/monitor/history",
-            get(super::api::monitor_history),
-        )
+        .route("/api/monitor/history", get(super::api::monitor_history))
         // Static files (SPA fallback to index.html)
         .fallback_service(
-            ServeDir::new("web-ui/dist")
-                .fallback(ServeFile::new("web-ui/dist/index.html")),
+            ServeDir::new("web-ui/dist").fallback(ServeFile::new("web-ui/dist/index.html")),
         )
         .layer(CorsLayer::permissive())
         .layer(Extension(monitor))

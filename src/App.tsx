@@ -72,14 +72,22 @@ function App() {
           <div className="left-sidebar slide-in">
             <div className="left-sidebar-header">
               <span>{PanelIcon.properties} 图元库</span>
-              <button className="btn-icon" title="收起" onClick={() => setShowLib(false)}>
+              <button
+                className="btn-icon"
+                title="收起"
+                onClick={() => setShowLib(false)}
+              >
                 ✕
               </button>
             </div>
             <ShapeLibrary />
           </div>
         ) : (
-          <button className="show-lib-btn fade-in" title="展开图元库" onClick={() => setShowLib(true)}>
+          <button
+            className="show-lib-btn fade-in"
+            title="展开图元库"
+            onClick={() => setShowLib(true)}
+          >
             📦
           </button>
         )}

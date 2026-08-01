@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import {
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import {
   AppstoreOutlined,
   DashboardOutlined,
@@ -9,7 +15,15 @@ import {
   RadarChartOutlined,
   SunOutlined,
 } from "@ant-design/icons";
-import { Breadcrumb, Button, Layout, Menu, Space, Tag, theme as antdTheme } from "antd";
+import {
+  Breadcrumb,
+  Button,
+  Layout,
+  Menu,
+  Space,
+  Tag,
+  theme as antdTheme,
+} from "antd";
 import type { MenuProps } from "antd";
 import Dashboard from "./pages/Dashboard";
 import Plugins from "./pages/Plugins";
@@ -87,7 +101,12 @@ export default function App() {
             borderBottom: `1px solid ${token.colorBorderSecondary}`,
           }}
         >
-          <Breadcrumb items={[{ title: "HMI IO" }, { title: TITLES[selected] ?? "控制台" }]} />
+          <Breadcrumb
+            items={[
+              { title: "HMI IO" },
+              { title: TITLES[selected] ?? "控制台" },
+            ]}
+          />
           <Space size="middle">
             <Tag color="blue" icon={<RadarChartOutlined />}>
               实时刷新

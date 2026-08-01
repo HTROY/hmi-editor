@@ -69,13 +69,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved === "light" || saved === "dark") return saved;
-    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
   });
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, mode);
     document.documentElement.setAttribute("data-theme", mode);
-    echarts.registerTheme("app", mode === "dark" ? darkEchartsTheme : lightEchartsTheme);
+    echarts.registerTheme(
+      "app",
+      mode === "dark" ? darkEchartsTheme : lightEchartsTheme,
+    );
   }, [mode]);
 
   const value = useMemo<ThemeContextValue>(() => {
@@ -85,7 +90,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       token: {
         colorPrimary: "#3b82f6",
         borderRadius: 6,
-        fontFamily: '"Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif',
+        fontFamily:
+          '"Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif',
       },
       components: {
         Layout: {
@@ -106,7 +112,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     };
   }, [mode]);
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  );
 }
 
 export function useTheme() {

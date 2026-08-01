@@ -96,7 +96,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
   const animEngine = new AnimationEngine(scene);
   const dataBridge = new DataBridge(varManager);
   dataBridge.setOnVarsRefreshed(() => {
-    setTimeout(() => { const s = get(); s.bumpVarRevision(); }, 0);
+    setTimeout(() => {
+      const s = get();
+      s.bumpVarRevision();
+    }, 0);
   });
   const projectManager = new ProjectManager();
   const alarmManager = new AlarmManager(varManager);
@@ -495,6 +498,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       );
     },
     bumpVarRevision: () => set((s) => ({ varRevision: s.varRevision + 1 })),
-    bumpShapeRevision: () => set((s) => ({ shapeRevision: s.shapeRevision + 1 })),
+    bumpShapeRevision: () =>
+      set((s) => ({ shapeRevision: s.shapeRevision + 1 })),
   };
 });

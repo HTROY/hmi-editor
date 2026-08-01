@@ -23,8 +23,12 @@ export function ConnectionPanel() {
   );
   const [iec104Host, setIec104Host] = useState("192.168.1.100");
   const [iec104Port, setIec104Port] = useState(2404);
-  const [ioBackendUrl, setIoBackendUrl] = useState("ws://localhost:8080/iscs/data");
-  const [ioBackendApiUrl, setIoBackendApiUrl] = useState("http://localhost:8081");
+  const [ioBackendUrl, setIoBackendUrl] = useState(
+    "ws://localhost:8080/iscs/data",
+  );
+  const [ioBackendApiUrl, setIoBackendApiUrl] = useState(
+    "http://localhost:8081",
+  );
   const [fetchingVars, setFetchingVars] = useState(false);
   const [varFetchMsg, setVarFetchMsg] = useState<string | null>(null);
 
@@ -121,7 +125,6 @@ export function ConnectionPanel() {
     setFetchingVars(false);
     setVarFetchMsg(null);
   };
-
 
   // 手动重新拉取变量列表（不重新连接）
   const handleRefreshVariables = () => {
@@ -263,7 +266,13 @@ export function ConnectionPanel() {
               placeholder="ws://localhost:8080/iscs/data"
             />
           </div>
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--text-secondary)",
+              marginTop: 4,
+            }}
+          >
             Rust 后端服务默认监听 ws://localhost:8080/iscs/data
           </div>
           <div className="prop-group">
@@ -274,28 +283,45 @@ export function ConnectionPanel() {
               placeholder="http://localhost:8081"
             />
           </div>
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--text-secondary)",
+              marginTop: 4,
+            }}
+          >
             连接成功后自动从此地址拉取变量列表（GET /api/points）
           </div>
           {fetchingVars && (
-            <div style={{ fontSize: 12, color: "var(--warning)", marginTop: 6 }}>
+            <div
+              style={{ fontSize: 12, color: "var(--warning)", marginTop: 6 }}
+            >
               正在拉取变量列表...
             </div>
           )}
           {varFetchMsg && (
-            <div style={{ fontSize: 12, color: varFetchMsg.startsWith("已导入") ? "var(--success)" : "var(--danger)", marginTop: 6 }}>
+            <div
+              style={{
+                fontSize: 12,
+                color: varFetchMsg.startsWith("已导入")
+                  ? "var(--success)"
+                  : "var(--danger)",
+                marginTop: 6,
+              }}
+            >
               {varFetchMsg}
             </div>
           )}
-          {dataBridge?.getStatus("websocket") === "connected" && !fetchingVars && (
-            <button
-              className="btn btn-sm"
-              style={{ marginTop: 8 }}
-              onClick={handleRefreshVariables}
-            >
-              🔄 刷新变量列表
-            </button>
-          )}
+          {dataBridge?.getStatus("websocket") === "connected" &&
+            !fetchingVars && (
+              <button
+                className="btn btn-sm"
+                style={{ marginTop: 8 }}
+                onClick={handleRefreshVariables}
+              >
+                🔄 刷新变量列表
+              </button>
+            )}
         </div>
       )}
 
@@ -340,7 +366,14 @@ export function ConnectionPanel() {
       {activeSource === "io_backend" &&
         dataBridge?.getStatus("websocket") === "connected" && (
           <div className="conn-section">
-            <div className="conn-section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div
+              className="conn-section-title"
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
               <span>订阅过滤</span>
               <button
                 className="btn btn-sm"
@@ -350,9 +383,19 @@ export function ConnectionPanel() {
                 {showSubFilter ? "折叠" : "展开"}
               </button>
             </div>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--text-secondary)",
+                marginBottom: 4,
+              }}
+            >
               {subscribedVarIds.length > 0
-                ? "Subscribed " + subscribedVarIds.length + " of " + (varManager?.count ?? "?") + " variables"
+                ? "Subscribed " +
+                  subscribedVarIds.length +
+                  " of " +
+                  (varManager?.count ?? "?") +
+                  " variables"
                 : "All variables (no filter)"}
             </div>
             {subscribedVarIds.length > 0 && (
@@ -377,12 +420,18 @@ export function ConnectionPanel() {
                     ?.getAllDefs()
                     ?.filter((d: VariableDef) =>
                       subFilterText
-                        ? d.id.toLowerCase().includes(subFilterText.toLowerCase()) ||
-                          d.name.toLowerCase().includes(subFilterText.toLowerCase())
-                        : true
+                        ? d.id
+                            .toLowerCase()
+                            .includes(subFilterText.toLowerCase()) ||
+                          d.name
+                            .toLowerCase()
+                            .includes(subFilterText.toLowerCase())
+                        : true,
                     )
                     ?.map((d: VariableDef) => {
-                      const isSubbed = subscribedVarIds.length === 0 || subscribedVarIds.includes(d.id);
+                      const isSubbed =
+                        subscribedVarIds.length === 0 ||
+                        subscribedVarIds.includes(d.id);
                       return (
                         <label
                           key={d.id}
@@ -392,7 +441,9 @@ export function ConnectionPanel() {
                             gap: 4,
                             padding: "2px 4px",
                             cursor: "pointer",
-                            color: isSubbed ? "inherit" : "var(--text-secondary)",
+                            color: isSubbed
+                              ? "inherit"
+                              : "var(--text-secondary)",
                           }}
                         >
                           <input
@@ -406,10 +457,24 @@ export function ConnectionPanel() {
                             }}
                             style={{ margin: 0 }}
                           />
-                          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <span
+                            style={{
+                              flex: 1,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
                             {d.id}
                           </span>
-                          <span style={{ color: "var(--text-secondary)", fontSize: 10 }}>{d.type}</span>
+                          <span
+                            style={{
+                              color: "var(--text-secondary)",
+                              fontSize: 10,
+                            }}
+                          >
+                            {d.type}
+                          </span>
                         </label>
                       );
                     })}

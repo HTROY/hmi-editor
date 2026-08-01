@@ -22,16 +22,29 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { api } from "../api/client";
-import type { LivePointInfo, MonitorSnapshot, PluginStatus } from "../api/types";
+import type {
+  LivePointInfo,
+  MonitorSnapshot,
+  PluginStatus,
+} from "../api/types";
 import ConnectionBadge from "../components/ConnectionBadge";
 import StatCard from "../components/StatCard";
 import { usePolling } from "../hooks/usePolling";
-import { formatAge, formatNumber, formatTime, formatTimeMs, formatUptime } from "../utils/format";
+import {
+  formatAge,
+  formatNumber,
+  formatTime,
+  formatTimeMs,
+  formatUptime,
+} from "../utils/format";
 
 function fmtValue(v: LivePointInfo["value"]): { text: string; stale: boolean } {
   if (v === null || v === undefined) return { text: "--", stale: true };
   if (typeof v === "number") {
-    return { text: Number.isInteger(v) ? String(v) : v.toFixed(3), stale: false };
+    return {
+      text: Number.isInteger(v) ? String(v) : v.toFixed(3),
+      stale: false,
+    };
   }
   if (typeof v === "boolean") return { text: v ? "1" : "0", stale: false };
   return { text: String(v), stale: false };
@@ -57,7 +70,8 @@ export default function Monitor() {
     [selected],
   );
   const packets = usePolling(
-    () => (selected ? api.monitorPluginPackets(selected, 200) : Promise.resolve([])),
+    () =>
+      selected ? api.monitorPluginPackets(selected, 200) : Promise.resolve([]),
     1000,
     [selected],
   );
@@ -80,14 +94,30 @@ export default function Monitor() {
     {
       title: "地址",
       dataIndex: "address",
-      render: (v: string) => <span className="mono" style={{ fontSize: 12 }}>{v}</span>,
+      render: (v: string) => (
+        <span className="mono" style={{ fontSize: 12 }}>
+          {v}
+        </span>
+      ),
     },
     {
       title: "类型",
       dataIndex: "var_type",
       width: 70,
       render: (v: string) => (
-        <Tag color={v === "AI" ? "blue" : v === "DI" ? "cyan" : v === "AO" ? "purple" : "magenta"}>{v}</Tag>
+        <Tag
+          color={
+            v === "AI"
+              ? "blue"
+              : v === "DI"
+                ? "cyan"
+                : v === "AO"
+                  ? "purple"
+                  : "magenta"
+          }
+        >
+          {v}
+        </Tag>
       ),
     },
     {
@@ -100,7 +130,11 @@ export default function Monitor() {
           <span
             className="mono"
             style={{
-              color: stale ? "inherit" : pt.var_type === "AI" ? "#22c55e" : "#3b82f6",
+              color: stale
+                ? "inherit"
+                : pt.var_type === "AI"
+                  ? "#22c55e"
+                  : "#3b82f6",
               opacity: stale ? 0.4 : 1,
               fontWeight: 600,
             }}
@@ -232,14 +266,22 @@ export default function Monitor() {
         </Col>
       </Row>
 
-      <Card size="small" title="插件状态" extra={<Tag color="blue">1s 自动刷新</Tag>}>
+      <Card
+        size="small"
+        title="插件状态"
+        extra={<Tag color="blue">1s 自动刷新</Tag>}
+      >
         {!snap || snap.plugins.length === 0 ? (
           <Empty description="暂无运行中的插件" />
         ) : (
           <Row gutter={[10, 10]}>
             {snap.plugins.map((p) => (
               <Col xs={24} sm={12} lg={8} xl={6} key={p.name}>
-                <PluginCard p={p} active={selected === p.name} onClick={() => setSelected(p.name)} />
+                <PluginCard
+                  p={p}
+                  active={selected === p.name}
+                  onClick={() => setSelected(p.name)}
+                />
               </Col>
             ))}
           </Row>
@@ -260,7 +302,8 @@ export default function Monitor() {
               plugin ? (
                 <Space size="middle">
                   <span style={{ fontSize: 12, opacity: 0.7 }}>
-                    扫描 {formatNumber(plugin.scan_count)} 次 · 上次 {plugin.last_scan_time_ms}ms
+                    扫描 {formatNumber(plugin.scan_count)} 次 · 上次{" "}
+                    {plugin.last_scan_time_ms}ms
                   </span>
                   <ConnectionBadge state={plugin.connection_state} />
                 </Space>
@@ -273,7 +316,11 @@ export default function Monitor() {
               columns={pointColumns}
               dataSource={points.data ?? []}
               loading={points.loading && !points.data}
-              pagination={{ pageSize: 12, showSizeChanger: false, showTotal: (t) => `共 ${t} 个点位` }}
+              pagination={{
+                pageSize: 12,
+                showSizeChanger: false,
+                showTotal: (t) => `共 ${t} 个点位`,
+              }}
               locale={{ emptyText: <Empty description="暂无点位数据" /> }}
             />
           </Card>
@@ -323,7 +370,8 @@ export default function Monitor() {
                       gap: 10,
                       padding: "5px 8px",
                       borderBottom: "1px solid rgba(148,163,184,0.08)",
-                      fontFamily: "JetBrains Mono, Cascadia Code, Consolas, monospace",
+                      fontFamily:
+                        "JetBrains Mono, Cascadia Code, Consolas, monospace",
                       fontSize: 11.5,
                       alignItems: "flex-start",
                     }}
@@ -337,12 +385,33 @@ export default function Monitor() {
                     >
                       {pkt.direction === "tx" ? "TX" : "RX"}
                     </span>
-                    <Tag style={{ marginRight: 0, fontSize: 10 }}>{pkt.protocol}</Tag>
-                    <span style={{ opacity: 0.5, minWidth: 78, fontSize: 10.5 }}>
-                      {pkt.timestamp_ms > 1e12 ? formatTimeMs(pkt.timestamp_ms) : `${(pkt.timestamp_ms / 1000).toFixed(1)}s`}
+                    <Tag style={{ marginRight: 0, fontSize: 10 }}>
+                      {pkt.protocol}
+                    </Tag>
+                    <span
+                      style={{ opacity: 0.5, minWidth: 78, fontSize: 10.5 }}
+                    >
+                      {pkt.timestamp_ms > 1e12
+                        ? formatTimeMs(pkt.timestamp_ms)
+                        : `${(pkt.timestamp_ms / 1000).toFixed(1)}s`}
                     </span>
-                    <span style={{ color: "#f59e0b", flex: 1, wordBreak: "break-all" }}>{pkt.hex_dump}</span>
-                    <span style={{ opacity: 0.6, minWidth: 180, maxWidth: 260, textAlign: "right" }}>
+                    <span
+                      style={{
+                        color: "#f59e0b",
+                        flex: 1,
+                        wordBreak: "break-all",
+                      }}
+                    >
+                      {pkt.hex_dump}
+                    </span>
+                    <span
+                      style={{
+                        opacity: 0.6,
+                        minWidth: 180,
+                        maxWidth: 260,
+                        textAlign: "right",
+                      }}
+                    >
                       {pkt.summary}
                     </span>
                   </div>
@@ -385,18 +454,38 @@ function PluginCard({
         transition: "all 0.15s",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-        <Typography.Text strong style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 8,
+        }}
+      >
+        <Typography.Text
+          strong
+          style={{ display: "flex", alignItems: "center", gap: 6 }}
+        >
           <span style={{ color: stateMeta.color }}>{stateMeta.icon}</span>
           {p.name}
         </Typography.Text>
         <ConnectionBadge state={p.connection_state} />
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: 11.5, opacity: 0.75 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 4,
+          fontSize: 11.5,
+          opacity: 0.75,
+        }}
+      >
         <span>扫描: {formatNumber(p.scan_count)}</span>
         <span>
           错误:{" "}
-          <span style={{ color: p.error_count > 0 ? "#ef4444" : "inherit" }}>{formatNumber(p.error_count)}</span>
+          <span style={{ color: p.error_count > 0 ? "#ef4444" : "inherit" }}>
+            {formatNumber(p.error_count)}
+          </span>
         </span>
         <span>上次: {p.last_scan_time_ms}ms</span>
         <span>运行: {formatUptime(p.uptime_ms)}</span>

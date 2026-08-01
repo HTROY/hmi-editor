@@ -144,12 +144,13 @@ impl PluginHost {
         };
         let mut store = Store::new(&self.engine, state);
 
-        let component = Component::from_file(&self.engine, wasm_path).map_err(|e| {
-            anyhow::anyhow!("Failed to load component '{}': {}", wasm_path, e)
-        })?;
+        let component = Component::from_file(&self.engine, wasm_path)
+            .map_err(|e| anyhow::anyhow!("Failed to load component '{}': {}", wasm_path, e))?;
         let inst = HmiPlugin::instantiate_async(&mut store, &component, &linker)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to instantiate plugin '{}': {}", plugin_name, e))?;
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to instantiate plugin '{}': {}", plugin_name, e)
+            })?;
         let lifecycle = inst.hmi_plugin_lifecycle().clone();
         Ok(PluginInstance::new(store, lifecycle))
     }

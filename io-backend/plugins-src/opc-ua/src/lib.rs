@@ -21,13 +21,7 @@ async fn rp(n: &str, v: f64, q: &str, ts: u64) {
 }
 
 async fn rpt(dir: &str, p: &str, h: &str, s: &str) {
-    events::on_packet(
-        dir.to_string(),
-        p.to_string(),
-        h.to_string(),
-        s.to_string(),
-    )
-    .await;
+    events::on_packet(dir.to_string(), p.to_string(), h.to_string(), s.to_string()).await;
 }
 
 fn now_ms() -> u64 {
@@ -96,11 +90,7 @@ impl Guest for Plugin {
         };
         lm(
             2,
-            &format!(
-                "OPC UA init: {}, {} pts",
-                cfg.endpoint,
-                cfg.points.len()
-            ),
+            &format!("OPC UA init: {}, {} pts", cfg.endpoint, cfg.points.len()),
         )
         .await;
         *STATE.lock().unwrap() = Some(PluginState {
@@ -135,7 +125,12 @@ impl Guest for Plugin {
             .unwrap_or(4840);
         lm(2, &format!("OPC UA connecting {}:{}...", h, p)).await;
         let addr = format!("{}:{}", h, p);
-        let stream = match TcpStream::connect_timeout(&addr.parse().unwrap_or_else(|_| "127.0.0.1:4840".parse().unwrap()), Duration::from_secs(5)) {
+        let stream = match TcpStream::connect_timeout(
+            &addr
+                .parse()
+                .unwrap_or_else(|_| "127.0.0.1:4840".parse().unwrap()),
+            Duration::from_secs(5),
+        ) {
             Ok(st) => st,
             Err(e) => {
                 lm(1, &format!("connect failed: {}", e)).await;

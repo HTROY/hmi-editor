@@ -31,7 +31,14 @@ import { api, importExcel } from "../api/client";
 import type { PluginRow, PointRow } from "../api/types";
 
 const DATA_TYPES = ["bool", "int16", "uint16", "int32", "uint32", "float32"];
-const BYTE_ORDERS = ["ABCD", "BADC", "CDAB", "DCBA", "big_endian", "little_endian"];
+const BYTE_ORDERS = [
+  "ABCD",
+  "BADC",
+  "CDAB",
+  "DCBA",
+  "big_endian",
+  "little_endian",
+];
 const VAR_TYPES = ["AI", "DI", "AO", "DO"];
 
 interface PointFormValues {
@@ -97,7 +104,13 @@ export default function Points() {
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
-    form.setFieldsValue({ data_type: "uint16", byte_order: "big_endian", scale: 1, offset_val: 0, var_type: "AI" });
+    form.setFieldsValue({
+      data_type: "uint16",
+      byte_order: "big_endian",
+      scale: 1,
+      offset_val: 0,
+      var_type: "AI",
+    });
     setModalOpen(true);
   };
 
@@ -163,7 +176,9 @@ export default function Points() {
   const exportConfig = async () => {
     try {
       const cfg = await api.exportConfig();
-      const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify(cfg, null, 2)], {
+        type: "application/json",
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -189,18 +204,54 @@ export default function Points() {
     {
       title: "协议地址",
       dataIndex: "address",
-      render: (v: string) => <span className="mono" style={{ fontSize: 12 }}>{v}</span>,
+      render: (v: string) => (
+        <span className="mono" style={{ fontSize: 12 }}>
+          {v}
+        </span>
+      ),
     },
-    { title: "数据类型", dataIndex: "data_type", render: (v: string) => <Tag className="mono">{v}</Tag> },
-    { title: "字节序", dataIndex: "byte_order", render: (v: string) => <span className="mono">{v}</span> },
-    { title: "缩放", dataIndex: "scale", width: 70, align: "right", render: (v: number) => <span className="mono">{v}</span> },
-    { title: "偏移", dataIndex: "offset_val", width: 70, align: "right", render: (v: number) => <span className="mono">{v}</span> },
+    {
+      title: "数据类型",
+      dataIndex: "data_type",
+      render: (v: string) => <Tag className="mono">{v}</Tag>,
+    },
+    {
+      title: "字节序",
+      dataIndex: "byte_order",
+      render: (v: string) => <span className="mono">{v}</span>,
+    },
+    {
+      title: "缩放",
+      dataIndex: "scale",
+      width: 70,
+      align: "right",
+      render: (v: number) => <span className="mono">{v}</span>,
+    },
+    {
+      title: "偏移",
+      dataIndex: "offset_val",
+      width: 70,
+      align: "right",
+      render: (v: number) => <span className="mono">{v}</span>,
+    },
     {
       title: "变量类型",
       dataIndex: "var_type",
       width: 90,
       render: (v: string) => (
-        <Tag color={v === "AI" ? "blue" : v === "DI" ? "cyan" : v === "AO" ? "purple" : "magenta"}>{v}</Tag>
+        <Tag
+          color={
+            v === "AI"
+              ? "blue"
+              : v === "DI"
+                ? "cyan"
+                : v === "AO"
+                  ? "purple"
+                  : "magenta"
+          }
+        >
+          {v}
+        </Tag>
       ),
     },
     {
@@ -215,7 +266,11 @@ export default function Points() {
       width: 130,
       render: (_, pt) => (
         <Space size={4}>
-          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(pt)}>
+          <Button
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => openEdit(pt)}
+          >
             编辑
           </Button>
           <Popconfirm
@@ -254,7 +309,12 @@ export default function Points() {
             disabled={pluginId === null}
           />
           <Tooltip title="按模板（variable_id, address, data_type, byte_order, scale, offset, var_type, description）导入点位">
-            <Upload accept=".xlsx,.xls" showUploadList={false} beforeUpload={onImport} disabled={pluginId === null}>
+            <Upload
+              accept=".xlsx,.xls"
+              showUploadList={false}
+              beforeUpload={onImport}
+              disabled={pluginId === null}
+            >
               <Button icon={<UploadOutlined />} disabled={pluginId === null}>
                 导入 Excel
               </Button>
@@ -264,7 +324,9 @@ export default function Points() {
             <Button
               icon={<DownloadOutlined />}
               disabled={pluginId === null}
-              href={pluginId !== null ? api.exportExcelUrl(pluginId) : undefined}
+              href={
+                pluginId !== null ? api.exportExcelUrl(pluginId) : undefined
+              }
               target="_blank"
             >
               导出 Excel
@@ -282,7 +344,12 @@ export default function Points() {
         size="small"
         title="点位配置"
         extra={
-          <Button type="primary" icon={<PlusOutlined />} disabled={pluginId === null} onClick={openCreate}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            disabled={pluginId === null}
+            onClick={openCreate}
+          >
             添加点位
           </Button>
         }
@@ -338,13 +405,19 @@ export default function Points() {
           </Space>
           <Space style={{ display: "flex" }} size={12} align="start">
             <Form.Item name="data_type" label="数据类型" style={{ flex: 1 }}>
-              <Select options={DATA_TYPES.map((t) => ({ value: t, label: t }))} />
+              <Select
+                options={DATA_TYPES.map((t) => ({ value: t, label: t }))}
+              />
             </Form.Item>
             <Form.Item name="byte_order" label="字节序" style={{ flex: 1 }}>
-              <Select options={BYTE_ORDERS.map((t) => ({ value: t, label: t }))} />
+              <Select
+                options={BYTE_ORDERS.map((t) => ({ value: t, label: t }))}
+              />
             </Form.Item>
             <Form.Item name="var_type" label="变量类型" style={{ flex: 1 }}>
-              <Select options={VAR_TYPES.map((t) => ({ value: t, label: t }))} />
+              <Select
+                options={VAR_TYPES.map((t) => ({ value: t, label: t }))}
+              />
             </Form.Item>
           </Space>
           <Space style={{ display: "flex" }} size={12} align="start">

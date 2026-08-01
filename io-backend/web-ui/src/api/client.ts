@@ -10,12 +10,19 @@ import type {
 } from "./types";
 
 export class ApiError extends Error {
-  constructor(message: string, public status: number) {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
     super(message);
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<T> {
   const opts: RequestInit = { method, headers: {} };
   if (body !== undefined) {
     opts.headers = { "Content-Type": "application/json" };
@@ -34,24 +41,40 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const api = {
   // Plugins
   listPlugins: () => request<PluginRow[]>("GET", "/api/plugins"),
-  createPlugin: (p: { name: string; wasm_file: string; config_json: string; enabled?: boolean }) =>
-    request<{ id: number }>("POST", "/api/plugins", p),
+  createPlugin: (p: {
+    name: string;
+    wasm_file: string;
+    config_json: string;
+    enabled?: boolean;
+  }) => request<{ id: number }>("POST", "/api/plugins", p),
   updatePlugin: (
     id: number,
-    p: { name: string; wasm_file: string; config_json: string; enabled: boolean },
+    p: {
+      name: string;
+      wasm_file: string;
+      config_json: string;
+      enabled: boolean;
+    },
   ) => request<void>("PUT", `/api/plugins/${id}`, p),
   deletePlugin: (id: number) => request<void>("DELETE", `/api/plugins/${id}`),
 
   // Points
-  listPoints: (pluginId: number) => request<PointRow[]>("GET", `/api/points?plugin_id=${pluginId}`),
-  createPoint: (p: PointUpsert) => request<{ id: number }>("POST", "/api/points", p),
-  updatePoint: (id: number, p: PointUpsert) => request<void>("PUT", `/api/points/${id}`, p),
+  listPoints: (pluginId: number) =>
+    request<PointRow[]>("GET", `/api/points?plugin_id=${pluginId}`),
+  createPoint: (p: PointUpsert) =>
+    request<{ id: number }>("POST", "/api/points", p),
+  updatePoint: (id: number, p: PointUpsert) =>
+    request<void>("PUT", `/api/points/${id}`, p),
   deletePoint: (id: number) => request<void>("DELETE", `/api/points/${id}`),
 
   // Monitor
-  monitorOverview: () => request<MonitorSnapshot>("GET", "/api/monitor/overview"),
+  monitorOverview: () =>
+    request<MonitorSnapshot>("GET", "/api/monitor/overview"),
   monitorPluginPoints: (name: string) =>
-    request<LivePointInfo[]>("GET", `/api/monitor/plugins/${encodeURIComponent(name)}/points`),
+    request<LivePointInfo[]>(
+      "GET",
+      `/api/monitor/plugins/${encodeURIComponent(name)}/points`,
+    ),
   monitorPluginPackets: (name: string, limit = 100) =>
     request<PacketLogEntry[]>(
       "GET",
@@ -68,7 +91,10 @@ export const api = {
 export async function importExcel(pluginId: number, file: File) {
   const fd = new FormData();
   fd.append("file", file);
-  const r = await fetch(`/api/plugins/${pluginId}/import`, { method: "POST", body: fd });
+  const r = await fetch(`/api/plugins/${pluginId}/import`, {
+    method: "POST",
+    body: fd,
+  });
   const text = await r.text();
   if (!r.ok) throw new ApiError(text, r.status);
   return JSON.parse(text) as { imported: number };

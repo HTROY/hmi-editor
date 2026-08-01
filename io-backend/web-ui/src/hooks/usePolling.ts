@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 
 /** Poll an async fetcher on an interval; pauses when the tab is hidden. */
-export function usePolling<T>(fetcher: () => Promise<T>, intervalMs: number, deps: unknown[] = []) {
+export function usePolling<T>(
+  fetcher: () => Promise<T>,
+  intervalMs: number,
+  deps: unknown[] = [],
+) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);

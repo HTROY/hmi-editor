@@ -7,7 +7,17 @@ import {
   ScanOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import { Card, Col, Empty, Row, Space, Table, Tag, Tooltip, Typography } from "antd";
+import {
+  Card,
+  Col,
+  Empty,
+  Row,
+  Space,
+  Table,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { EChartsOption } from "echarts";
 import { api } from "../api/client";
@@ -42,7 +52,11 @@ export default function Dashboard() {
       tooltip: {
         trigger: "axis",
         formatter: (params: unknown) => {
-          const list = params as { axisValue: string; seriesName: string; value: unknown }[];
+          const list = params as {
+            axisValue: string;
+            seriesName: string;
+            value: unknown;
+          }[];
           const lines = list.map(
             (p) =>
               `${p.seriesName}: <b>${p.value === null || p.value === undefined ? "-" : p.value}</b>`,
@@ -96,22 +110,42 @@ export default function Dashboard() {
     {
       title: "WASM 文件",
       dataIndex: "wasm_file",
-      render: (v: string) => <span className="mono" style={{ fontSize: 12 }}>{v}</span>,
+      render: (v: string) => (
+        <span className="mono" style={{ fontSize: 12 }}>
+          {v}
+        </span>
+      ),
     },
-    { title: "连接状态", dataIndex: "connection_state", render: (s: number) => <ConnectionBadge state={s} /> },
-    { title: "扫描次数", dataIndex: "scan_count", render: (v: number) => formatNumber(v) },
+    {
+      title: "连接状态",
+      dataIndex: "connection_state",
+      render: (s: number) => <ConnectionBadge state={s} />,
+    },
+    {
+      title: "扫描次数",
+      dataIndex: "scan_count",
+      render: (v: number) => formatNumber(v),
+    },
     {
       title: "错误次数",
       dataIndex: "error_count",
       render: (v: number) =>
-        v > 0 ? <Typography.Text type="danger">{formatNumber(v)}</Typography.Text> : <span>{formatNumber(v)}</span>,
+        v > 0 ? (
+          <Typography.Text type="danger">{formatNumber(v)}</Typography.Text>
+        ) : (
+          <span>{formatNumber(v)}</span>
+        ),
     },
     {
       title: "上次扫描耗时",
       dataIndex: "last_scan_time_ms",
       render: (v: number) => (v ? `${v}ms` : "-"),
     },
-    { title: "运行时长", dataIndex: "uptime_ms", render: (v: number) => formatUptime(v) },
+    {
+      title: "运行时长",
+      dataIndex: "uptime_ms",
+      render: (v: number) => formatUptime(v),
+    },
   ];
 
   const errors = (snap?.plugins ?? [])
@@ -173,7 +207,11 @@ export default function Dashboard() {
             icon={<ClockCircleOutlined />}
             color="#f59e0b"
             loading={overview.loading && !snap}
-            hint={snap ? `启动于 ${formatTime(Date.now() - snap.server_uptime_ms)}` : undefined}
+            hint={
+              snap
+                ? `启动于 ${formatTime(Date.now() - snap.server_uptime_ms)}`
+                : undefined
+            }
           />
         </Col>
       </Row>
@@ -202,12 +240,27 @@ export default function Dashboard() {
           dataSource={snap?.plugins ?? []}
           loading={overview.loading}
           pagination={false}
-          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无运行中的插件" /> }}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="暂无运行中的插件"
+              />
+            ),
+          }}
         />
       </Card>
 
       {errors.length > 0 && (
-        <Card size="small" title={<Space><AlertOutlined style={{ color: "#ef4444" }} />最近错误</Space>}>
+        <Card
+          size="small"
+          title={
+            <Space>
+              <AlertOutlined style={{ color: "#ef4444" }} />
+              最近错误
+            </Space>
+          }
+        >
           {errors.map((p) => (
             <div
               key={p.name}
@@ -222,12 +275,19 @@ export default function Dashboard() {
               }}
             >
               <Tag color="error">{p.name}</Tag>
-              <Typography.Text style={{ flex: 1 }} ellipsis={{ tooltip: p.last_error }} type="danger">
+              <Typography.Text
+                style={{ flex: 1 }}
+                ellipsis={{ tooltip: p.last_error }}
+                type="danger"
+              >
                 {p.last_error}
               </Typography.Text>
-              <Tooltip title={`错误发生于 ${formatTime(Date.now() - (snap!.server_uptime_ms - p.last_error_time_ms))}`}>
+              <Tooltip
+                title={`错误发生于 ${formatTime(Date.now() - (snap!.server_uptime_ms - p.last_error_time_ms))}`}
+              >
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {formatUptime(snap!.server_uptime_ms - p.last_error_time_ms)} 前
+                  {formatUptime(snap!.server_uptime_ms - p.last_error_time_ms)}{" "}
+                  前
                 </Typography.Text>
               </Tooltip>
             </div>

@@ -1,104 +1,104 @@
 ﻿/* 脚本面板 */
 .script-item {
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 8px;
-    margin-bottom: 6px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+  margin-bottom: 6px;
 }
 .script-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 .script-info {
-    flex: 1;
-    min-width: 0;
+  flex: 1;
+  min-width: 0;
 }
 .script-name {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
 }
 .script-meta {
-    font-size: 10px;
-    color: var(--text-secondary);
-    margin-top: 1px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-top: 1px;
 }
 .script-actions {
-    display: flex;
-    gap: 4px;
-    flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
 }
 .script-error {
-    font-size: 10px;
-    color: var(--danger);
-    margin-top: 4px;
-    padding: 4px;
-    background: #2a1010;
-    border-radius: 3px;
+  font-size: 10px;
+  color: var(--danger);
+  margin-top: 4px;
+  padding: 4px;
+  background: #2a1010;
+  border-radius: 3px;
 }
 .script-time {
-    font-size: 10px;
-    color: var(--text-secondary);
-    margin-top: 2px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-top: 2px;
 }
 .script-editor {
-    margin-top: 6px;
+  margin-top: 6px;
 }
 .script-textarea {
-    width: 100%;
-    padding: 6px;
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    background: #0a0a1a;
-    color: #e0e0e0;
-    font-family: "Consolas", "Courier New", monospace;
-    font-size: 11px;
-    resize: vertical;
-    outline: none;
+  width: 100%;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: #0a0a1a;
+  color: #e0e0e0;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 11px;
+  resize: vertical;
+  outline: none;
 }
 .script-textarea:focus {
-    border-color: var(--accent);
+  border-color: var(--accent);
 }
 .script-editor-actions {
-    display: flex;
-    gap: 6px;
-    margin-top: 4px;
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
 }
 
 /* 报表面板 */
 .report-actions {
-    margin-bottom: 8px;
+  margin-bottom: 8px;
 }
 .report-status {
-    font-size: 11px;
-    color: var(--success);
-    padding: 4px 0;
+  font-size: 11px;
+  color: var(--success);
+  padding: 4px 0;
 }
 .report-list {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 .report-config-item {
-    padding: 6px 8px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    cursor: pointer;
+  padding: 6px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
 }
 .report-config-item:hover {
-    background: var(--bg-hover);
+  background: var(--bg-hover);
 }
 .report-cfg-name {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
 }
 .report-cfg-desc {
-    font-size: 10px;
-    color: var(--text-secondary);
-    margin-top: 1px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-top: 1px;
 }

@@ -12,7 +12,15 @@ interface StatCardProps {
   loading?: boolean;
 }
 
-export default function StatCard({ title, value, icon, color, suffix, hint, loading }: StatCardProps) {
+export default function StatCard({
+  title,
+  value,
+  icon,
+  color,
+  suffix,
+  hint,
+  loading,
+}: StatCardProps) {
   const { isDark } = useTheme();
   return (
     <Card size="small" loading={loading} styles={{ body: { padding: 14 } }}>
@@ -45,7 +53,9 @@ export default function StatCard({ title, value, icon, color, suffix, hint, load
           valueStyle={{ fontSize: 22, fontWeight: 600, color }}
         />
       </div>
-      {hint && <div style={{ marginTop: 6, fontSize: 11, opacity: 0.55 }}>{hint}</div>}
+      {hint && (
+        <div style={{ marginTop: 6, fontSize: 11, opacity: 0.55 }}>{hint}</div>
+      )}
     </Card>
   );
 }

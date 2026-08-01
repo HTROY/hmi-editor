@@ -58,7 +58,12 @@ fn now_ms() -> u64 {
 }
 
 fn split_addr(address: &str) -> Result<(&'static str, u16), String> {
-    for prefix in ["coil:", "holding_register:", "input_register:", "discrete_input:"] {
+    for prefix in [
+        "coil:",
+        "holding_register:",
+        "input_register:",
+        "discrete_input:",
+    ] {
         if let Some(rest) = address.strip_prefix(prefix) {
             return rest
                 .parse::<u16>()
@@ -281,13 +286,17 @@ impl Mbap {
         self.stream.write_all(&frame).map_err(|e| e.to_string())?;
 
         let mut head = [0u8; MBAP_HEADER_LEN];
-        self.stream.read_exact(&mut head).map_err(|e| e.to_string())?;
+        self.stream
+            .read_exact(&mut head)
+            .map_err(|e| e.to_string())?;
         let rsp_len = u16::from_be_bytes([head[4], head[5]]) as usize;
         if rsp_len < 1 || rsp_len > 254 {
             return Err(format!("bad response length: {}", rsp_len));
         }
         let mut body = vec![0u8; rsp_len - 1];
-        self.stream.read_exact(&mut body).map_err(|e| e.to_string())?;
+        self.stream
+            .read_exact(&mut body)
+            .map_err(|e| e.to_string())?;
         let mut response = head.to_vec();
         response.extend_from_slice(&body);
         let rx_hex = hex_str(&response);
@@ -312,7 +321,13 @@ impl Mbap {
         pdu.extend_from_slice(&addr.to_be_bytes());
         pdu.extend_from_slice(&1u16.to_be_bytes());
         let (data, _tx, rx_hex) = self
-            .transaction(fc, &pdu, &format!("{} addr={} count=1", fc_name, addr), 1, false)
+            .transaction(
+                fc,
+                &pdu,
+                &format!("{} addr={} count=1", fc_name, addr),
+                1,
+                false,
+            )
             .await?;
         let on = data[0] & 0x01 != 0;
         Self::log_rx(&rx_hex, &format!("resp: {}", if on { "On" } else { "Off" })).await;
@@ -352,7 +367,13 @@ impl Mbap {
         Ok(regs)
     }
 
-    async fn write_single(&mut self, fc: u8, fc_name: &str, addr: u16, val: u16) -> Result<(), String> {
+    async fn write_single(
+        &mut self,
+        fc: u8,
+        fc_name: &str,
+        addr: u16,
+        val: u16,
+    ) -> Result<(), String> {
         let pdu = [
             fc,
             (addr >> 8) as u8,
@@ -373,11 +394,7 @@ impl Mbap {
         Ok(())
     }
 
-    async fn write_multiple_registers(
-        &mut self,
-        addr: u16,
-        vals: &[u16],
-    ) -> Result<(), String> {
+    async fn write_multiple_registers(&mut self, addr: u16, vals: &[u16]) -> Result<(), String> {
         let mut pdu = Vec::with_capacity(6 + vals.len() * 2);
         pdu.push(0x10);
         pdu.extend_from_slice(&addr.to_be_bytes());
@@ -395,7 +412,12 @@ impl Mbap {
             .transaction(
                 0x10,
                 &pdu,
-                &format!("WR_MREG addr={} count={} val=[{}]", addr, vals.len(), vals_hex),
+                &format!(
+                    "WR_MREG addr={} count={} val=[{}]",
+                    addr,
+                    vals.len(),
+                    vals_hex
+                ),
                 0,
                 true,
             )
@@ -612,7 +634,10 @@ mod tests {
     #[test]
     fn build_frame_basic() {
         let f = build_request_frame(0x0001, 0x01, &[0x03, 0x00, 0x00, 0x00, 0x02]);
-        assert_eq!(f, [0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x01, 0x03, 0x00, 0x00, 0x00, 0x02]);
+        assert_eq!(
+            f,
+            [0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x01, 0x03, 0x00, 0x00, 0x00, 0x02]
+        );
     }
 
     #[test]
@@ -626,14 +651,19 @@ mod tests {
         let f = build_request_frame(2, 1, &pdu);
         assert_eq!(
             f,
-            [0x00, 0x02, 0x00, 0x00, 0x00, 0x0b, 0x01, 0x10, 0x00, 0x00, 0x00, 0x02, 0x04, 0x3f, 0xc0, 0x00, 0x00]
+            [
+                0x00, 0x02, 0x00, 0x00, 0x00, 0x0b, 0x01, 0x10, 0x00, 0x00, 0x00, 0x02, 0x04, 0x3f,
+                0xc0, 0x00, 0x00
+            ]
         );
     }
 
     #[test]
     fn parse_ok_read_regs() {
         // FC03 read 2 regs: tid=5, pid=0, len=7 (uid+fc+count+4 data), uid=1
-        let resp = [0x00, 0x05, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x12, 0x34, 0x56, 0x78];
+        let resp = [
+            0x00, 0x05, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x12, 0x34, 0x56, 0x78,
+        ];
         let data = parse_response(5, 1, 0x03, 4, false, &resp).unwrap();
         assert_eq!(data, [0x12, 0x34, 0x56, 0x78]);
     }
@@ -649,7 +679,9 @@ mod tests {
     #[test]
     fn parse_ok_write_echo() {
         // FC06 echo: len=6, body = 06 addr val
-        let resp = [0x00, 0x03, 0x00, 0x00, 0x00, 0x06, 0x01, 0x06, 0x00, 0x00, 0x12, 0x34];
+        let resp = [
+            0x00, 0x03, 0x00, 0x00, 0x00, 0x06, 0x01, 0x06, 0x00, 0x00, 0x12, 0x34,
+        ];
         let data = parse_response(3, 1, 0x06, 0, true, &resp).unwrap();
         assert!(data.is_empty());
     }
@@ -663,7 +695,9 @@ mod tests {
 
     #[test]
     fn parse_bad_tid() {
-        let resp = [0x00, 0x99, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x12, 0x34, 0x56, 0x78];
+        let resp = [
+            0x00, 0x99, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x12, 0x34, 0x56, 0x78,
+        ];
         let err = parse_response(5, 1, 0x03, 4, false, &resp).unwrap_err();
         assert!(err.contains("tid=153"), "{}", err);
     }
@@ -721,7 +755,10 @@ mod tests {
         assert_eq!(decode_value("int16", "", 0x8000, 0), -32768.0);
         assert_eq!(decode_value("bool", "", 0x0001, 0), 1.0);
         assert_eq!(decode_value("bool", "", 0x0000, 0), 0.0);
-        assert_eq!(decode_value("uint32", "", 0x0001, 0x0000), 0x0001_0000 as f64);
+        assert_eq!(
+            decode_value("uint32", "", 0x0001, 0x0000),
+            0x0001_0000 as f64
+        );
         assert_eq!(decode_value("int32", "", 0xffff, 0xffff), -1.0);
         assert_eq!(decode_value("float32", "", 0x3fc0, 0x0000), 1.5);
     }
@@ -730,7 +767,10 @@ mod tests {
     fn encode_value_types() {
         assert_eq!(encode_value("uint16", "", 42.0), vec![42]);
         assert_eq!(encode_value("int16", "", -1.0), vec![0xffff]);
-        assert_eq!(encode_value("uint32", "", 0x12345678 as f64), vec![0x1234, 0x5678]);
+        assert_eq!(
+            encode_value("uint32", "", 0x12345678 as f64),
+            vec![0x1234, 0x5678]
+        );
         assert_eq!(encode_value("float32", "", 1.5), vec![0x3fc0, 0x0000]);
     }
 
@@ -741,8 +781,14 @@ mod tests {
             split_addr("holding_register:2").unwrap(),
             ("holding_register:", 2)
         );
-        assert_eq!(split_addr("input_register:3").unwrap(), ("input_register:", 3));
-        assert_eq!(split_addr("discrete_input:4").unwrap(), ("discrete_input:", 4));
+        assert_eq!(
+            split_addr("input_register:3").unwrap(),
+            ("input_register:", 3)
+        );
+        assert_eq!(
+            split_addr("discrete_input:4").unwrap(),
+            ("discrete_input:", 4)
+        );
         assert!(split_addr("blob:1").is_err());
         assert!(split_addr("coil:xx").is_err());
     }

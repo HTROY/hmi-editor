@@ -21,13 +21,7 @@ async fn rp(n: &str, v: f64, q: &str, ts: u64) {
 }
 
 async fn rpt(dir: &str, p: &str, h: &str, s: &str) {
-    events::on_packet(
-        dir.to_string(),
-        p.to_string(),
-        h.to_string(),
-        s.to_string(),
-    )
-    .await;
+    events::on_packet(dir.to_string(), p.to_string(), h.to_string(), s.to_string()).await;
 }
 
 fn now_ms() -> u64 {
@@ -218,13 +212,14 @@ impl Guest for Plugin {
                 return 1;
             }
         };
-        lm(
-            2,
-            &format!("IEC104 connecting {}:{}...", s.host, s.port),
-        )
-        .await;
+        lm(2, &format!("IEC104 connecting {}:{}...", s.host, s.port)).await;
         let addr = format!("{}:{}", s.host, s.port);
-        let stream = match TcpStream::connect_timeout(&addr.parse().unwrap_or_else(|_| "127.0.0.1:2404".parse().unwrap()), Duration::from_secs(5)) {
+        let stream = match TcpStream::connect_timeout(
+            &addr
+                .parse()
+                .unwrap_or_else(|_| "127.0.0.1:2404".parse().unwrap()),
+            Duration::from_secs(5),
+        ) {
             Ok(st) => st,
             Err(e) => {
                 lm(1, &format!("connect failed: {}", e)).await;

@@ -346,8 +346,8 @@ export function VariablePanel() {
         {filteredDefs.length === 0 && (
           <div className="panel-hint">
             {allDefs.length === 0
-              ? '暂无点位，点击「预设」添加示例'
-              : '无匹配点位'}
+              ? "暂无点位，点击「预设」添加示例"
+              : "无匹配点位"}
           </div>
         )}
         {filteredDefs.map((def) => {
@@ -372,7 +372,13 @@ export function VariablePanel() {
                 <div className="variable-item-header">
                   <span
                     title={
-                      def.type === "DI" ? "开关量输入" : def.type === "DO" ? "开关量输出" : def.type === "AI" ? "模拟量输入" : "模拟量输出"
+                      def.type === "DI"
+                        ? "开关量输入"
+                        : def.type === "DO"
+                          ? "开关量输出"
+                          : def.type === "AI"
+                            ? "模拟量输入"
+                            : "模拟量输出"
                     }
                     className={"var-type-badge " + def.type.toLowerCase()}
                   >

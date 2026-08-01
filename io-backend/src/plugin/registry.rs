@@ -148,9 +148,10 @@ impl PluginRegistry {
         monitor.register_plugin(&plugin_name, &inst_cfg.wasm_file, &point_configs);
 
         let wasm_path_str = wasm_path.to_string_lossy().to_string();
-        let mut plugin =
-            self.host
-                .load_plugin(&wasm_path_str, point_tx, monitor.clone(), &plugin_name).await?;
+        let mut plugin = self
+            .host
+            .load_plugin(&wasm_path_str, point_tx, monitor.clone(), &plugin_name)
+            .await?;
 
         let init_ok = plugin.init(&config_json).await?;
         if init_ok != 0 {

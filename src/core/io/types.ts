@@ -3,7 +3,8 @@
 // ============================================================
 
 /** 数据源类型 */
-export type DataSourceType = "simulation" | "websocket" | "iec104" | "opcua" | "io_backend";
+export type DataSourceType =
+  "simulation" | "websocket" | "iec104" | "opcua" | "io_backend";
 
 /** 连接状态 */
 export type ConnectionStatus =

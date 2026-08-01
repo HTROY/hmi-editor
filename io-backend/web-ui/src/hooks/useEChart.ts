@@ -26,7 +26,14 @@ export function useEChart(option: EChartsOption | null) {
     const chart = chartRef.current;
     if (chart) {
       echarts.registerTheme("app", {
-        color: ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4", "#a78bfa"],
+        color: [
+          "#3b82f6",
+          "#22c55e",
+          "#f59e0b",
+          "#ef4444",
+          "#06b6d4",
+          "#a78bfa",
+        ],
         backgroundColor: "transparent",
         textStyle: { color: isDark ? "#8899b4" : "#556580" },
         categoryAxis: {
@@ -38,7 +45,9 @@ export function useEChart(option: EChartsOption | null) {
           axisLine: { lineStyle: { color: isDark ? "#1e293b" : "#d1d5db" } },
           axisLabel: { color: isDark ? "#8899b4" : "#556580" },
           splitLine: {
-            lineStyle: { color: isDark ? "rgba(148,163,184,0.1)" : "rgba(31,41,55,0.08)" },
+            lineStyle: {
+              color: isDark ? "rgba(148,163,184,0.1)" : "rgba(31,41,55,0.08)",
+            },
           },
         },
         tooltip: {

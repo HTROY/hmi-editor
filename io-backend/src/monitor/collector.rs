@@ -366,12 +366,28 @@ mod tests {
         c.register_plugin(
             "modbus_tcp",
             "modbus_tcp.wasm",
-            &[("P1".into(), "coil:0".into(), "DI".into(), "bool".into(), 1.0, 0.0, "ABCD".into())],
+            &[(
+                "P1".into(),
+                "coil:0".into(),
+                "DI".into(),
+                "bool".into(),
+                1.0,
+                0.0,
+                "ABCD".into(),
+            )],
         );
         c.register_plugin(
             "iec104",
             "iec104.wasm",
-            &[("P2".into(), "1001".into(), "AI".into(), "float32".into(), 1.0, 0.0, "ABCD".into())],
+            &[(
+                "P2".into(),
+                "1001".into(),
+                "AI".into(),
+                "float32".into(),
+                1.0,
+                0.0,
+                "ABCD".into(),
+            )],
         );
         c
     }
@@ -391,7 +407,11 @@ mod tests {
         assert_eq!(s.total_scans, 3);
         assert_eq!(s.total_errors, 1);
         assert_eq!(s.per_plugin.len(), 2);
-        let mb = s.per_plugin.iter().find(|p| p.name == "modbus_tcp").unwrap();
+        let mb = s
+            .per_plugin
+            .iter()
+            .find(|p| p.name == "modbus_tcp")
+            .unwrap();
         assert_eq!(mb.scans, 2);
         assert_eq!(mb.errors, 1);
         assert!(s.timestamp_ms > 1_000_000_000_000);
@@ -403,7 +423,10 @@ mod tests {
         for _ in 0..MAX_HISTORY_SAMPLES + 10 {
             c.sample();
         }
-        assert_eq!(c.get_history(usize::MAX, 500).samples.len(), MAX_HISTORY_SAMPLES);
+        assert_eq!(
+            c.get_history(usize::MAX, 500).samples.len(),
+            MAX_HISTORY_SAMPLES
+        );
     }
 
     #[test]

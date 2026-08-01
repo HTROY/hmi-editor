@@ -50,10 +50,18 @@ export class WebSocketClient extends DataSource {
         };
 
         ws.onmessage = (event) => {
-          console.log("[WebSocket] Raw message received, length:", typeof event.data === "string" ? event.data.length : "binary");
+          console.log(
+            "[WebSocket] Raw message received, length:",
+            typeof event.data === "string" ? event.data.length : "binary",
+          );
           try {
             const msg = JSON.parse(event.data);
-            console.log("[WebSocket] Parsed:", msg.type, "points:", msg.data?.length ?? "single");
+            console.log(
+              "[WebSocket] Parsed:",
+              msg.type,
+              "points:",
+              msg.data?.length ?? "single",
+            );
             this.handleMessage(msg);
           } catch {
             // 尝试按行解析（多个 JSON 对象）
@@ -79,7 +87,12 @@ export class WebSocketClient extends DataSource {
         };
 
         ws.onclose = (ev) => {
-          console.log("[WebSocket] Closed, code:", ev.code, "reason:", ev.reason);
+          console.log(
+            "[WebSocket] Closed, code:",
+            ev.code,
+            "reason:",
+            ev.reason,
+          );
           this.ws = null;
           this.stopHeartbeat();
           this.emitStatus("disconnected");

@@ -51,7 +51,9 @@ export default function Plugins() {
     2000,
     [],
   );
-  const statusMap = new Map((status.data ?? []).map((p: PluginStatus) => [p.name, p]));
+  const statusMap = new Map(
+    (status.data ?? []).map((p: PluginStatus) => [p.name, p]),
+  );
 
   const load = useCallback(async () => {
     try {
@@ -141,7 +143,9 @@ export default function Plugins() {
       title: "ID",
       dataIndex: "id",
       width: 60,
-      render: (v: number) => <span style={{ color: "inherit", opacity: 0.5 }}>{v}</span>,
+      render: (v: number) => (
+        <span style={{ color: "inherit", opacity: 0.5 }}>{v}</span>
+      ),
     },
     {
       title: "名称",
@@ -151,7 +155,11 @@ export default function Plugins() {
     {
       title: "WASM 文件",
       dataIndex: "wasm_file",
-      render: (v: string) => <span className="mono" style={{ fontSize: 12 }}>{v}</span>,
+      render: (v: string) => (
+        <span className="mono" style={{ fontSize: 12 }}>
+          {v}
+        </span>
+      ),
     },
     {
       title: "运行状态",
@@ -159,7 +167,11 @@ export default function Plugins() {
       width: 110,
       render: (_, p) => {
         const s = statusMap.get(p.name);
-        return s ? <ConnectionBadge state={s.connection_state} /> : <Tag>未加载</Tag>;
+        return s ? (
+          <ConnectionBadge state={s.connection_state} />
+        ) : (
+          <Tag>未加载</Tag>
+        );
       },
     },
     {
@@ -182,7 +194,11 @@ export default function Plugins() {
       width: 330,
       render: (_, p) => (
         <Space size={4}>
-          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(p)}>
+          <Button
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => openEdit(p)}
+          >
             编辑
           </Button>
           <Upload
@@ -263,20 +279,27 @@ export default function Plugins() {
           >
             <Input placeholder="plugins 目录下的 .wasm 文件名，如 modbus_tcp.wasm" />
           </Form.Item>
-          <Form.Item name="config_json" label="配置 JSON" rules={[
-            {
-              validator: (_, v: string) => {
-                if (!v) return Promise.resolve();
-                try {
-                  JSON.parse(v);
-                  return Promise.resolve();
-                } catch {
-                  return Promise.reject(new Error("不是合法的 JSON"));
-                }
+          <Form.Item
+            name="config_json"
+            label="配置 JSON"
+            rules={[
+              {
+                validator: (_, v: string) => {
+                  if (!v) return Promise.resolve();
+                  try {
+                    JSON.parse(v);
+                    return Promise.resolve();
+                  } catch {
+                    return Promise.reject(new Error("不是合法的 JSON"));
+                  }
+                },
               },
-            },
-          ]}>
-            <Input.TextArea rows={4} placeholder='{"host":"127.0.0.1","port":502}' />
+            ]}
+          >
+            <Input.TextArea
+              rows={4}
+              placeholder='{"host":"127.0.0.1","port":502}'
+            />
           </Form.Item>
           <Form.Item name="enabled" label="启用">
             <Select
