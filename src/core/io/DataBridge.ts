@@ -39,6 +39,8 @@ export class DataBridge {
 
   /** IO 后端 REST API 地址缓存 */
   private apiBaseUrl: string = "http://localhost:8081";
+  /** 备用 REST API 地址，主地址不可用时自动回退 */
+  private backupApiBaseUrl: string = "";
 
   /** config_change 防抖定时器 */
   private configRefreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -153,6 +155,11 @@ export class DataBridge {
     return this.apiBaseUrl;
   }
 
+  /** 设置备用 REST API 地址，主地址不可用时自动回退。 */
+  setBackupApiBaseUrl(url: string): void {
+    this.backupApiBaseUrl = url;
+  }
+
   /** 设置变量刷新回调（用于通知 UI） */
   setOnVarsRefreshed(cb: (() => void) | null): void {
     this.onVarsRefreshed = cb;
@@ -174,12 +181,26 @@ export class DataBridge {
     this.apiBaseUrl = base;
     const url = `${base}/api/points`;
     console.log("[DataBridge] 正在从后端拉取变量列表:", url);
+    const fallback = this.backupApiBaseUrl
+      ? `${this.backupApiBaseUrl}/api/points`
+      : null;
+    let resp: Response | null = null;
     try {
-      const resp = await fetch(url);
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => "");
-        throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
+      resp = await fetch(url);
+      if (!resp.ok && fallback) {
+        console.log("[DataBridge] 主 API 不可用，尝试备用:", fallback);
+        resp = await fetch(fallback);
       }
+    } catch (err) {
+      if (!fallback) throw err;
+      console.log("[DataBridge] 主 API 连接失败，尝试备用:", fallback);
+      resp = await fetch(fallback);
+    }
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => "");
+      throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
+    }
+    try {
       const points: Array<{
         id: number;
         plugin_id: number;

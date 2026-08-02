@@ -18,14 +18,19 @@ export class WebSocketClient extends DataSource {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private shouldReconnect = false;
+  private urlIndex = 0;
   private configChangeHandlers: Set<ConfigChangeHandler> = new Set();
 
   constructor(config: Partial<WebSocketConfig> = {}) {
+    const urls = config.urls?.length
+      ? config.urls
+      : [config.url ?? "ws://localhost:8080/iscs/data"];
     super({
       type: "websocket",
       name: config.name ?? "WebSocket 数据源",
       enabled: config.enabled ?? true,
-      url: config.url ?? "ws://localhost:8080/iscs/data",
+      url: urls[0],
+      urls,
       protocol: config.protocol ?? "",
       reconnectInterval: config.reconnectInterval ?? 5000,
       heartbeatInterval: config.heartbeatInterval ?? 30000,
@@ -40,9 +45,14 @@ export class WebSocketClient extends DataSource {
 
     return new Promise((resolve, reject) => {
       try {
-        const ws = new WebSocket(this.config.url);
+        const ws = new WebSocket(
+          this.getUrls()[this.urlIndex] ?? this.config.url,
+        );
         ws.onopen = () => {
-          console.log("[WebSocket] Connected to", this.config.url);
+          console.log(
+            "[WebSocket] Connected to",
+            this.getUrls()[this.urlIndex] ?? this.config.url,
+          );
           this.ws = ws;
           this.emitStatus("connected");
           this.startHeartbeat();
@@ -96,6 +106,8 @@ export class WebSocketClient extends DataSource {
           this.ws = null;
           this.stopHeartbeat();
           this.emitStatus("disconnected");
+          const urls = this.getUrls();
+          this.urlIndex = (this.urlIndex + 1) % urls.length;
           this.scheduleReconnect();
         };
       } catch (err) {
@@ -218,10 +230,22 @@ export class WebSocketClient extends DataSource {
   private scheduleReconnect(): void {
     if (!this.shouldReconnect) return;
     this.clearReconnect();
+    // 有多个地址时快速轮询；单个地址维持原重连间隔
+    const delay =
+      this.getUrls().length > 1 && this.urlIndex !== 0
+        ? 100
+        : this.config.reconnectInterval;
     this.reconnectTimer = setTimeout(() => {
       this.emitStatus("connecting");
       this.connect().catch(() => {});
-    }, this.config.reconnectInterval);
+    }, delay);
+  }
+
+  private getUrls(): string[] {
+    if (this.config.urls && this.config.urls.length > 0) {
+      return this.config.urls;
+    }
+    return [this.config.url];
   }
 
   private clearReconnect(): void {

@@ -53,7 +53,7 @@ interface EditorState {
   activePageId: string;
   rightPanel: RightPanel;
   simRunning: boolean;
-  wsConfig: { url: string };
+  wsConfig: { url: string; backupUrl?: string };
   varRevision: number;
   shapeRevision: number;
   setRenderer: (r: Renderer) => void;
@@ -69,7 +69,7 @@ interface EditorState {
   exportProject: () => void;
   importProject: (j: string) => void;
   toggleSimulation: () => void;
-  setWsConfig: (c: { url: string }) => void;
+  setWsConfig: (c: { url: string; backupUrl?: string }) => void;
   newProject: () => void;
   saveProject: () => void;
   openProject: (f: File) => void;
@@ -484,7 +484,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     setWsConfig: (c) => {
       set({ wsConfig: c });
-      get().dataBridge.wsClient.updateConfig({ url: c.url });
+      const urls = [c.url, ...(c.backupUrl ? [c.backupUrl] : [])];
+      get().dataBridge.wsClient.updateConfig({ urls });
     },
     acknowledgeAlarm: (id) => {
       get().alarmManager.acknowledge(

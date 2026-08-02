@@ -29,6 +29,10 @@ export function ConnectionPanel() {
   const [ioBackendApiUrl, setIoBackendApiUrl] = useState(
     "http://localhost:8081",
   );
+  const [ioBackendBackupUrl, setIoBackendBackupUrl] = useState(
+    wsConfig?.backupUrl ?? "",
+  );
+  const [ioBackendBackupApiUrl, setIoBackendBackupApiUrl] = useState("");
   const [fetchingVars, setFetchingVars] = useState(false);
   const [varFetchMsg, setVarFetchMsg] = useState<string | null>(null);
 
@@ -117,7 +121,9 @@ export function ConnectionPanel() {
 
     // 预配置 io_backend 的 WebSocket URL
     if (source === "io_backend") {
-      dataBridge?.wsClient.updateConfig({ url: ioBackendUrl });
+      dataBridge?.wsClient.updateConfig({
+        urls: [ioBackendUrl, ...(ioBackendBackupUrl ? [ioBackendBackupUrl] : [])],
+      });
     }
 
     // 切换数据源时重置拉取状态
@@ -152,8 +158,14 @@ export function ConnectionPanel() {
 
     // 配置 WebSocket URL
     if (activeSource === "io_backend") {
-      dataBridge?.wsClient.updateConfig({ url: ioBackendUrl });
-      setWsConfig({ url: ioBackendUrl });
+      dataBridge?.wsClient.updateConfig({
+        urls: [ioBackendUrl, ...(ioBackendBackupUrl ? [ioBackendBackupUrl] : [])],
+      });
+      dataBridge?.setBackupApiBaseUrl(ioBackendBackupApiUrl);
+      setWsConfig({
+        url: ioBackendUrl,
+        backupUrl: ioBackendBackupUrl || undefined,
+      });
     } else if (activeSource === "websocket") {
       dataBridge?.wsClient.updateConfig({ url: wsUrl });
       setWsConfig({ url: wsUrl });
@@ -266,6 +278,14 @@ export function ConnectionPanel() {
               placeholder="ws://localhost:8080/iscs/data"
             />
           </div>
+          <div className="prop-group">
+            <label>备用 WebSocket 地址（可选）</label>
+            <input
+              value={ioBackendBackupUrl}
+              onChange={(e) => setIoBackendBackupUrl(e.target.value)}
+              placeholder="ws://backup-host:8080/iscs/data"
+            />
+          </div>
           <div
             style={{
               fontSize: 11,
@@ -281,6 +301,14 @@ export function ConnectionPanel() {
               value={ioBackendApiUrl}
               onChange={(e) => setIoBackendApiUrl(e.target.value)}
               placeholder="http://localhost:8081"
+            />
+          </div>
+          <div className="prop-group">
+            <label>备用 REST API 地址（可选）</label>
+            <input
+              value={ioBackendBackupApiUrl}
+              onChange={(e) => setIoBackendBackupApiUrl(e.target.value)}
+              placeholder="http://backup-host:8081"
             />
           </div>
           <div

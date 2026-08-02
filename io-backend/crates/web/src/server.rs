@@ -2,6 +2,7 @@ use hmi_io_db::repo::Repo;
 use hmi_io_monitor::collector::MonitorCollector;
 use hmi_io_plugin::registry::PluginRegistry;
 use hmi_io_point::manager::PointManager;
+use hmi_io_point::redundancy::RedundancyEngine;
 use axum::{
     routing::{get, post, put},
     Extension, Router,
@@ -15,9 +16,10 @@ use tower_http::services::{ServeDir, ServeFile};
 pub async fn run_web_server(
     repo: Arc<Repo>,
     monitor: Arc<MonitorCollector>,
-    _registry: Arc<PluginRegistry>,
+    registry: Arc<PluginRegistry>,
     broadcast_tx: broadcast::Sender<String>,
     point_manager: Arc<Mutex<PointManager>>,
+    redundancy: Arc<RedundancyEngine>,
     port: u16,
 ) -> anyhow::Result<()> {
     // Sampler task: keep the trend history continuous regardless of UI clients
@@ -64,6 +66,33 @@ pub async fn run_web_server(
         )
         // Config export
         .route("/api/config/export", get(super::api::export_config))
+        // Redundancy API
+        .route(
+            "/api/redundancy/config",
+            get(super::api::get_redundancy_config).put(super::api::update_redundancy_config),
+        )
+        .route(
+            "/api/redundancy/config/push",
+            post(super::api::apply_config_push),
+        )
+        .route(
+            "/api/redundancy/heartbeat",
+            get(super::api::redundancy_heartbeat),
+        )
+        .route("/api/redundancy/sync", post(super::api::redundancy_sync))
+        .route(
+            "/api/redundancy/snapshot",
+            get(super::api::redundancy_snapshot),
+        )
+        .route("/api/redundancy/claim", post(super::api::redundancy_claim))
+        .route(
+            "/api/redundancy/status",
+            get(super::api::redundancy_status),
+        )
+        .route(
+            "/api/redundancy/instance-groups",
+            get(super::api::redundancy_instance_groups),
+        )
         // Monitor API
         .route("/api/monitor/overview", get(super::api::monitor_overview))
         .route(
@@ -85,9 +114,10 @@ pub async fn run_web_server(
         )
         .layer(CorsLayer::permissive())
         .layer(Extension(monitor))
-        .layer(Extension(_registry))
+        .layer(Extension(registry))
         .layer(Extension(broadcast_tx))
         .layer(Extension(point_manager))
+        .layer(Extension(redundancy))
         .with_state(repo);
 
     let addr = format!("0.0.0.0:{}", port);

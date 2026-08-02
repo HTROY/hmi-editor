@@ -4,9 +4,12 @@ import type {
   MonitorHistory,
   MonitorSnapshot,
   PacketLogEntry,
+  InstanceGroupStatus,
   PluginRow,
   PointRow,
   PointUpsert,
+  RedundancyConfig,
+  RedundancyStatus,
 } from "./types";
 
 export class ApiError extends Error {
@@ -46,6 +49,9 @@ export const api = {
     wasm_file: string;
     config_json: string;
     enabled?: boolean;
+    redundancy_group?: string;
+    redundancy_role?: string;
+    priority?: number;
   }) => request<{ id: number }>("POST", "/api/plugins", p),
   updatePlugin: (
     id: number,
@@ -54,13 +60,19 @@ export const api = {
       wasm_file: string;
       config_json: string;
       enabled: boolean;
+      redundancy_group: string;
+      redundancy_role: string;
+      priority: number;
     },
   ) => request<void>("PUT", `/api/plugins/${id}`, p),
   deletePlugin: (id: number) => request<void>("DELETE", `/api/plugins/${id}`),
 
   // Points
-  listPoints: (pluginId: number) =>
-    request<PointRow[]>("GET", `/api/points?plugin_id=${pluginId}`),
+  listPoints: (pluginId: number, includeBackup = false) =>
+    request<PointRow[]>(
+      "GET",
+      `/api/points?plugin_id=${pluginId}&include_backup=${includeBackup}`,
+    ),
   createPoint: (p: PointUpsert) =>
     request<{ id: number }>("POST", "/api/points", p),
   updatePoint: (id: number, p: PointUpsert) =>
@@ -82,6 +94,16 @@ export const api = {
     ),
   monitorHistory: (limit = 300) =>
     request<MonitorHistory>("GET", `/api/monitor/history?limit=${limit}`),
+
+  // Redundancy
+  getRedundancyConfig: () =>
+    request<RedundancyConfig>("GET", "/api/redundancy/config"),
+  saveRedundancyConfig: (c: RedundancyConfig) =>
+    request<void>("PUT", "/api/redundancy/config", c),
+  getRedundancyStatus: () =>
+    request<RedundancyStatus>("GET", "/api/redundancy/status"),
+  getInstanceGroups: () =>
+    request<InstanceGroupStatus[]>("GET", "/api/redundancy/instance-groups"),
 
   // Files
   exportExcelUrl: (pluginId: number) => `/api/plugins/${pluginId}/export`,

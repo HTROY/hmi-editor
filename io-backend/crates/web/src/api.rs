@@ -1,9 +1,14 @@
 //! REST API handlers for plugin/point management
 
-use hmi_io_db::repo::{PluginRow, PointRow, Repo};
+use hmi_io_config::RedundancyConfig;
+use hmi_io_db::repo::{ConfigSnapshot, PluginRow, PointRow, Repo, SnapshotPoint, SnapshotPlugin};
 use hmi_io_monitor::collector::MonitorCollector;
 use hmi_io_monitor::types::*;
 use hmi_io_point::manager::PointManager;
+use hmi_io_point::redundancy::{
+    ClaimBody, ClaimResult, ConfigPushBody, HeartbeatInfo, RedundancyEngine, RedundancyStatus,
+    SyncBody,
+};
 use hmi_io_point::types::WsConfigChangeMessage;
 use hmi_io_point::point_key;
 use axum::{
@@ -21,6 +26,7 @@ pub type AppState = Arc<Repo>;
 #[derive(Deserialize)]
 pub struct PluginQuery {
     pub plugin_id: Option<i64>,
+    pub include_backup: Option<bool>,
 }
 
 pub async fn list_plugins(
@@ -54,40 +60,139 @@ pub struct UpsertPlugin {
     pub config_json: String,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    #[serde(default)]
+    pub redundancy_group: String,
+    #[serde(default)]
+    pub redundancy_role: String,
+    #[serde(default)]
+    pub priority: u32,
 }
 fn default_enabled() -> bool {
     true
 }
 
+fn validate_group_edit(
+    repo: &Repo,
+    candidate: &UpsertPlugin,
+    edit_id: Option<i64>,
+) -> Result<(), StatusCode> {
+    let mut plugins = repo.list_plugins().map_err(|e| {
+        log::error!("{}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    if let Some(id) = edit_id {
+        plugins.retain(|p| p.id != id);
+    }
+    plugins.push(PluginRow {
+        id: edit_id.unwrap_or(0),
+        name: candidate.name.clone(),
+        wasm_file: candidate.wasm_file.clone(),
+        config_json: candidate.config_json.clone(),
+        enabled: candidate.enabled,
+        redundancy_group: candidate.redundancy_group.clone(),
+        redundancy_role: candidate.redundancy_role.clone(),
+        priority: candidate.priority,
+    });
+    let instances: Vec<hmi_io_config::PluginInstance> = plugins
+        .into_iter()
+        .map(|p| {
+            let points = repo
+                .list_points(Some(p.id))
+                .unwrap_or_default()
+                .into_iter()
+                .map(|pt| hmi_io_config::PointMapping {
+                    id: pt.variable_id,
+                    address: pt.address,
+                    data_type: pt.data_type,
+                    byte_order: pt.byte_order,
+                    scale: pt.scale,
+                    offset: pt.offset_val,
+                    var_type: pt.var_type,
+                })
+                .collect();
+            hmi_io_config::PluginInstance {
+                name: p.name,
+                wasm_file: p.wasm_file,
+                config: serde_json::from_str(&p.config_json).unwrap_or(serde_json::json!({})),
+                points,
+                redundancy_group: p.redundancy_group,
+                redundancy_role: p.redundancy_role,
+                priority: p.priority,
+            }
+        })
+        .collect();
+    let mut cfg = hmi_io_config::AppConfig::default_config();
+    cfg.plugins.instances = instances;
+    cfg.validate().map_err(|e| {
+        log::warn!("group validation failed: {}", e);
+        StatusCode::BAD_REQUEST
+    })
+}
+
 pub async fn create_plugin(
     State(repo): State<AppState>,
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
     Json(p): Json<UpsertPlugin>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    repo.insert_plugin(&p.name, &p.wasm_file, &p.config_json)
-        .map(|id| Json(serde_json::json!({"id": id})))
+    validate_group_edit(&repo, &p, None)?;
+    let id = repo
+        .insert_plugin_full(
+            &p.name,
+            &p.wasm_file,
+            &p.config_json,
+            &p.redundancy_group,
+            &p.redundancy_role,
+            p.priority,
+        )
         .map_err(|e| {
             log::error!("{}", e);
             StatusCode::INTERNAL_SERVER_ERROR
-        })
+        })?;
+    bump_version_and_push(&repo, &engine).await;
+    Ok(Json(serde_json::json!({"id": id})))
 }
 
 pub async fn update_plugin(
     State(repo): State<AppState>,
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
     Path(id): Path<i64>,
     Json(p): Json<UpsertPlugin>,
 ) -> Result<StatusCode, StatusCode> {
-    repo.update_plugin(id, &p.name, &p.wasm_file, &p.config_json, p.enabled)
+    validate_group_edit(&repo, &p, Some(id))?;
+    repo.update_plugin_full(
+        id,
+        &p.name,
+        &p.wasm_file,
+        &p.config_json,
+        &p.redundancy_group,
+        &p.redundancy_role,
+        p.priority,
+        p.enabled,
+    )
         .map(|_| StatusCode::OK)
         .map_err(|e| {
             log::error!("{}", e);
             StatusCode::INTERNAL_SERVER_ERROR
-        })
+        })?;
+    bump_version_and_push(&repo, &engine).await;
+    Ok(StatusCode::OK)
 }
 
-pub async fn delete_plugin(State(repo): State<AppState>, Path(id): Path<i64>) -> StatusCode {
-    repo.delete_plugin(id)
-        .map(|_| StatusCode::OK)
-        .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+pub async fn delete_plugin(
+    State(repo): State<AppState>,
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
+    Path(id): Path<i64>,
+) -> StatusCode {
+    match repo.delete_plugin(id) {
+        Ok(()) => {
+            bump_version_and_push(&repo, &engine).await;
+            StatusCode::OK
+        }
+        Err(e) => {
+            log::error!("{}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -104,11 +209,13 @@ pub struct PointView {
     pub description: String,
     pub plugin_name: String,
     pub hmi_id: String,
+    pub redundancy_group: String,
+    pub plugin_role: String,
 }
 
 impl From<PointRow> for PointView {
     fn from(row: PointRow) -> Self {
-        let hmi_id = point_key(&row.plugin_name, &row.variable_id);
+        let hmi_id = hmi_id_for_point(&row);
         Self {
             id: row.id,
             plugin_id: row.plugin_id,
@@ -122,7 +229,17 @@ impl From<PointRow> for PointView {
             description: row.description,
             plugin_name: row.plugin_name,
             hmi_id,
+            redundancy_group: row.redundancy_group,
+            plugin_role: row.redundancy_role,
         }
+    }
+}
+
+fn hmi_id_for_point(p: &PointRow) -> String {
+    if p.redundancy_group.is_empty() {
+        point_key(&p.plugin_name, &p.variable_id)
+    } else {
+        point_key(&p.redundancy_group, &p.variable_id)
     }
 }
 
@@ -136,11 +253,13 @@ pub async fn list_points(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     let total_in_db = all_points.len();
+    let include_backup = q.include_backup.unwrap_or(false);
     // 以 PointManager 为准：只返回实际在管理范围内的点位
     let pm = point_manager.lock().unwrap();
     let filtered: Vec<PointView> = all_points
         .into_iter()
-        .filter(|p| pm.has_point(&point_key(&p.plugin_name, &p.variable_id)))
+        .filter(|p| pm.has_point(&hmi_id_for_point(p)))
+        .filter(|p| include_backup || p.redundancy_role != "backup")
         .map(PointView::from)
         .collect();
     if filtered.len() != total_in_db {
@@ -198,6 +317,7 @@ fn send_config_change(
 pub async fn create_point(
     State(repo): State<AppState>,
     Extension(broadcast_tx): Extension<broadcast::Sender<String>>,
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
     Json(p): Json<UpsertPoint>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let plugin_id = p.plugin_id;
@@ -220,12 +340,14 @@ pub async fn create_point(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
     send_config_change(&broadcast_tx, "create", &var_id, plugin_id);
+    bump_version_and_push(&repo, &engine).await;
     Ok(result)
 }
 
 pub async fn update_point(
     State(repo): State<AppState>,
     Extension(broadcast_tx): Extension<broadcast::Sender<String>>,
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
     Path(id): Path<i64>,
     Json(p): Json<UpsertPoint>,
 ) -> Result<StatusCode, StatusCode> {
@@ -248,12 +370,14 @@ pub async fn update_point(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     send_config_change(&broadcast_tx, "update", &var_id, plugin_id);
+    bump_version_and_push(&repo, &engine).await;
     Ok(StatusCode::OK)
 }
 
 pub async fn delete_point(
     State(repo): State<AppState>,
     Extension(broadcast_tx): Extension<broadcast::Sender<String>>,
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
     Path(id): Path<i64>,
 ) -> Result<StatusCode, StatusCode> {
     // Get point info before deletion for the notification
@@ -272,11 +396,13 @@ pub async fn delete_point(
     if !var_id.is_empty() {
         send_config_change(&broadcast_tx, "delete", &var_id, plugin_id);
     }
+    bump_version_and_push(&repo, &engine).await;
     Ok(StatusCode::OK)
 }
 
 pub async fn import_excel(
     State(repo): State<AppState>,
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
     Path(plugin_id): Path<i64>,
     mut multipart: Multipart,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
@@ -341,6 +467,7 @@ pub async fn import_excel(
                         imported += 1;
                     }
                 }
+                bump_version_and_push(&repo, &engine).await;
                 return Ok(Json(serde_json::json!({"imported": imported})));
             }
         }
@@ -469,6 +596,187 @@ pub async fn export_config(State(repo): State<AppState>) -> Result<Json<ConfigEx
 }
 
 // ============================================================
+// Redundancy API
+// ============================================================
+
+fn build_config_snapshot(repo: &Repo) -> ConfigSnapshot {
+    let scan_ms: u64 = repo
+        .get_config("scan_interval_ms")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(500);
+    let batch_ms: u64 = repo
+        .get_config("batch_interval_ms")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(100);
+    let plugin_dir = repo
+        .get_config("plugin_dir")
+        .unwrap_or_else(|| "./plugins".into());
+    let version = repo
+        .get_config("config_version")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let redundancy = repo
+        .get_config("redundancy_config")
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or(serde_json::json!({}));
+    let plugins = repo
+        .list_plugins_with_points()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|pw| SnapshotPlugin {
+            name: pw.plugin.name,
+            wasm_file: pw.plugin.wasm_file,
+            config_json: pw.plugin.config_json,
+            enabled: pw.plugin.enabled,
+            redundancy_group: pw.plugin.redundancy_group.clone(),
+            redundancy_role: pw.plugin.redundancy_role.clone(),
+            priority: pw.plugin.priority,
+            points: pw
+                .points
+                .into_iter()
+                .map(|p| SnapshotPoint {
+                    variable_id: p.variable_id,
+                    address: p.address,
+                    data_type: p.data_type,
+                    byte_order: p.byte_order,
+                    scale: p.scale,
+                    offset_val: p.offset_val,
+                    var_type: p.var_type,
+                    description: p.description,
+                })
+                .collect(),
+        })
+        .collect();
+    ConfigSnapshot {
+        config_version: version,
+        scan_interval_ms: scan_ms,
+        batch_interval_ms: batch_ms,
+        plugin_dir,
+        redundancy,
+        plugins,
+    }
+}
+
+/// 本地配置变更后：递增版本并向对端推送（仅 Active 节点）。
+async fn bump_version_and_push(repo: &Repo, engine: &RedundancyEngine) {
+    if !engine.is_active() {
+        return;
+    }
+    let v = repo
+        .get_config("config_version")
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0)
+        + 1;
+    let _ = repo.set_config("config_version", &v.to_string());
+    engine.set_config_version(v);
+    let snap = build_config_snapshot(repo);
+    let json = serde_json::to_value(&snap).unwrap_or(serde_json::json!({}));
+    engine.push_config(json).await;
+}
+
+pub async fn get_redundancy_config(
+    State(repo): State<AppState>,
+) -> Result<Json<RedundancyConfig>, StatusCode> {
+    let cfg: RedundancyConfig = repo
+        .get_config("redundancy_config")
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    Ok(Json(cfg))
+}
+
+pub async fn update_redundancy_config(
+    State(repo): State<AppState>,
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
+    Json(cfg): Json<RedundancyConfig>,
+) -> Result<StatusCode, StatusCode> {
+    if cfg.enabled {
+        if cfg.node_id.is_empty() || cfg.peer_url.is_empty() {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+    let json = serde_json::to_string(&cfg).map_err(|e| {
+        log::error!("{}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    repo.set_config("redundancy_config", &json)
+        .map_err(|e| {
+            log::error!("{}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    bump_version_and_push(&repo, &engine).await;
+    Ok(StatusCode::OK)
+}
+
+pub async fn redundancy_heartbeat(
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
+) -> Json<HeartbeatInfo> {
+    engine.record_peer_seen(0);
+    Json(engine.heartbeat_info())
+}
+
+pub async fn redundancy_sync(
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
+    Json(body): Json<SyncBody>,
+) -> Result<StatusCode, StatusCode> {
+    engine.handle_sync(&body).map(|_| StatusCode::OK).map_err(|e| {
+        log::warn!("redundancy sync rejected: {}", e);
+        StatusCode::CONFLICT
+    })
+}
+
+pub async fn redundancy_snapshot(
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
+) -> Json<SyncBody> {
+    Json(engine.snapshot_for_peer())
+}
+
+pub async fn apply_config_push(
+    State(repo): State<AppState>,
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
+    Json(body): Json<ConfigPushBody>,
+) -> Result<StatusCode, StatusCode> {
+    let snap: ConfigSnapshot = serde_json::from_value(body.config).map_err(|e| {
+        log::error!("bad config push: {}", e);
+        StatusCode::BAD_REQUEST
+    })?;
+    let local: u64 = repo
+        .get_config("config_version")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    if snap.config_version < local {
+        return Ok(StatusCode::OK); // 旧版本，忽略
+    }
+    repo.apply_config_snapshot(&snap).map_err(|e| {
+        log::error!("apply config snapshot failed: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    engine.set_config_version(snap.config_version);
+    engine
+        .state()
+        .record_event("config_synced", format!("applied config v{}", snap.config_version));
+    Ok(StatusCode::OK)
+}
+
+pub async fn redundancy_claim(
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
+    Json(body): Json<ClaimBody>,
+) -> Json<ClaimResult> {
+    Json(engine.handle_claim(&body))
+}
+
+pub async fn redundancy_status(
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
+) -> Json<RedundancyStatus> {
+    Json(engine.state().get_status())
+}
+
+pub async fn redundancy_instance_groups(
+    Extension(registry): Extension<Arc<hmi_io_plugin::registry::PluginRegistry>>,
+) -> Json<Vec<hmi_io_plugin::registry::InstanceGroupStatus>> {
+    Json(registry.instance_groups_status())
+}
+
+// ============================================================
 // Monitor API handlers
 // ============================================================
 
@@ -561,12 +869,18 @@ mod tests {
                 wasm_file: "modbus.wasm".into(),
                 config: serde_json::json!({}),
                 points: vec![mapping("P1")],
+                redundancy_group: String::new(),
+                redundancy_role: String::new(),
+                priority: 0,
             },
             PluginInstance {
                 name: "mb2".into(),
                 wasm_file: "modbus.wasm".into(),
                 config: serde_json::json!({}),
                 points: vec![mapping("P1")],
+                redundancy_group: String::new(),
+                redundancy_role: String::new(),
+                priority: 0,
             },
         ];
         Arc::new(Mutex::new(PointManager::from_config(&cfg)))
@@ -587,13 +901,19 @@ mod tests {
             wasm_file: "modbus_tcp.wasm".into(),
             config: serde_json::json!({}),
             points: vec![mapping("P1")],
+            redundancy_group: String::new(),
+            redundancy_role: String::new(),
+            priority: 0,
         }];
         let pm = Arc::new(Mutex::new(PointManager::from_config(&cfg)));
 
         let res = list_points(
             State(repo),
             Extension(pm),
-            Query(PluginQuery { plugin_id: None }),
+            Query(PluginQuery {
+                plugin_id: None,
+                include_backup: None,
+            }),
         )
         .await
         .unwrap();
@@ -616,7 +936,10 @@ mod tests {
         let res = list_points(
             State(repo),
             Extension(point_manager_with_two_instances()),
-            Query(PluginQuery { plugin_id: None }),
+            Query(PluginQuery {
+                plugin_id: None,
+                include_backup: None,
+            }),
         )
         .await
         .unwrap();
@@ -625,5 +948,88 @@ mod tests {
         let ids: Vec<&str> = points.iter().map(|p| p.hmi_id.as_str()).collect();
         assert!(ids.contains(&"mb1:P1"));
         assert!(ids.contains(&"mb2:P1"));
+    }
+
+    #[tokio::test]
+    async fn list_points_uses_group_logical_id_and_hides_backups() {
+        let repo = Arc::new(Repo::new(":memory:").unwrap());
+        let p1 = repo
+            .insert_plugin_full("mb1", "mb.wasm", "{}", "mb-link", "primary", 0)
+            .unwrap();
+        let p2 = repo
+            .insert_plugin_full("mb2", "mb.wasm", "{}", "mb-link", "backup", 1)
+            .unwrap();
+        repo.insert_point(p1, "P1", "a", "bool", "big_endian", 1.0, 0.0, "DI", "")
+            .unwrap();
+        repo.insert_point(p2, "P1", "b", "bool", "big_endian", 1.0, 0.0, "DI", "")
+            .unwrap();
+
+        let mut cfg = AppConfig::default_config();
+        cfg.plugins.instances = vec![
+            PluginInstance {
+                name: "mb1".into(),
+                wasm_file: "mb.wasm".into(),
+                config: serde_json::json!({}),
+                points: vec![mapping("P1")],
+                redundancy_group: "mb-link".into(),
+                redundancy_role: "primary".into(),
+                priority: 0,
+            },
+            PluginInstance {
+                name: "mb2".into(),
+                wasm_file: "mb.wasm".into(),
+                config: serde_json::json!({}),
+                points: vec![mapping("P1")],
+                redundancy_group: "mb-link".into(),
+                redundancy_role: "backup".into(),
+                priority: 1,
+            },
+        ];
+        let pm = Arc::new(Mutex::new(PointManager::from_config(&cfg)));
+
+        let res = list_points(
+            State(repo.clone()),
+            Extension(pm.clone()),
+            Query(PluginQuery {
+                plugin_id: None,
+                include_backup: None,
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(res.0.len(), 1);
+        assert_eq!(res.0[0].hmi_id, "mb-link:P1");
+
+        let res = list_points(
+            State(repo),
+            Extension(pm),
+            Query(PluginQuery {
+                plugin_id: None,
+                include_backup: Some(true),
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(res.0.len(), 2);
+    }
+
+    #[test]
+    fn build_config_snapshot_includes_all_fields() {
+        let repo = Arc::new(Repo::new(":memory:").unwrap());
+        let pid = repo
+            .insert_plugin("mb", "mb.wasm", "{\"host\":\"x\"}")
+            .unwrap();
+        repo.insert_point(pid, "P1", "coil:0", "bool", "big_endian", 1.0, 0.0, "DI", "d")
+            .unwrap();
+        repo.set_config("config_version", "3").unwrap();
+        repo.set_config("redundancy_config", r#"{"enabled":true}"#)
+            .unwrap();
+
+        let snap = build_config_snapshot(&repo);
+        assert_eq!(snap.config_version, 3);
+        assert_eq!(snap.plugins.len(), 1);
+        assert_eq!(snap.plugins[0].name, "mb");
+        assert_eq!(snap.plugins[0].points[0].variable_id, "P1");
+        assert_eq!(snap.redundancy["enabled"], serde_json::Value::Bool(true));
     }
 }

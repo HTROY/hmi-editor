@@ -54,5 +54,32 @@ pub fn init_db(conn: &Connection) -> anyhow::Result<()> {
         conn.execute_batch("ALTER TABLE points ADD COLUMN description TEXT NOT NULL DEFAULT ''")?;
     }
 
+    // Migration: add instance-redundancy columns if missing
+    for (col, sql) in [
+        (
+            "redundancy_group",
+            "ALTER TABLE plugins ADD COLUMN redundancy_group TEXT NOT NULL DEFAULT ''",
+        ),
+        (
+            "redundancy_role",
+            "ALTER TABLE plugins ADD COLUMN redundancy_role TEXT NOT NULL DEFAULT ''",
+        ),
+        (
+            "priority",
+            "ALTER TABLE plugins ADD COLUMN priority INTEGER NOT NULL DEFAULT 0",
+        ),
+    ] {
+        let has: bool = conn
+            .prepare(&format!(
+                "SELECT 1 FROM pragma_table_info('plugins') WHERE name='{}'",
+                col
+            ))?
+            .exists([])?;
+        if !has {
+            log::info!("Migrating: adding {} column to plugins table", col);
+            conn.execute_batch(sql)?;
+        }
+    }
+
     Ok(())
 }

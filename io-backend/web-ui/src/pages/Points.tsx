@@ -11,6 +11,7 @@ import {
   Popconfirm,
   Select,
   Space,
+  Switch,
   Table,
   Tag,
   Tooltip,
@@ -59,6 +60,7 @@ export default function Points() {
   const [points, setPoints] = useState<PointRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState("");
+  const [includeBackup, setIncludeBackup] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PointRow | null>(null);
   const [saving, setSaving] = useState(false);
@@ -75,7 +77,7 @@ export default function Points() {
     async (pid: number) => {
       setLoading(true);
       try {
-        setPoints(await api.listPoints(pid));
+        setPoints(await api.listPoints(pid, includeBackup));
       } catch (e) {
         message.error(`加载点位失败: ${e instanceof Error ? e.message : e}`);
         setPoints([]);
@@ -88,7 +90,7 @@ export default function Points() {
 
   useEffect(() => {
     if (pluginId !== null) loadPoints(pluginId);
-  }, [pluginId, loadPoints]);
+  }, [pluginId, includeBackup, loadPoints]);
 
   const filtered = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
@@ -255,6 +257,22 @@ export default function Points() {
       ),
     },
     {
+      title: "冗余",
+      key: "redundancy",
+      width: 130,
+      render: (_, pt) => (
+        <Space size={4}>
+          {pt.plugin_role === "primary" && <Tag color="green">主</Tag>}
+          {pt.plugin_role === "backup" && <Tag color="orange">备</Tag>}
+          {pt.redundancy_group && (
+            <Tag color="blue" className="mono">
+              {pt.redundancy_group}
+            </Tag>
+          )}
+        </Space>
+      ),
+    },
+    {
       title: "描述",
       dataIndex: "description",
       ellipsis: { showTitle: true },
@@ -306,6 +324,13 @@ export default function Points() {
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             allowClear
+            disabled={pluginId === null}
+          />
+          <Switch
+            checked={includeBackup}
+            onChange={setIncludeBackup}
+            checkedChildren="含备实例"
+            unCheckedChildren="仅主实例"
             disabled={pluginId === null}
           />
           <Tooltip title="按模板（variable_id, address, data_type, byte_order, scale, offset, var_type, description）导入点位">

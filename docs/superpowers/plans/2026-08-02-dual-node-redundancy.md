@@ -939,7 +939,7 @@ mod tests {
         e.state().set_state(NodeState::Active);
         pm.lock().unwrap().set_active(true);
         let res = e.handle_claim(&ClaimBody {
-            node_id: "node-a".into(),
+            node_id: "node-b".into(),
         });
         assert!(res.accepted);
         assert_eq!(e.state().state(), NodeState::Standby);
@@ -3929,7 +3929,7 @@ fn claim_from_primary_accepted_when_healthy() {
     e.state().set_state(NodeState::Active);
     pm.lock().unwrap().set_active(true);
     let res = e.handle_claim(&ClaimBody {
-        node_id: "node-a".into(),
+        node_id: "node-b".into(),
         role: "primary".into(),
     });
     assert!(res.accepted);
@@ -5336,3 +5336,17 @@ Expected：备机日志 `claim accepted` / `promoted to ACTIVE`；`GET /api/redu
 - **Spec 覆盖**：节点级采集健康触发（Task 22/23/26/30）、实例级组配置与校验（Task 19/20）、PointManager 逻辑映射（Task 21）、Registry 监督器与切换/回切（Task 24）、web API 与 UI（Task 25/27/28）、bin 接线（Task 26）、E2E（Task 30）。无缺口。
 - **类型一致性**：`PluginRow.redundancy_group/redundancy_role/priority` 贯穿 db/config/web/TS；`PluginInstance` 新字段贯穿 config/registry/web；`HeartbeatInfo` 三字段与 `ClaimBody.role` 在 engine/web 一致；`InstanceGroupStatus` 与 TS 类型逐字段对齐。
 - **占位符扫描**：无 TBD/TODO；所有修改点均给出完整代码或精确位置。
+
+---
+
+## 执行期修订记录（2026-08-02 实测发现）
+
+以下偏差在 Task 18 双进程 E2E 实测中发现并已修复，代码以最终实现为准：
+
+1. **`server.web_port`**：`ServerConfig` 新增 `web_port: u16`（默认 8081，`#[serde(default)]`）；`migrate_yaml_to_db` 持久化 `ws_host/ws_port/web_port` 到 `server_config`；bin 读取端口时回退到 `app_config.server.port / web_port`。原因：原实现端口只从 DB 读默认值，双机无法用不同端口部署。
+2. **`redundancy.peer_ws_port`**：`RedundancyConfig` 新增 `peer_ws_port: u16`（默认 8080）；`RedundancyEngine::new` 移除 `ws_port` 参数，TCP 第二通道探测改用 `config.peer_ws_port`。原因：同机异端口 E2E 下用本机 WS 端口探测会误判对端“可达”，导致备机不升主。
+3. **`RedundancyEngine::run()` 单机驻留**：`enabled=false` 时不再直接返回，改为长睡眠循环。原因：`tokio::select!` 命中完成的 engine 任务导致单机后端立即退出。
+4. **引擎测试节点 ID**：`claim_demotes_active_node` / `claim_from_primary_accepted_when_healthy` 的请求方 `node_id` 改为 `node-b`（引擎本机为 `node-a`），否则被“claim 来自本机”规则拒绝。
+5. **Task 18 E2E 配置**：实测用 iec104 实例（从站 :2404）代替 modbus（本机无 modbus 从站），且 `server` 增加 `web_port`、`redundancy` 增加 `peer_ws_port`。
+6. **回切前就绪探测**：`RoleCommand` 新增 `ProbeData { reply }`；主节点回切 claim 前先由 bin 启动本机插件、轮询 `MonitorCollector` 确认有插件 connected（最长 8s），失败则跳过回切。原因：E2E 发现主备均不健康时主节点会立刻抢回角色造成每 ~10s 抖动；且 iec104 握手约 2s，固定 1.5s 等待窗口不够。
+7. **Task 30 实例级 E2E**：实测用 iec104（:2404）为主、OPC UA（:4840）为备的同组实例（点位 ID 相同、协议地址不同），验证顺序切换、逻辑 ID 稳定与回切。

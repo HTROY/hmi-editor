@@ -29,6 +29,8 @@ export interface DataSourceConfig {
 export interface WebSocketConfig extends DataSourceConfig {
   type: "websocket";
   url: string;
+  /** 主备地址列表（主在前）；缺省时退回 url */
+  urls?: string[];
   protocol: string;
   reconnectInterval: number;
   heartbeatInterval: number;

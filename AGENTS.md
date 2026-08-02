@@ -5,9 +5,36 @@ Contributor guide for HMI Editor, a rail-transit HMI configuration tool with a R
 ## Project Structure & Module Organization
 
 - Frontend in `src/`: `core/` holds framework-agnostic engines (shapes, scene, variables, bindings, io, alarm, historian, auth, script, report); `editor/` holds React components (canvas, toolbar, panels); `store/editorStore.ts` is the Zustand hub. Entry: `index.html` + `src/main.tsx`; output: `dist/` (gitignored).
-- Backend in `io-backend/`: one crate per domain under `io-backend/crates/` (`hmi-io-config`, `hmi-io-db`, `hmi-io-point`, `hmi-io-monitor`, `hmi-io-plugin`, `hmi-io-bridge`, `hmi-io-server`, `hmi-io-web`, plus the `hmi-io-backend` binary crate), compiled plugins in `plugins/`, sources in `crates/plugins/<plugin>/`. All crates belong to one Cargo workspace rooted at `io-backend/Cargo.toml`. Plugins are WASIp2 components built with `wit-bindgen` against the shared contract `io-backend/wit/hmi-plugin.wit` and run on wasmtime 47 (`wasmtime` + `wasmtime-wasi` crates); the host implements the `events` import (log / on-point / on-packet) in `crates/plugin/src/host.rs`. Protocol codecs live in shared crates under `crates/shared/` (`iec104-core`, `ua-core`) and are reused by the plugin guests and by local test servers under `crates/test-servers/` (`iec104-slave` on :2404 and `opcua-server` on :4840, used for end-to-end testing against `config.yaml`).
-- Management Web UI in `io-backend/web-ui/`: React/Vite/TypeScript SPA (Ant Design 5, ECharts, react-router), built to `web-ui/dist/` and served by the backend on :8081 (SPA fallback to `index.html`); dev mode proxies `/api` to the backend via Vite on :5174. All deps are bundled (no CDN) so the console works offline.
+- Backend in `io-backend/`: one crate per domain under `io-backend/crates/` (`hmi-io-config`, `hmi-io-db`, `hmi-io-point`, `hmi-io-monitor`, `hmi-io-plugin`, `hmi-io-bridge`, `hmi-io-server`, `hmi-io-web`, plus the `hmi-io-backend` binary crate), compiled plugins in `plugins/`, sources in `crates/plugins/<plugin>/`. All crates belong to one Cargo workspace rooted at `io-backend/Cargo.toml`. Plugins are WASIp2 components built with `wit-bindgen` against the shared contract `io-backend/wit/hmi-plugin.wit` and run on wasmtime 47 (`wasmtime` + `wasmtime-wasi` crates); the host implements the `events` import (log / on-point / on-packet) in `crates/plugin/src/host.rs`. Protocol codecs live in shared crates under `crates/shared/` (`iec104-core`, `ua-core`) and are reused by the plugin guests and by local test servers under `crates/test-servers/` (`iec104-slave` on :2404 and `opcua-server` on :4840, used for end-to-end testing against `config.yaml`). Redundancy engine lives in `crates/point/src/redundancy/` (node-level state machine, heartbeat, value/config sync) and the per-instance group supervisor lives in `crates/plugin/src/registry.rs`.
+- Management Web UI in `io-backend/web-ui/`: React/Vite/TypeScript SPA (Ant Design 5, ECharts, react-router), built to `web-ui/dist/` and served by the backend on :8081 (SPA fallback to `index.html`); dev mode proxies `/api` to the backend via Vite on :5174. All deps are bundled (no CDN) so the console works offline. Pages: 运行总览 / 协议插件 / 点位配置 / 实时监控 / 冗余配置 (`/redundancy`) / 冗余监控 (`/redundancy/monitor`).
 - `ARCHITECTURE.md` documents the architecture; `config.yaml` files hold runtime configuration.
+
+## Redundancy（主备冗余）
+
+### 节点级双机热备（`redundancy.enabled: true` 时启用）
+
+- 静态角色 `role: primary|backup` + HTTP 心跳（复用 web 端口，`GET /api/redundancy/heartbeat`），备机连续 `failover_threshold` 次心跳失败且对端 WS 端口（`peer_ws_port`）TCP 探测失败后升主。
+- 备机为值同步模式：不启动插件、拒绝 WS 连接，Active 节点经 Bridge broadcast 推送点值（`POST /api/redundancy/sync`），并按 `full_snapshot_interval_ms` 补推全量快照；备机用 `PointManager::apply_sync` 写缓存。
+- 自动回切：恢复的主机先以 Standby 进入，稳定 `failback_delay_ms` 后**先探测本机数据就绪**（bin 启动插件并轮询连接，最长 8s），成功才发起 claim（`POST /api/redundancy/claim`，请求体含 `role`），避免主备均不健康时反复横跳。
+- 采集健康触发：心跳正常但对端上报 `data_healthy=false`（没有任何插件 connected 且最近 3 个扫描周期有成功扫描）连续 `plugin_unhealthy_threshold` 次 → 备机 claim 接管；受 `plugin_promotion_cooldown_ms` 冷却限制。
+- 配置快照同步：Active 节点在插件/点位/冗余配置变更后递增 `config_version` 并推送 `POST /api/redundancy/config/push`，备机事务性替换本地 DB（`Repo::apply_config_snapshot`）。
+- 端口：`server.web_port`（默认 8081）随 YAML 迁移持久化；双机部署两机配置一致（`role`、`node_id`、`peer_url`、`peer_ws_port` 按机设置）。
+- WS 行为：Standby 拒绝新连接；Active 降级时广播 `{"type":"role","state":"standby"}`，WS 服务端收到后断开全部客户端。
+
+### 实例级冗余（单机内 1 主 + 0..N 备，独立于节点级开关）
+
+- 插件实例通过 `redundancy_group` + `redundancy_role(primary|backup)` + `priority` 成组；每组恰好 1 个 primary，backup 按 `priority` 升序接管（全失败后环形回 primary）。
+- HMI 逻辑变量 ID = `组名:变量名`；`PointManager` 只广播当前活跃成员的值（非活跃成员数据丢弃），切换不改变前端绑定；写命令经 `registry.write_point` 路由到活跃成员。
+- `registry.rs` 的实例组监督器每扫描周期检查活跃成员健康（connected 且扫描新鲜），连续 `instance_failover_threshold` 次失败且过 `instance_switch_cooldown_ms` 后切换；`instance_failback_enabled` 时按 `instance_failback_delay_ms` 探测 primary 并回切。
+- `GET /api/redundancy/instance-groups` 返回组状态；`/api/points` 默认只返回 primary/独立实例点位（`?include_backup=true` 返回全部）。
+
+### 前端
+
+- HMI 编辑器 `WebSocketClient` 支持 `urls: string[]`（主在前），断线按序快速轮询；`ConnectionPanel` 的 IO 后端区块可配置主备 WS 与备用 REST API 地址。
+
+### 数据库
+
+- `plugins` 表新增可空列 `redundancy_group TEXT`、`redundancy_role TEXT`、`priority INTEGER`（幂等 `ALTER TABLE` 迁移）；`server_config` 新增 `redundancy_config`、`config_version` 键。
 
 ## Build, Test, and Development Commands
 
@@ -67,4 +94,5 @@ Backend (from repo root unless noted):
 ## Security & Configuration Tips
 
 - `config.yaml` controls ports, plugin instances, and point mappings; keep secrets out.
+- Redundancy uses `redundancy:` block: `enabled / node_id / role / peer_url / peer_ws_port / heartbeat_interval_ms / failover_threshold / failback_delay_ms / full_snapshot_interval_ms / plugin_unhealthy_threshold / plugin_promotion_cooldown_ms / instance_failover_threshold / instance_failback_enabled / instance_failback_delay_ms / instance_switch_cooldown_ms`；`server.web_port` 控制管理端口。
 - Never commit `hmi_io.db` (local SQLite). Load `.wasm` plugins only from `plugins/`; treat plugin binaries as untrusted code.

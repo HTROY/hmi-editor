@@ -142,6 +142,7 @@
 | `node_id` | "" | 节点 ID |
 | `role` | primary | 节点静态角色 |
 | `peer_url` | "" | 对端 web 地址 |
+| `peer_ws_port` | 8080 | 对端 WS 端口（双通道 TCP 探测用） |
 | `heartbeat_interval_ms` | 1000 | 心跳间隔 |
 | `failover_threshold` | 3 | 心跳丢失升主阈值 |
 | `failback_delay_ms` | 30000 | 回切稳定期 |
@@ -155,6 +156,7 @@
 
 - 插件实例增加 `redundancy_group`、`redundancy_role`、`priority`；DB `plugins` 表迁移新增三列（`redundancy_group TEXT NOT NULL DEFAULT ''`、`redundancy_role TEXT NOT NULL DEFAULT ''`、`priority INTEGER NOT NULL DEFAULT 0`）。
 - 运行时配置存 DB `server_config`（`redundancy_config` JSON + `config_version`），`AppConfig::from_repo_sync` 读回。
+- `server` 块增加 `web_port`（默认 8081）；YAML 迁移时把 `ws_host/ws_port/web_port` 持久化到 `server_config`，保证双机可用不同端口部署。
 
 ## hmi-io-point 改动
 
@@ -189,6 +191,7 @@
 
 - 心跳丢失：连续 `failover_threshold` 次且 WS 端口 TCP 探测失败才切换；期间记事件。
 - 采集不健康：连续 `plugin_unhealthy_threshold` 次上报才触发，且受 `plugin_promotion_cooldown_ms` 限制；claim 被拒（对端健康）则重置计数继续待命。
+- 回切前就绪探测：主节点（Standby）稳定期结束后先探测本机插件能否取到数据（启动插件并轮询连接，最长 8s），失败则跳过回切并等待下个周期，避免“主备都不健康”时反复横跳；数据恢复后自动回切。
 - 值同步失败：重试 + 全量快照兜底；同步中断不触发切换。
 - 配置同步：版本号单调递增，旧版本忽略；失败标记“配置未同步”并在恢复后补推。
 - 接管后插件启动失败：保持 Active 用最后同步值服务，每 5 秒重试启动，记录事件，不自动降级。

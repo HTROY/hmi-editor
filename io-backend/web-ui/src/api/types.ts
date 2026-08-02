@@ -6,6 +6,9 @@ export interface PluginRow {
   wasm_file: string;
   config_json: string;
   enabled: boolean;
+  redundancy_group: string;
+  redundancy_role: string;
+  priority: number;
 }
 
 export interface PointRow {
@@ -19,6 +22,8 @@ export interface PointRow {
   offset_val: number;
   var_type: string;
   description: string;
+  redundancy_group: string;
+  plugin_role: string;
 }
 
 export interface PointUpsert {
@@ -107,4 +112,87 @@ export interface ConfigExport {
     enabled: boolean;
     points: PointUpsert[];
   }[];
+}
+
+export interface RedundancyConfig {
+  enabled: boolean;
+  node_id: string;
+  role: "primary" | "backup";
+  peer_url: string;
+  peer_ws_port: number;
+  heartbeat_interval_ms: number;
+  failover_threshold: number;
+  failback_delay_ms: number;
+  full_snapshot_interval_ms: number;
+  plugin_unhealthy_threshold: number;
+  plugin_promotion_cooldown_ms: number;
+  instance_failover_threshold: number;
+  instance_failback_enabled: boolean;
+  instance_failback_delay_ms: number;
+  instance_switch_cooldown_ms: number;
+}
+
+export interface PeerStatus {
+  reachable: boolean;
+  active: boolean;
+  node_id: string;
+  config_version: number;
+  last_seen_ms: number;
+  rtt_ms: number;
+  rtt_avg_ms: number;
+}
+
+export interface SyncStats {
+  last_sync_ms: number;
+  points_received: number;
+  points_pushed: number;
+}
+
+export interface RedundancyEvent {
+  time_ms: number;
+  kind: string;
+  message: string;
+}
+
+export interface RedundancyPoint {
+  id: string;
+  value: string | number | boolean | null;
+  quality: string;
+  timestamp: number;
+}
+
+export interface RedundancyStatus {
+  enabled: boolean;
+  node_id: string;
+  role: string;
+  state: string;
+  config_version: number;
+  uptime_ms: number;
+  peer: PeerStatus;
+  sync: SyncStats;
+  events: RedundancyEvent[];
+  rtt_history: number[];
+  synced_points: RedundancyPoint[];
+  split_brain: boolean;
+  failover_count: number;
+  heartbeat_failures: number;
+}
+
+export interface InstanceMemberStatus {
+  name: string;
+  role: string;
+  priority: number;
+  is_active: boolean;
+  connection_state: number;
+  connection_label: string;
+}
+
+export interface InstanceGroupStatus {
+  group: string;
+  members: InstanceMemberStatus[];
+  active_instance: string;
+  consecutive_failures: number;
+  last_switch_ms: number;
+  last_switch_reason: string;
+  switch_count: number;
 }

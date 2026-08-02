@@ -8,6 +8,7 @@ import {
 } from "react-router-dom";
 import {
   AppstoreOutlined,
+  ControlOutlined,
   DashboardOutlined,
   DatabaseOutlined,
   DesktopOutlined,
@@ -29,6 +30,8 @@ import Dashboard from "./pages/Dashboard";
 import Plugins from "./pages/Plugins";
 import Points from "./pages/Points";
 import Monitor from "./pages/Monitor";
+import RedundancyConfig from "./pages/RedundancyConfig";
+import RedundancyMonitor from "./pages/RedundancyMonitor";
 import { useTheme } from "./theme";
 
 const { Sider, Header, Content } = Layout;
@@ -38,6 +41,8 @@ const MENU_ITEMS: NonNullable<MenuProps["items"]> = [
   { key: "/plugins", icon: <AppstoreOutlined />, label: "协议插件" },
   { key: "/points", icon: <DatabaseOutlined />, label: "点位配置" },
   { key: "/monitor", icon: <RadarChartOutlined />, label: "实时监控" },
+  { key: "/redundancy", icon: <ControlOutlined />, label: "冗余配置" },
+  { key: "/redundancy/monitor", icon: <RadarChartOutlined />, label: "冗余监控" },
 ];
 
 const TITLES: Record<string, string> = {
@@ -45,6 +50,8 @@ const TITLES: Record<string, string> = {
   "/plugins": "协议插件",
   "/points": "点位配置",
   "/monitor": "实时监控",
+  "/redundancy": "冗余配置",
+  "/redundancy/monitor": "冗余监控",
 };
 
 export default function App() {
@@ -125,6 +132,8 @@ export default function App() {
             <Route path="/plugins" element={<Plugins />} />
             <Route path="/points" element={<Points />} />
             <Route path="/monitor" element={<Monitor />} />
+            <Route path="/redundancy" element={<RedundancyConfig />} />
+            <Route path="/redundancy/monitor" element={<RedundancyMonitor />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Content>

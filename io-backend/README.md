@@ -92,6 +92,8 @@ cargo run -- config.yaml
 5. 在 `ws://0.0.0.0:8080/iscs/data` 监听 WebSocket 数据推送（批量 100ms）
 6. 在 `:8081` 提供管理 Web UI 与监控 API（见下方「监控与调试」）
 
+双机主备部署（可选）：两机使用同一套 `config.yaml`（`role`/`node_id`/`peer_url`/`peer_ws_port` 按机设置），`redundancy.enabled: true`；主机 Active 采集并推值，备机 Standby 只收同步，心跳丢失或主插件整组取不到数据时备机自动接管，数据恢复后自动回切。
+
 ## 配置
 
 编辑 `config.yaml` 配置文件：
@@ -122,17 +124,63 @@ plugins:
           byte_order: "ABCD" # ABCD/BADC/CDAB/DCBA（默认 ABCD）
           scale: 0.1
           var_type: "AI"
+redundancy:
+  enabled: false
+  node_id: node-a
+  role: primary
+  peer_url: "http://192.168.1.2:8081"
+  peer_ws_port: 8080
+  heartbeat_interval_ms: 1000
+  failover_threshold: 3
+  failback_delay_ms: 30000
+  full_snapshot_interval_ms: 5000
+  plugin_unhealthy_threshold: 3
+  plugin_promotion_cooldown_ms: 60000
+  instance_failover_threshold: 3
+  instance_failback_enabled: true
+  instance_failback_delay_ms: 30000
+  instance_switch_cooldown_ms: 60000
 ```
 
 - `data_type`：`bool` / `int16` / `uint16` / `int32` / `uint32` / `float32`（默认 `uint16`）
 - `byte_order`：`ABCD` / `BADC` / `CDAB` / `DCBA`（仅 modbus-tcp，默认 `ABCD`）
 - 插件解码完成后统一应用 `scale`、`offset`
 
+### 实例级主备（1 主 + 0..N 备，单机内）
+
+同一 `redundancy_group` 的实例共享一组逻辑变量（HMI ID = `组名:变量名`），backup 按 `priority` 升序接管，切换不改变前端绑定：
+
+```yaml
+plugins:
+  instances:
+    - name: iec104
+      redundancy_group: dual-link
+      redundancy_role: primary
+      wasm_file: iec104.wasm
+      config: { host: "127.0.0.1", port: 2404, common_address: 1 }
+      points:
+        - { id: "STA1_211_IA", address: "1003", data_type: "float32", var_type: "AI" }
+    - name: opc_ua_backup
+      redundancy_group: dual-link
+      redundancy_role: backup
+      priority: 1
+      wasm_file: opc_ua.wasm
+      config: { endpoint: "opc.tcp://127.0.0.1:4840" }
+      points:
+        - { id: "STA1_211_IA", address: "ns=2;s=Temperature.Zone1", var_type: "AI" }
+```
+
+校验要求：组内 primary 唯一；backup 必须填 `priority` 且组内唯一；主备实例 `variable_id` 集合完全一致。
+
 ## 监控与调试
 
 - 点值：`GET http://localhost:8081/api/monitor/plugins/<name>/points`
 - 状态总览：`GET http://localhost:8081/api/monitor/overview`
 - 报文追踪：`GET http://localhost:8081/api/monitor/plugins/<name>/packets`
+- 冗余状态：`GET http://localhost:8081/api/redundancy/status`（节点级：角色/对端/心跳 RTT/同步/事件/分裂告警）
+- 实例组状态：`GET http://localhost:8081/api/redundancy/instance-groups`
+- 冗余配置读写：`GET/PUT http://localhost:8081/api/redundancy/config`
+- Web UI：`http://localhost:8081/redundancy`（冗余配置）、`http://localhost:8081/redundancy/monitor`（冗余监控）
 - WebSocket 写点（`ws://localhost:8080/iscs/data` 发送控制消息）：
 
 ```json
@@ -144,7 +192,8 @@ plugins:
 1. 启动 `hmi-editor` 前端：`npm run dev`
 2. 打开"数据连接"面板
 3. 选择"IO 后端"数据源
-4. 点击"连接"
+4. （可选）填写备用 WebSocket 地址与备用 REST API 地址，主节点故障时自动切换
+5. 点击"连接"
 
 ## WASM 插件接口
 
@@ -188,6 +237,7 @@ io-backend/
 │   ├── config/              # hmi-io-config
 │   ├── db/                  # hmi-io-db
 │   ├── point/               # hmi-io-point
+│   │   └── redundancy/      # 节点级冗余引擎（心跳/同步/回切状态机）
 │   ├── monitor/             # hmi-io-monitor
 │   ├── plugin/              # hmi-io-plugin（WASM 插件宿主）
 │   │   ├── host.rs          # wasmtime 引擎 + events 导入实现

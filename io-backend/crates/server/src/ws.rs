@@ -42,6 +42,11 @@ pub async fn run_server(
             }
         };
         log::info!("New connection from {}", peer);
+        // 冗余模式下 Standby 节点拒绝 WS 服务（HMI 前端会尝试下一个地址）
+        if !point_manager.lock().unwrap().is_active() {
+            log::info!("Rejecting WS connection from {}: node is standby", peer);
+            continue;
+        }
         let bc_rx = broadcast_tx.subscribe();
         let reg = registry.clone();
         let pm = point_manager.clone();
@@ -97,6 +102,15 @@ async fn handle_connection(
         loop {
             match bc_rx.recv().await {
                 Ok(msg) => {
+                    // 降级消息：本机转为 Standby，立即断开所有 WS 客户端
+                    if msg.contains("\"type\":\"role\"") || msg.contains("\"type\": \"role\"") {
+                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&msg) {
+                            if v.get("state").and_then(|s| s.as_str()) == Some("standby") {
+                                log::info!("Node demoted to standby, closing WS client");
+                                break;
+                            }
+                        }
+                    }
                     // Quick check: is this a data message that needs filtering?
                     let is_data_msg =
                         msg.contains("\"type\":\"data\"") || msg.contains("\"type\": \"data\"");

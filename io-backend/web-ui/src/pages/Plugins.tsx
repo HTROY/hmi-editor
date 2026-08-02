@@ -6,6 +6,7 @@ import {
   Empty,
   Form,
   Input,
+  InputNumber,
   Modal,
   Popconfirm,
   Select,
@@ -35,6 +36,9 @@ interface PluginFormValues {
   wasm_file: string;
   config_json: string;
   enabled: boolean;
+  redundancy_group: string;
+  redundancy_role: string;
+  priority: number;
 }
 
 export default function Plugins() {
@@ -72,7 +76,13 @@ export default function Plugins() {
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
-    form.setFieldsValue({ enabled: true, config_json: "{}" });
+    form.setFieldsValue({
+      enabled: true,
+      config_json: "{}",
+      redundancy_group: "",
+      redundancy_role: "",
+      priority: 0,
+    });
     setModalOpen(true);
   };
 
@@ -83,6 +93,9 @@ export default function Plugins() {
       wasm_file: p.wasm_file,
       config_json: p.config_json,
       enabled: p.enabled,
+      redundancy_group: p.redundancy_group,
+      redundancy_role: p.redundancy_role,
+      priority: p.priority,
     });
     setModalOpen(true);
   };
@@ -187,6 +200,41 @@ export default function Plugins() {
           unCheckedChildren="关"
         />
       ),
+    },
+    {
+      title: "冗余组",
+      dataIndex: "redundancy_group",
+      width: 110,
+      render: (v: string) =>
+        v ? (
+          <Tag color="blue">{v}</Tag>
+        ) : (
+          <span style={{ opacity: 0.35 }}>-</span>
+        ),
+    },
+    {
+      title: "角色",
+      dataIndex: "redundancy_role",
+      width: 100,
+      render: (v: string) =>
+        v === "primary" ? (
+          <Tag color="green">主</Tag>
+        ) : v === "backup" ? (
+          <Tag color="orange">备</Tag>
+        ) : (
+          <span style={{ opacity: 0.35 }}>-</span>
+        ),
+    },
+    {
+      title: "优先级",
+      dataIndex: "priority",
+      width: 80,
+      render: (v: number) =>
+        v > 0 ? (
+          <span className="mono">{v}</span>
+        ) : (
+          <span style={{ opacity: 0.35 }}>-</span>
+        ),
     },
     {
       title: "操作",
@@ -308,6 +356,31 @@ export default function Plugins() {
                 { value: false, label: "停用" },
               ]}
             />
+          </Form.Item>
+          <Form.Item name="redundancy_group" label="冗余组（可选）">
+            <Input placeholder="如 mb-link" />
+          </Form.Item>
+          <Form.Item name="redundancy_role" label="组内角色">
+            <Select
+              options={[
+                { value: "", label: "无" },
+                { value: "primary", label: "主 primary" },
+                { value: "backup", label: "备 backup" },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate>
+            {({ getFieldValue }) =>
+              getFieldValue("redundancy_role") === "backup" ? (
+                <Form.Item
+                  name="priority"
+                  label="切换优先级（越小越先）"
+                  rules={[{ required: true, message: "请输入优先级" }]}
+                >
+                  <InputNumber min={1} style={{ width: "100%" }} />
+                </Form.Item>
+              ) : null
+            }
           </Form.Item>
         </Form>
       </Modal>
