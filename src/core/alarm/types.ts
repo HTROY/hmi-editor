@@ -68,7 +68,8 @@ export interface SOERecord {
 
 /** WS alarm_update 消息载荷 */
 export interface AlarmUpdateMessage {
-  eventType: AlarmEventType;
+  /** Backend WS envelope uses snake_case event_type (REST payloads are camelCase). */
+  event_type: AlarmEventType;
   occurrence: AlarmOccurrence;
 }
 
@@ -78,7 +79,7 @@ export interface AlarmHistoryQuery {
   severity?: AlarmSeverity | "";
   group?: string;
   variableId?: string;
-  status?: AlarmStatus | "";
+  status?: AlarmStatus | "unacknowledged" | "";
   page?: number;
   pageSize?: number;
 }

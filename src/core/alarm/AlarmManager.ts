@@ -328,7 +328,13 @@ export class AlarmManager {
     if (q.severity) items = items.filter((o) => o.severity === q.severity);
     if (q.group) items = items.filter((o) => o.group === q.group);
     if (q.variableId) items = items.filter((o) => o.variableId === q.variableId);
-    if (q.status) items = items.filter((o) => o.status === q.status);
+    if (q.status === "unacknowledged") {
+      items = items.filter((o) => o.acknowledgedAt == null);
+    } else if (q.status === "acknowledged") {
+      items = items.filter((o) => o.acknowledgedAt != null);
+    } else if (q.status) {
+      items = items.filter((o) => o.status === q.status);
+    }
     const page = q.page ?? 1;
     const size = q.pageSize ?? 100;
     this.historyOccurrences = items.slice((page - 1) * size, page * size);
@@ -419,7 +425,12 @@ export class AlarmManager {
   }
 
   private async refreshAll(): Promise<void> {
-    await Promise.all([this.fetchActive(), this.fetchHistory(), this.fetchSOE()]);
+    await Promise.all([
+      this.fetchActive(),
+      this.fetchHistory(),
+      this.fetchSOE(),
+      this.fetchRules(),
+    ]);
     this.notify();
   }
 
@@ -443,6 +454,12 @@ export class AlarmManager {
     for (const r of paged.items) this.soeSeqSeen.add(r.seq);
   }
 
+  private async fetchRules(): Promise<void> {
+    const rules = await this.request<AlarmRule[]>("/api/alarm/rules");
+    this.rules.clear();
+    for (const r of rules) this.rules.set(r.id, r);
+  }
+
   private handleRemoteMessage(msg: { type: string; data?: any }): void {
     switch (msg.type) {
       case "alarm_snapshot":
@@ -451,7 +468,26 @@ export class AlarmManager {
         break;
       case "alarm_update": {
         const update = msg.data as AlarmUpdateMessage;
-        this.applyRemoteUpdate(update);
+        this.applyRemoteUpdate({
+          eventType: update.event_type,
+          occurrence: update.occurrence,
+        });
+        this.notify();
+        break;
+      }
+      case "alarm_rules": {
+        const rules = msg.data as AlarmRule[];
+        this.rules.clear();
+        for (const r of rules) this.rules.set(r.id, r);
+        this.notify();
+        break;
+      }
+      case "alarm_rules_changed": {
+        this.fetchRules()
+          .then(() => this.notify())
+          .catch((err) =>
+            console.warn("[AlarmManager] refresh backend alarm rules failed:", err),
+          );
         this.notify();
         break;
       }
@@ -473,7 +509,10 @@ export class AlarmManager {
     }
   }
 
-  private applyRemoteUpdate(update: AlarmUpdateMessage): void {
+  private applyRemoteUpdate(update: {
+    eventType: AlarmEventType;
+    occurrence: AlarmOccurrence;
+  }): void {
     const occ = update.occurrence;
     if (update.eventType === "trigger") {
       if (occ.status === "recovered") {

@@ -686,8 +686,20 @@ impl Repo {
             args.push(Box::new(v.to_string()));
         }
         if let Some(v) = status {
-            conds.push(format!("status = ?{}", args.len() + 1));
-            args.push(Box::new(v.to_string()));
+            match v {
+                // 按确认状态过滤：已确认 = 存在确认时间（无论是否已恢复）
+                "acknowledged" => {
+                    conds.push("acknowledged_at IS NOT NULL".to_string());
+                }
+                // 未确认 = 尚无确认时间（含活跃未确认与恢复后未确认）
+                "unacknowledged" => {
+                    conds.push("acknowledged_at IS NULL".to_string());
+                }
+                _ => {
+                    conds.push(format!("status = ?{}", args.len() + 1));
+                    args.push(Box::new(v.to_string()));
+                }
+            }
         }
         let where_sql = if conds.is_empty() {
             String::new()
@@ -922,5 +934,65 @@ mod tests {
         let p = repo.get_plugin(pid).unwrap().unwrap();
         assert_eq!(p.redundancy_role, "backup");
         assert_eq!(p.priority, 2);
+    }
+
+    #[test]
+    fn alarm_history_ack_filter_matches_acknowledgement_state() {
+        let repo = Repo::new(":memory:").unwrap();
+        let mut row = AlarmOccurrenceRow {
+            id: String::new(),
+            rule_id: "R1".into(),
+            variable_id: "P1".into(),
+            name: "test".into(),
+            severity: "major".into(),
+            group_name: "g".into(),
+            message: "m".into(),
+            value: "1".into(),
+            threshold: 0.0,
+            status: "active".into(),
+            triggered_at: 100,
+            recovered_at: None,
+            recovered_reason: String::new(),
+            acknowledged_at: None,
+            acknowledged_by: String::new(),
+        };
+
+        row.id = "OCC_ACTIVE_UNACK".into();
+        repo.upsert_alarm_occurrence(&row).unwrap();
+
+        row.id = "OCC_ACTIVE_ACK".into();
+        row.status = "acknowledged".into();
+        row.acknowledged_at = Some(200);
+        row.acknowledged_by = "op".into();
+        repo.upsert_alarm_occurrence(&row).unwrap();
+
+        row.id = "OCC_RECOVERED_ACK".into();
+        row.status = "recovered".into();
+        row.recovered_at = Some(300);
+        repo.upsert_alarm_occurrence(&row).unwrap();
+
+        row.id = "OCC_RECOVERED_UNACK".into();
+        row.status = "recovered".into();
+        row.acknowledged_at = None;
+        row.acknowledged_by = String::new();
+        repo.upsert_alarm_occurrence(&row).unwrap();
+
+        let (total_ack, rows_ack) = repo
+            .query_alarm_occurrences(None, None, None, None, None, Some("acknowledged"), 1, 10)
+            .unwrap();
+        assert_eq!(total_ack, 2);
+        let ack_ids: Vec<&str> = rows_ack.iter().map(|r| r.id.as_str()).collect();
+        assert!(ack_ids.contains(&"OCC_ACTIVE_ACK"));
+        assert!(ack_ids.contains(&"OCC_RECOVERED_ACK"));
+
+        let (total_unack, _) = repo
+            .query_alarm_occurrences(None, None, None, None, None, Some("unacknowledged"), 1, 10)
+            .unwrap();
+        assert_eq!(total_unack, 2);
+
+        let (total_recovered, _) = repo
+            .query_alarm_occurrences(None, None, None, None, None, Some("recovered"), 1, 10)
+            .unwrap();
+        assert_eq!(total_recovered, 2);
     }
 }

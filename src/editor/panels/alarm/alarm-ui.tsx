@@ -79,11 +79,18 @@ export function ActiveAlarmRow({
 }) {
   const sc = SEVERITY_CONFIG[alarm.severity] ?? SEVERITY_CONFIG.warning;
   return (
-    <div className="alarm-row" style={{ borderLeftColor: sc.color }}>
+    <div
+      className={"alarm-row" + (alarm.status === "active" ? " unacked" : "")}
+      style={{ borderLeftColor: sc.color }}
+    >
       <div className="alarm-row-header">
         <SeverityTag severity={alarm.severity} />
-        <span className="alarm-name">{alarm.name}</span>
-        <span className="alarm-var">{alarm.variableId}</span>
+        <span className="alarm-name" title={alarm.name}>
+          {alarm.name}
+        </span>
+        <span className="alarm-var" title={alarm.variableId}>
+          {alarm.variableId}
+        </span>
         <span className="alarm-time">{formatTime(alarm.triggeredAt)}</span>
       </div>
       <div className="alarm-row-detail">
@@ -130,11 +137,18 @@ export function HistoryAlarmRow({
   const sc = SEVERITY_CONFIG[alarm.severity] ?? SEVERITY_CONFIG.warning;
   const unacked = alarm.status === "recovered" && alarm.acknowledgedAt == null;
   return (
-    <div className="alarm-row history-row" style={{ borderLeftColor: sc.color }}>
+    <div
+      className={"alarm-row history-row" + (unacked ? " unacked" : "")}
+      style={{ borderLeftColor: sc.color }}
+    >
       <div className="alarm-row-header">
         <SeverityTag severity={alarm.severity} />
-        <span className="alarm-name">{alarm.name}</span>
-        <span className="alarm-var">{alarm.variableId}</span>
+        <span className="alarm-name" title={alarm.name}>
+          {alarm.name}
+        </span>
+        <span className="alarm-var" title={alarm.variableId}>
+          {alarm.variableId}
+        </span>
         <span className="alarm-time">{formatTime(alarm.triggeredAt)}</span>
         <button className="btn-icon" title="明细" onClick={onToggle}>
           {expanded ? "▾" : "▸"}

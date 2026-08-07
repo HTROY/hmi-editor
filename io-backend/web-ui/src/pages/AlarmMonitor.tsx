@@ -62,7 +62,7 @@ export default function AlarmMonitor() {
 
   const [histPage, setHistPage] = useState(1);
   const [histSeverity, setHistSeverity] = useState<AlarmSeverity | "">("");
-  const [histStatus, setHistStatus] = useState<AlarmStatus | "">("");
+  const [histStatus, setHistStatus] = useState<AlarmStatus | "unacknowledged" | "">("");
   const [soePage, setSoePage] = useState(1);
   const [soeQuality, setSoeQuality] = useState("");
 
@@ -360,8 +360,9 @@ export default function AlarmMonitor() {
                         setHistPage(1);
                       }}
                       options={[
-                        { value: "active", label: "未恢复" },
+                        { value: "unacknowledged", label: "未确认" },
                         { value: "acknowledged", label: "已确认" },
+                        { value: "active", label: "未恢复" },
                         { value: "recovered", label: "已恢复" },
                       ]}
                     />

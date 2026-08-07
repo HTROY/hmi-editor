@@ -39,7 +39,7 @@ export function AlarmCenter({ onClose }: { onClose: () => void }) {
 
   const [histPage, setHistPage] = useState(1);
   const [histSeverity, setHistSeverity] = useState<AlarmSeverity | "">("");
-  const [histStatus, setHistStatus] = useState<AlarmStatus | "">("");
+  const [histStatus, setHistStatus] = useState<AlarmStatus | "unacknowledged" | "">("");
   const [histVar, setHistVar] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [streamEvents, setStreamEvents] = useState<
@@ -165,13 +165,13 @@ export function AlarmCenter({ onClose }: { onClose: () => void }) {
               }
               onClick={() => setRightTab("history")}
             >
-              报警历史
+              报警历史 ({historyTotal})
             </button>
             <button
               className={"alarm-tab" + (rightTab === "soe" ? " active" : "")}
               onClick={() => setRightTab("soe")}
             >
-              SOE
+              SOE ({soeTotal})
             </button>
             {mode === "local" && (
               <button
@@ -207,8 +207,9 @@ export function AlarmCenter({ onClose }: { onClose: () => void }) {
                   }}
                 >
                   <option value="">全部状态</option>
-                  <option value="active">未恢复</option>
+                  <option value="unacknowledged">未确认</option>
                   <option value="acknowledged">已确认</option>
+                  <option value="active">未恢复</option>
                   <option value="recovered">已恢复</option>
                 </select>
                 <select
@@ -276,9 +277,16 @@ export function AlarmCenter({ onClose }: { onClose: () => void }) {
                   <option value="good">良好</option>
                   <option value="bad">无效</option>
                   <option value="uncertain">不确定</option>
-                </select>
-              </div>
-              <div className="soe-list alarm-center-scroll">
+              </select>
+            </div>
+            <div className="soe-list-head">
+              <span>时间</span>
+              <span>变量</span>
+              <span>值</span>
+              <span>质量</span>
+              <span>来源</span>
+            </div>
+            <div className="soe-list alarm-center-scroll">
                 {soeRecords.length === 0 && (
                   <div className="panel-hint">暂无 SOE 记录</div>
                 )}

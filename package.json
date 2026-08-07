@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test:alarm": "tsc -p scripts/alarm-remote-test/tsconfig.json && node scripts/alarm-remote-test/out/scripts/alarm-remote-test/repro.js",
     "preview": "vite preview",
     "format": "prettier --write ."
   },

@@ -119,6 +119,7 @@ function App() {
               visitedPanels.has(t.key) ? (
                 <div
                   key={t.key}
+                  className="panel-host"
                   style={{ display: rp === t.key ? undefined : "none" }}
                 >
                   {PANELS[t.key]}

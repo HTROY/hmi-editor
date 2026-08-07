@@ -24,7 +24,7 @@ export function AlarmPanel() {
 
   const [histPage, setHistPage] = useState(1);
   const [histSeverity, setHistSeverity] = useState<AlarmSeverity | "">("");
-  const [histStatus, setHistStatus] = useState<AlarmStatus | "">("");
+  const [histStatus, setHistStatus] = useState<AlarmStatus | "unacknowledged" | "">("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [streamEvents, setStreamEvents] = useState<
     Map<string, AlarmStreamEvent[]>
@@ -133,13 +133,13 @@ export function AlarmPanel() {
             className={"alarm-tab" + (activeTab === "history" ? " active" : "")}
             onClick={() => setActiveTab("history")}
           >
-            历史
+            历史 ({historyTotal})
           </button>
           <button
             className={"alarm-tab" + (activeTab === "soe" ? " active" : "")}
             onClick={() => setActiveTab("soe")}
           >
-            SOE
+            SOE ({soeTotal})
           </button>
         </div>
 
@@ -149,7 +149,6 @@ export function AlarmPanel() {
               <button
                 className="btn btn-sm btn-full"
                 onClick={() => acknowledgeAllAlarms()}
-                style={{ marginBottom: 4 }}
               >
                 确认全部 ({unackCount})
               </button>
@@ -190,12 +189,13 @@ export function AlarmPanel() {
                   setHistStatus(e.target.value as AlarmStatus | "");
                   setHistPage(1);
                 }}
-              >
-                <option value="">全部状态</option>
-                <option value="active">未恢复</option>
-                <option value="acknowledged">已确认</option>
-                <option value="recovered">已恢复</option>
-              </select>
+                >
+                  <option value="">全部状态</option>
+                  <option value="unacknowledged">未确认</option>
+                  <option value="acknowledged">已确认</option>
+                  <option value="active">未恢复</option>
+                  <option value="recovered">已恢复</option>
+                </select>
             </div>
             {historyAlarms.length === 0 && (
               <div className="panel-hint">暂无报警历史</div>
@@ -241,6 +241,13 @@ export function AlarmPanel() {
                 <option value="bad">无效</option>
                 <option value="uncertain">不确定</option>
               </select>
+            </div>
+            <div className="soe-list-head">
+              <span>时间</span>
+              <span>变量</span>
+              <span>值</span>
+              <span>质量</span>
+              <span>来源</span>
             </div>
             <div className="soe-list">
               {soeRecords.length === 0 && (

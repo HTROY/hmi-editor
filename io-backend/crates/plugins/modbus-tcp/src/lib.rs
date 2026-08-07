@@ -465,6 +465,10 @@ impl Guest for Plugin {
             Some(s) => s.clone(),
             None => return 1,
         };
+        // Re-entrant: close any stale socket before opening a new connection.
+        if let Some(mut old) = STREAM.lock().unwrap().take() {
+            let _ = old.close();
+        }
         events::log(2, format!("Modbus TCP connecting {}:{}...", s.host, s.port)).await;
         match Mbap::connect(
             &s.host,
@@ -483,6 +487,9 @@ impl Guest for Plugin {
                 0
             }
             Err(e) => {
+                if let Some(st) = STATE.lock().unwrap().as_mut() {
+                    st.connected = false;
+                }
                 events::log(1, format!("connect failed: {}", e)).await;
                 1
             }
@@ -508,24 +515,35 @@ impl Guest for Plugin {
         if !s.connected {
             return 1;
         }
-        let mut stream_guard = STREAM.lock().unwrap();
-        let stream = match stream_guard.as_mut() {
-            Some(stream) => stream,
-            None => return 1,
-        };
         s.scan_count += 1;
         let now = now_ms();
         let points = s.points.clone();
-        for pt in &points {
-            match mb_read(stream, pt).await {
-                Ok(v) => {
-                    events::on_point(pt.variable_id.clone(), v, "good".to_string(), now).await;
-                }
-                Err(e) => {
-                    events::on_point(pt.variable_id.clone(), 0.0, "bad".to_string(), now).await;
-                    events::log(1, e).await;
+        let mut had_error = false;
+        {
+            let mut stream_guard = STREAM.lock().unwrap();
+            let stream = match stream_guard.as_mut() {
+                Some(stream) => stream,
+                None => return 1,
+            };
+            for pt in &points {
+                match mb_read(stream, pt).await {
+                    Ok(v) => {
+                        events::on_point(pt.variable_id.clone(), v, "good".to_string(), now).await;
+                    }
+                    Err(e) => {
+                        had_error = true;
+                        events::on_point(pt.variable_id.clone(), 0.0, "bad".to_string(), now).await;
+                        events::log(1, e).await;
+                    }
                 }
             }
+        }
+        if had_error {
+            s.connected = false;
+            if let Some(mut t) = STREAM.lock().unwrap().take() {
+                let _ = t.close();
+            }
+            return 1;
         }
         0
     }
@@ -577,6 +595,13 @@ impl Guest for Plugin {
             }
             Err(e) => {
                 events::log(1, format!("write {} failed: {}", name, e)).await;
+                drop(stream_guard);
+                if let Some(st) = STATE.lock().unwrap().as_mut() {
+                    st.connected = false;
+                }
+                if let Some(mut t) = STREAM.lock().unwrap().take() {
+                    let _ = t.close();
+                }
                 4
             }
         }

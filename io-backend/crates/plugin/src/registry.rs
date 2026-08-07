@@ -748,8 +748,9 @@ async fn run_plugin_actor(
                     Ok(code) => {
                         monitor.record_error(&name, &format!("scan_points returned code {}", code));
                         log::warn!("[{}] scan_points: {}", name, code);
-                        let connected = plugin.get_status().await.unwrap_or(0) == 2;
-                        if !connected && last_reconnect.elapsed() >= RECONNECT_MIN_INTERVAL {
+                        let status = plugin.get_status().await.unwrap_or(0);
+                        monitor.set_connection_state(&name, status as i32);
+                        if status != 2 && last_reconnect.elapsed() >= RECONNECT_MIN_INTERVAL {
                             last_reconnect = std::time::Instant::now();
                             log::info!("[{}] link lost, attempting reconnect...", name);
                             match plugin.connect().await {
@@ -760,10 +761,13 @@ async fn run_plugin_actor(
                                 Ok(r) => {
                                     monitor.record_error(&name, &format!("reconnect failed code {}", r));
                                     log::warn!("[{}] reconnect failed: {}", name, r);
+                                    let s = plugin.get_status().await.unwrap_or(0);
+                                    monitor.set_connection_state(&name, s as i32);
                                 }
                                 Err(e) => {
                                     monitor.record_error(&name, &format!("reconnect error: {}", e));
                                     log::warn!("[{}] reconnect error: {}", name, e);
+                                    monitor.set_connection_state(&name, 0);
                                 }
                             }
                         }
@@ -771,6 +775,8 @@ async fn run_plugin_actor(
                     Err(e) => {
                         monitor.record_error(&name, &e.to_string());
                         log::error!("[{}] scan_points error: {}", name, e);
+                        let s = plugin.get_status().await.unwrap_or(0);
+                        monitor.set_connection_state(&name, s as i32);
                     }
                 }
             }

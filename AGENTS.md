@@ -63,6 +63,25 @@ Backend (from repo root unless noted):
 - `cargo test -p <plugin>` (e.g. `cargo test -p modbus-tcp-plugin`) — run plugin unit tests (e.g. encode/decode helpers in modbus-tcp)
 - `cargo build -p iec104-slave -p opcua-server` (in `io-backend/`) — build/run the local IEC 60870-5-104 slave (:2404) and OPC UA server (:4840) simulators; start each binary manually for E2E tests against the backend
 
+### Rust builds inside the Codex sandbox
+
+本机的 `cargo` 是 rustup 代理且没有默认 toolchain，全局 Cargo 配置（`E:\packages\cargo\config.toml`）又把 `build-dir` 指向沙箱不可写的 `E:\packages\rust-targets`，所以沙箱内 `cargo build` 会报 `failed to open: ...\.cargo-build-lock`（拒绝访问）和 `attempt to write a readonly database`（后者只是警告，可忽略）。按以下步骤构建：
+
+1. 指向真实工具链：`$env:RUSTUP_HOME = "E:\packages\cargo\Related Directories\.rustup"`（stable toolchain 装在这里）。
+2. 不要改全局配置。临时创建 `io-backend/.cargo/config.toml`，把 `target-dir` 和 `build-dir` **同时**指到可写临时目录（cargo 1.9x 用 `build-dir` 放 `.cargo-build-lock`，且沙箱禁止在工作区内创建该文件）：
+
+   ```toml
+   [build]
+   target-dir = "C:/Users/huangcheng/AppData/Local/Temp/hmi-cargo-build"
+   build-dir = "C:/Users/huangcheng/AppData/Local/Temp/hmi-cargo-build"
+   ```
+
+3. 在 `io-backend/` 下执行 `cargo build --target wasm32-wasip2 -p <plugin>` 或 `cargo build -p hmi-io-backend`（`cargo test` 同理）。
+4. 把产物拷回工作区：覆盖 `plugins/*.wasm` 可以直接写；`target/debug/hmi-io-backend.exe` 被沙箱写保护，拷成新文件名（如 `hmi-io-backend-fixed.exe`），测试时用 `HMI_BACKEND` 环境变量指向它，或让用户自己在普通终端跑 `.\scripts\build.ps1 -BackendOnly` 刷新正式二进制。
+5. 构建成功后删除临时 `io-backend/.cargo/config.toml`，恢复机器默认配置。
+
+完成标准：`cargo build` 退出码为 0 且产物已就位。普通（非沙箱）终端里 `.\scripts\build.ps1` 无需任何变通。
+
 ## WASM Plugin Contract
 
 - Single source of truth: `io-backend/wit/hmi-plugin.wit` — package `hmi:plugin`, exports `lifecycle` (init/connect/disconnect/scan-points/write-point/get-name/get-status), imports `events` (log/on-point/on-packet); all functions are `async`.

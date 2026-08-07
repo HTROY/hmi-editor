@@ -1705,3 +1705,331 @@ button {
   gap: 8px;
   margin-top: 10px;
 }
+
+/* ============================================================
+   Alarm & SOE readability pass
+   ============================================================ */
+.btn-full {
+  width: 100%;
+}
+
+.panel-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.alarm-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  margin-bottom: 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.alarm-tab {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.alarm-tab:hover {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+}
+.alarm-tab.active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--border-default);
+}
+
+.alarm-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.alarm-content > .btn-full {
+  margin-bottom: 8px;
+}
+
+/* 让报警/SOE 内容区撑满外层面板高度，滚动只发生在内容区内 */
+.panel-host {
+  height: 100%;
+  min-height: 0;
+}
+
+.alarm-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.alarm-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border-subtle);
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  cursor: default;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.alarm-row:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-default);
+}
+
+.alarm-row-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.alarm-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.alarm-var {
+  max-width: 42%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  flex-shrink: 1;
+}
+
+.alarm-time {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.alarm-row-detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  padding: 1px 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.alarm-row-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.alarm-status {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.alarm-row-footer .btn {
+  margin-left: auto;
+  min-width: 52px;
+  height: 26px;
+}
+
+.alarm-ack-by {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.alarm-severity {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.alarm-events {
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: var(--bg-app);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.alarm-event-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px;
+  font-size: 11px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.alarm-event-row:last-child {
+  border-bottom: none;
+}
+
+.alarm-filter-row {
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.alarm-filter-row select {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.alarm-pager {
+  margin-top: 10px;
+  gap: 10px;
+  font-size: 11px;
+}
+.alarm-pager .btn {
+  min-width: 28px;
+  height: 26px;
+  padding: 0 8px;
+}
+
+.alarm-mode-badge {
+  font-size: 9.5px;
+  padding: 2px 8px;
+}
+
+.alarm-panel .panel-title .btn-icon {
+  width: 26px;
+  height: 26px;
+}
+
+.soe-list-head,
+.soe-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 64px 52px 54px;
+  gap: 8px;
+  align-items: center;
+}
+
+.soe-list-head {
+  padding: 0 10px 4px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.soe-list {
+  gap: 3px;
+}
+.alarm-panel .soe-list {
+  max-height: none;
+  overflow: visible;
+}
+.alarm-center .soe-list {
+  max-height: none;
+}
+
+.soe-row {
+  padding: 7px 10px;
+  font-size: 11px;
+  background: var(--bg-surface);
+  border: 1px solid transparent;
+  border-left: 2px solid transparent;
+  border-radius: var(--radius-sm);
+}
+.soe-row:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-subtle);
+}
+
+.soe-time {
+  width: auto;
+  font-size: 10.5px;
+}
+.soe-var {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.soe-val {
+  width: auto;
+  font-size: 11.5px;
+  text-align: right;
+}
+.soe-quality {
+  width: auto;
+  font-size: 9.5px;
+  padding: 2px 6px;
+}
+.soe-source {
+  width: auto;
+  text-align: right;
+}
+
+.btn:focus-visible,
+.btn-icon:focus-visible,
+.alarm-tab:focus-visible,
+.alarm-filter-row select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@keyframes alarmDotPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.alarm-row.unacked .alarm-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: alarmDotPulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alarm-row.unacked .alarm-status::before {
+    animation: none;
+  }
+}

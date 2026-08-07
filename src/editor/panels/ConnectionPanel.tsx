@@ -49,6 +49,17 @@ export function ConnectionPanel() {
   const ioBackendApiUrlRef = React.useRef(ioBackendApiUrl);
   ioBackendApiUrlRef.current = ioBackendApiUrl;
 
+  // 连接后端时自动启用报警/SOE 数据流（remote 模式），无需再点工具栏「模拟」。
+  const startBackendAlarmFeed = React.useCallback((apiUrl?: string) => {
+    const s = useEditorStore.getState();
+    s.alarmManager.setMode("remote");
+    s.alarmManager.setRemote(
+      s.dataBridge.wsClient,
+      apiUrl || s.dataBridge.getApiBaseUrl() || "http://localhost:8081",
+    );
+    s.alarmManager.start();
+  }, []);
+
   // 监听状态变化
   useEffect(() => {
     if (!dataBridge) return;
@@ -72,10 +83,10 @@ export function ConnectionPanel() {
     // 面板挂载时检查是否已连接
     if (
       dataBridge.active === "io_backend" &&
-      dataBridge.getStatus("websocket") === "connected" &&
-      !hasFetchedRef.current
+      dataBridge.getStatus("websocket") === "connected"
     ) {
-      doFetch();
+      if (!hasFetchedRef.current) doFetch();
+      startBackendAlarmFeed(ioBackendApiUrlRef.current);
     }
 
     const unsub = dataBridge.onStatus((source, status) => {
@@ -85,10 +96,10 @@ export function ConnectionPanel() {
       if (
         source === "websocket" &&
         status === "connected" &&
-        dataBridge.active === "io_backend" &&
-        !hasFetchedRef.current
+        dataBridge.active === "io_backend"
       ) {
-        doFetch();
+        if (!hasFetchedRef.current) doFetch();
+        startBackendAlarmFeed(ioBackendApiUrlRef.current);
       }
 
       // 断开时重置拉取标记
@@ -97,7 +108,7 @@ export function ConnectionPanel() {
       }
     });
     return unsub;
-  }, [dataBridge]);
+  }, [dataBridge, startBackendAlarmFeed]);
 
   const handleSubscribeFilter = (varIds: string[]) => {
     setSubscribedVarIds(varIds);
@@ -117,6 +128,7 @@ export function ConnectionPanel() {
     // 只停止当前数据源，不自动连接（等待用户点击「连接」按钮）
     if (dataBridge?.active !== "simulation") {
       dataBridge?.stop();
+      useEditorStore.getState().alarmManager.stop();
     }
 
     // 预配置 io_backend 的 WebSocket URL
@@ -178,11 +190,15 @@ export function ConnectionPanel() {
 
     // 建立连接
     dataBridge?.setActiveSource(activeSource);
+    if (activeSource === "io_backend" || activeSource === "websocket") {
+      startBackendAlarmFeed(ioBackendApiUrlRef.current);
+    }
   };
 
   const handleDisconnect = () => {
     if (simRunning) toggleSimulation();
     dataBridge?.stop();
+    useEditorStore.getState().alarmManager.stop();
   };
 
   const handleStartSim = () => {
