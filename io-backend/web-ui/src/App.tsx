@@ -14,11 +14,14 @@ import {
   DesktopOutlined,
   MoonOutlined,
   RadarChartOutlined,
+  SettingOutlined,
   SunOutlined,
+  WarningOutlined,
 } from "@ant-design/icons";
 import {
   Breadcrumb,
   Button,
+  Input,
   Layout,
   Menu,
   Space,
@@ -32,7 +35,10 @@ import Points from "./pages/Points";
 import Monitor from "./pages/Monitor";
 import RedundancyConfig from "./pages/RedundancyConfig";
 import RedundancyMonitor from "./pages/RedundancyMonitor";
+import AlarmMonitor from "./pages/AlarmMonitor";
+import AlarmRules from "./pages/AlarmRules";
 import { useTheme } from "./theme";
+import { getOperator, setOperator } from "./operator";
 
 const { Sider, Header, Content } = Layout;
 
@@ -41,6 +47,8 @@ const MENU_ITEMS: NonNullable<MenuProps["items"]> = [
   { key: "/plugins", icon: <AppstoreOutlined />, label: "协议插件" },
   { key: "/points", icon: <DatabaseOutlined />, label: "点位配置" },
   { key: "/monitor", icon: <RadarChartOutlined />, label: "实时监控" },
+  { key: "/alarm", icon: <WarningOutlined />, label: "报警监控" },
+  { key: "/alarm/rules", icon: <SettingOutlined />, label: "报警规则" },
   { key: "/redundancy", icon: <ControlOutlined />, label: "冗余配置" },
   { key: "/redundancy/monitor", icon: <RadarChartOutlined />, label: "冗余监控" },
 ];
@@ -50,6 +58,8 @@ const TITLES: Record<string, string> = {
   "/plugins": "协议插件",
   "/points": "点位配置",
   "/monitor": "实时监控",
+  "/alarm": "报警监控",
+  "/alarm/rules": "报警规则",
   "/redundancy": "冗余配置",
   "/redundancy/monitor": "冗余监控",
 };
@@ -60,6 +70,7 @@ export default function App() {
   const navigate = useNavigate();
   const { isDark, toggle } = useTheme();
   const { token } = antdTheme.useToken();
+  const [operator, setOperatorState] = useState(getOperator());
 
   const selected = MENU_ITEMS.some((i) => i?.key === location.pathname)
     ? location.pathname
@@ -118,6 +129,15 @@ export default function App() {
             <Tag color="blue" icon={<RadarChartOutlined />}>
               实时刷新
             </Tag>
+            <Input
+              size="small"
+              style={{ width: 130 }}
+              prefix="操作员"
+              value={operator}
+              onChange={(e) => setOperatorState(e.target.value)}
+              onBlur={() => setOperator(operator)}
+              onPressEnter={() => setOperator(operator)}
+            />
             <Button
               type="text"
               icon={isDark ? <SunOutlined /> : <MoonOutlined />}
@@ -132,6 +152,8 @@ export default function App() {
             <Route path="/plugins" element={<Plugins />} />
             <Route path="/points" element={<Points />} />
             <Route path="/monitor" element={<Monitor />} />
+            <Route path="/alarm" element={<AlarmMonitor />} />
+            <Route path="/alarm/rules" element={<AlarmRules />} />
             <Route path="/redundancy" element={<RedundancyConfig />} />
             <Route path="/redundancy/monitor" element={<RedundancyMonitor />} />
             <Route path="*" element={<Navigate to="/" replace />} />

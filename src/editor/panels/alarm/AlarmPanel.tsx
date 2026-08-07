@@ -1,169 +1,265 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useEditorStore } from "../../../store/editorStore";
-import type { AlarmEvent } from "../../../core/alarm/types";
+import type {
+  AlarmStreamEvent,
+  AlarmSeverity,
+  AlarmStatus,
+} from "../../../core/alarm/types";
+import {
+  ActiveAlarmRow,
+  HistoryAlarmRow,
+  Pager,
+  SoeRowItem,
+} from "./alarm-ui";
+import { AlarmCenter } from "./AlarmCenter";
 
-// ============================================================
-// AlarmPanel — 报警与事件面板
-// ============================================================
-
-const SEVERITY_CONFIG: Record<
-  string,
-  { label: string; color: string; bg: string }
-> = {
-  critical: { label: "紧急", color: "#FF2020", bg: "#2A1010" },
-  major: { label: "严重", color: "#E06020", bg: "#2A1A10" },
-  minor: { label: "一般", color: "#E0C020", bg: "#2A2410" },
-  warning: { label: "预警", color: "#60A0E0", bg: "#101A2A" },
-};
+type TabKey = "active" | "history" | "soe";
 
 export function AlarmPanel() {
   const { alarmManager, acknowledgeAlarm, acknowledgeAllAlarms } =
     useEditorStore();
-  const [activeTab, setActiveTab] = useState<"active" | "history" | "soe">(
-    "active",
-  );
   const [, forceUpdate] = useState(0);
+  const [activeTab, setActiveTab] = useState<TabKey>("active");
+  const [showCenter, setShowCenter] = useState(false);
 
-  const activeAlarms = alarmManager?.getActiveAlarms() ?? [];
-  const soeRecords = alarmManager?.getSOERecords(50) ?? [];
+  const [histPage, setHistPage] = useState(1);
+  const [histSeverity, setHistSeverity] = useState<AlarmSeverity | "">("");
+  const [histStatus, setHistStatus] = useState<AlarmStatus | "">("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [streamEvents, setStreamEvents] = useState<
+    Map<string, AlarmStreamEvent[]>
+  >(new Map());
 
-  // 监听报警变化
+  const [soePage, setSoePage] = useState(1);
+  const [soeVar, setSoeVar] = useState("");
+  const [soeQuality, setSoeQuality] = useState("");
+  const soePageSize = 50;
+
+  const varManager = useEditorStore((s) => s.varManager);
+
   useEffect(() => {
     if (!alarmManager) return;
     const unsub = alarmManager.onChange(() => forceUpdate((n) => n + 1));
+    alarmManager.queryHistory({ page: 1, pageSize: 100 }).catch(() => {});
+    alarmManager
+      .querySOE({ page: 1, pageSize: soePageSize })
+      .catch(() => {});
     return unsub;
   }, [alarmManager]);
 
-  const formatTime = (ts: number) => {
-    const d = new Date(ts);
-    return (
-      d.toLocaleTimeString("zh-CN", { hour12: false }) +
-      "." +
-      String(d.getMilliseconds()).padStart(3, "0")
-    );
+  useEffect(() => {
+    if (!alarmManager) return;
+    alarmManager
+      .queryHistory({
+        page: histPage,
+        pageSize: 100,
+        severity: histSeverity,
+        status: histStatus,
+      })
+      .catch(() => {});
+  }, [alarmManager, histPage, histSeverity, histStatus]);
+
+  useEffect(() => {
+    if (!alarmManager) return;
+    alarmManager
+      .querySOE({
+        page: soePage,
+        pageSize: soePageSize,
+        variableId: soeVar || undefined,
+        quality: soeQuality || undefined,
+      })
+      .catch(() => {});
+  }, [alarmManager, soePage, soeVar, soeQuality]);
+
+  const activeAlarms = alarmManager?.getActiveAlarms() ?? [];
+  const historyAlarms = alarmManager?.getHistoryAlarms() ?? [];
+  const historyTotal = alarmManager?.getHistoryTotal() ?? 0;
+  const soeRecords = alarmManager?.getSOERecords(soePageSize) ?? [];
+  const soeTotal = alarmManager?.getSOETotal() ?? 0;
+  const unackCount = alarmManager?.unacknowledgedCount ?? 0;
+  const mode = alarmManager?.getMode() ?? "local";
+
+  const toggleEvents = (id: string) => {
+    if (expandedId === id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(id);
+    alarmManager
+      ?.getOccurrenceEvents(id)
+      .then((events) => {
+        setStreamEvents((prev) => {
+          const next = new Map(prev);
+          next.set(id, events);
+          return next;
+        });
+      })
+      .catch(() => {});
   };
 
-  const alarmCount = activeAlarms.length;
-  const unackCount = alarmManager?.unacknowledgedCount ?? 0;
-
   return (
-    <div className="panel alarm-panel">
-      <div className="panel-title">
-        报警事件
-        <span
-          className="panel-badge"
-          style={{
-            background: unackCount > 0 ? "var(--danger)" : "var(--success)",
-          }}
-        >
-          {unackCount > 0 ? unackCount + " 未确认" : "正常"}
-        </span>
-      </div>
-
-      <div className="alarm-tabs">
-        <button
-          className={"alarm-tab" + (activeTab === "active" ? " active" : "")}
-          onClick={() => setActiveTab("active")}
-        >
-          活跃 ({alarmCount})
-        </button>
-        <button
-          className={"alarm-tab" + (activeTab === "history" ? " active" : "")}
-          onClick={() => setActiveTab("history")}
-        >
-          历史
-        </button>
-        <button
-          className={"alarm-tab" + (activeTab === "soe" ? " active" : "")}
-          onClick={() => setActiveTab("soe")}
-        >
-          SOE
-        </button>
-      </div>
-
-      {activeTab === "active" && (
-        <div className="alarm-content">
-          {alarmCount > 0 && (
-            <button
-              className="btn btn-sm btn-full"
-              onClick={acknowledgeAllAlarms}
-              style={{ marginBottom: 4 }}
-            >
-              确认全部 ({unackCount})
-            </button>
-          )}
-          {activeAlarms.length === 0 && (
-            <div className="panel-hint">无活跃报警</div>
-          )}
-          {activeAlarms.map((alarm) => {
-            const sc =
-              SEVERITY_CONFIG[alarm.severity] ?? SEVERITY_CONFIG.warning!;
-            return (
-              <div
-                key={alarm.id}
-                className="alarm-row"
-                style={{ borderLeftColor: sc.color }}
-              >
-                <div className="alarm-row-header">
-                  <span
-                    className="alarm-severity"
-                    style={{ background: sc.color }}
-                  >
-                    {sc.label}
-                  </span>
-                  <span className="alarm-name">{alarm.name}</span>
-                  <span className="alarm-time">
-                    {formatTime(alarm.triggeredAt)}
-                  </span>
-                </div>
-                <div className="alarm-row-detail">
-                  {alarm.message} · 当前值: {String(alarm.value)} / 阈值:{" "}
-                  {alarm.threshold}
-                </div>
-                <div className="alarm-row-footer">
-                  <span
-                    className="alarm-status"
-                    style={{
-                      color:
-                        alarm.status === "active"
-                          ? sc.color
-                          : "var(--text-secondary)",
-                    }}
-                  >
-                    {alarm.status === "active" ? "未确认" : "已确认"}
-                  </span>
-                  {alarm.status === "active" && (
-                    <button
-                      className="btn btn-sm"
-                      onClick={() => acknowledgeAlarm(alarm.id)}
-                    >
-                      确认
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+    <>
+      <div className="panel alarm-panel">
+        <div className="panel-title">
+          报警事件
+          <span
+            className="panel-badge"
+            style={{
+              background: unackCount > 0 ? "var(--danger)" : "var(--success)",
+            }}
+          >
+            {unackCount > 0 ? unackCount + " 未确认" : "正常"}
+          </span>
+          <span className="alarm-mode-badge">
+            {mode === "remote" ? "后端" : "模拟"}
+          </span>
+          <button
+            className="btn btn-sm"
+            title="全屏报警中心"
+            onClick={() => setShowCenter(true)}
+          >
+            ⛶
+          </button>
         </div>
-      )}
 
-      {activeTab === "soe" && (
-        <div className="alarm-content">
-          <div className="panel-hint">SOE 顺序事件记录（毫秒精度）</div>
-          <div className="soe-list">
-            {soeRecords.map((soe) => (
-              <div key={soe.id} className="soe-row">
-                <span className="soe-time">{formatTime(soe.timestamp)}</span>
-                <span className="soe-var">{soe.variableId}</span>
-                <span className="soe-val">{String(soe.value)}</span>
-                <span className={"soe-quality " + soe.quality}>
-                  {soe.quality}
-                </span>
-              </div>
+        <div className="alarm-tabs">
+          <button
+            className={"alarm-tab" + (activeTab === "active" ? " active" : "")}
+            onClick={() => setActiveTab("active")}
+          >
+            活跃 ({activeAlarms.length})
+          </button>
+          <button
+            className={"alarm-tab" + (activeTab === "history" ? " active" : "")}
+            onClick={() => setActiveTab("history")}
+          >
+            历史
+          </button>
+          <button
+            className={"alarm-tab" + (activeTab === "soe" ? " active" : "")}
+            onClick={() => setActiveTab("soe")}
+          >
+            SOE
+          </button>
+        </div>
+
+        {activeTab === "active" && (
+          <div className="alarm-content">
+            {activeAlarms.length > 0 && (
+              <button
+                className="btn btn-sm btn-full"
+                onClick={() => acknowledgeAllAlarms()}
+                style={{ marginBottom: 4 }}
+              >
+                确认全部 ({unackCount})
+              </button>
+            )}
+            {activeAlarms.length === 0 && (
+              <div className="panel-hint">无活跃报警</div>
+            )}
+            {activeAlarms.map((alarm) => (
+              <ActiveAlarmRow
+                key={alarm.id}
+                alarm={alarm}
+                liveValue={varManager?.getValue(alarm.variableId)?.value}
+                onAck={(id) => acknowledgeAlarm(id)}
+              />
             ))}
           </div>
-        </div>
-      )}
-    </div>
+        )}
+
+        {activeTab === "history" && (
+          <div className="alarm-content">
+            <div className="alarm-filter-row">
+              <select
+                value={histSeverity}
+                onChange={(e) => {
+                  setHistSeverity(e.target.value as AlarmSeverity | "");
+                  setHistPage(1);
+                }}
+              >
+                <option value="">全部级别</option>
+                <option value="critical">紧急</option>
+                <option value="major">严重</option>
+                <option value="minor">一般</option>
+                <option value="warning">预警</option>
+              </select>
+              <select
+                value={histStatus}
+                onChange={(e) => {
+                  setHistStatus(e.target.value as AlarmStatus | "");
+                  setHistPage(1);
+                }}
+              >
+                <option value="">全部状态</option>
+                <option value="active">未恢复</option>
+                <option value="acknowledged">已确认</option>
+                <option value="recovered">已恢复</option>
+              </select>
+            </div>
+            {historyAlarms.length === 0 && (
+              <div className="panel-hint">暂无报警历史</div>
+            )}
+            {historyAlarms.map((alarm) => (
+              <HistoryAlarmRow
+                key={alarm.id}
+                alarm={alarm}
+                events={streamEvents.get(alarm.id)}
+                expanded={expandedId === alarm.id}
+                onToggle={() => toggleEvents(alarm.id)}
+                onAck={(id) => acknowledgeAlarm(id)}
+              />
+            ))}
+            <Pager
+              page={histPage}
+              pageSize={100}
+              total={historyTotal}
+              onPage={setHistPage}
+            />
+          </div>
+        )}
+
+        {activeTab === "soe" && (
+          <div className="alarm-content">
+            <div className="alarm-filter-row">
+              <select value={soeVar} onChange={(e) => setSoeVar(e.target.value)}>
+                <option value="">全部变量</option>
+                {varManager
+                  ?.getAllDefs()
+                  .map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.id}
+                    </option>
+                  ))}
+              </select>
+              <select
+                value={soeQuality}
+                onChange={(e) => setSoeQuality(e.target.value)}
+              >
+                <option value="">全部质量</option>
+                <option value="good">良好</option>
+                <option value="bad">无效</option>
+                <option value="uncertain">不确定</option>
+              </select>
+            </div>
+            <div className="soe-list">
+              {soeRecords.length === 0 && (
+                <div className="panel-hint">暂无 SOE 记录</div>
+              )}
+              {soeRecords.map((soe) => (
+                <SoeRowItem key={soe.seq} record={soe} />
+              ))}
+            </div>
+            <Pager
+              page={soePage}
+              pageSize={soePageSize}
+              total={soeTotal}
+              onPage={setSoePage}
+            />
+          </div>
+        )}
+      </div>
+      {showCenter && <AlarmCenter onClose={() => setShowCenter(false)} />}
+    </>
   );
 }

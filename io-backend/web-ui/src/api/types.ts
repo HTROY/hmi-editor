@@ -22,6 +22,8 @@ export interface PointRow {
   offset_val: number;
   var_type: string;
   description: string;
+  plugin_name?: string;
+  hmi_id?: string;
   redundancy_group: string;
   plugin_role: string;
 }
@@ -195,4 +197,81 @@ export interface InstanceGroupStatus {
   last_switch_ms: number;
   last_switch_reason: string;
   switch_count: number;
+}
+
+// ---- Alarm & SOE ----
+
+export type AlarmSeverity = "critical" | "major" | "minor" | "warning";
+export type AlarmCondition = "high" | "low" | "equal" | "notEqual" | "change";
+export type AlarmStatus = "active" | "acknowledged" | "recovered";
+
+export interface AlarmRule {
+  id: string;
+  variableId: string;
+  name: string;
+  description: string;
+  severity: AlarmSeverity;
+  group: string;
+  condition: AlarmCondition;
+  threshold: number;
+  enabled: boolean;
+  hysteresis: number;
+  confirmMs: number;
+}
+
+export interface AlarmRuleUpsert {
+  variableId: string;
+  name: string;
+  description: string;
+  severity: AlarmSeverity;
+  group: string;
+  condition: AlarmCondition;
+  threshold: number;
+  enabled: boolean;
+  hysteresis: number;
+  confirmMs: number;
+}
+
+export interface AlarmOccurrence {
+  id: string;
+  ruleId: string;
+  variableId: string;
+  name: string;
+  severity: AlarmSeverity;
+  group: string;
+  message: string;
+  value: number | boolean;
+  threshold: number;
+  status: AlarmStatus;
+  triggeredAt: number;
+  recoveredAt: number | null;
+  recoveredReason: string;
+  acknowledgedAt: number | null;
+  acknowledgedBy: string;
+}
+
+export interface AlarmStreamEvent {
+  id: number;
+  occurrenceId: string;
+  eventType: "trigger" | "ack" | "recover" | "rule_disabled";
+  atMs: number;
+  byUser: string;
+  value: number | boolean;
+  message: string;
+}
+
+export interface SoeRecord {
+  id: number;
+  seq: number;
+  variableId: string;
+  value: number | boolean;
+  quality: "good" | "bad" | "uncertain";
+  deviceTime: number;
+  receiveTime: number;
+  source: string;
+}
+
+export interface Paged<T> {
+  total: number;
+  items: T[];
 }

@@ -9,6 +9,63 @@ pub struct AppConfig {
     pub plugins: PluginsConfig,
     #[serde(default)]
     pub redundancy: RedundancyConfig,
+    #[serde(default)]
+    pub alarm: AlarmConfig,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AlarmConfig {
+    #[serde(default = "default_alarm_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_alarm_retention_days")]
+    pub retention_alarm_days: u32,
+    #[serde(default = "default_soe_retention_days")]
+    pub retention_soe_days: u32,
+    #[serde(default)]
+    pub rules: Vec<AlarmRuleYaml>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlarmRuleYaml {
+    pub id: String,
+    pub variable_id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default = "default_severity")]
+    pub severity: String,
+    #[serde(default)]
+    pub group: String,
+    #[serde(default = "default_condition")]
+    pub condition: String,
+    #[serde(default)]
+    pub threshold: f64,
+    #[serde(default = "default_rule_enabled")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub hysteresis: f64,
+    #[serde(default)]
+    pub confirm_ms: u64,
+}
+
+fn default_alarm_enabled() -> bool {
+    true
+}
+fn default_alarm_retention_days() -> u32 {
+    90
+}
+fn default_soe_retention_days() -> u32 {
+    30
+}
+fn default_severity() -> String {
+    "warning".into()
+}
+fn default_condition() -> String {
+    "high".into()
+}
+fn default_rule_enabled() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -232,6 +289,12 @@ impl AppConfig {
                 instances: vec![],
             },
             redundancy: RedundancyConfig::default(),
+            alarm: AlarmConfig {
+                enabled: default_alarm_enabled(),
+                retention_alarm_days: default_alarm_retention_days(),
+                retention_soe_days: default_soe_retention_days(),
+                rules: vec![],
+            },
         }
     }
 
@@ -323,6 +386,34 @@ impl AppConfig {
                 }
             }
         }
+        // ---- Alarm rule validation ----
+        if self.alarm.enabled {
+            let mut rule_ids = std::collections::HashSet::new();
+            for r in &self.alarm.rules {
+                if r.id.trim().is_empty() || r.variable_id.trim().is_empty() {
+                    anyhow::bail!("alarm rule must have non-empty id and variable_id");
+                }
+                if !rule_ids.insert(r.id.as_str()) {
+                    anyhow::bail!("duplicate alarm rule id '{}'", r.id);
+                }
+                if !matches!(
+                    r.condition.as_str(),
+                    "high" | "low" | "equal" | "notEqual" | "change"
+                ) {
+                    anyhow::bail!(
+                        "alarm rule '{}': invalid condition '{}'",
+                        r.id,
+                        r.condition
+                    );
+                }
+                if !matches!(
+                    r.severity.as_str(),
+                    "critical" | "major" | "minor" | "warning"
+                ) {
+                    anyhow::bail!("alarm rule '{}': invalid severity '{}'", r.id, r.severity);
+                }
+            }
+        }
         Ok(())
     }
 
@@ -345,6 +436,18 @@ impl AppConfig {
             .get_config("redundancy_config")
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default();
+        let alarm = AlarmConfig {
+            enabled: true,
+            retention_alarm_days: repo
+                .get_config("alarm_retention_days")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or_else(default_alarm_retention_days),
+            retention_soe_days: repo
+                .get_config("soe_retention_days")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or_else(default_soe_retention_days),
+            rules: vec![],
+        };
 
         let instances = match repo.list_plugins_with_points() {
             Ok(pws) => pws
@@ -403,6 +506,7 @@ impl AppConfig {
                 instances,
             },
             redundancy,
+            alarm,
         }
     }
 }

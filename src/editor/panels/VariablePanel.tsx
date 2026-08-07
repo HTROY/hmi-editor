@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import type { VariableDef, VariableType } from "../../core/variables/types";
 
@@ -63,7 +63,8 @@ export function VariablePanel() {
 
   const handleSave = () => {
     if (!varManager || !form.id) return;
-    varManager.define(form as VariableDef);
+    const def = form as VariableDef;
+    varManager.define(def);
     resetForm();
   };
 
@@ -91,8 +92,6 @@ export function VariablePanel() {
         group: "供电/400V开关柜",
         min: 0,
         max: 1,
-        alarmHigh: 0,
-        alarmLow: 0,
       },
       {
         id: "STA1_211_ACB_CTRL",
@@ -105,8 +104,6 @@ export function VariablePanel() {
         group: "供电/400V开关柜",
         min: 0,
         max: 1,
-        alarmHigh: 0,
-        alarmLow: 0,
       },
       {
         id: "STA1_211_IA",
@@ -119,8 +116,6 @@ export function VariablePanel() {
         group: "供电/400V开关柜",
         min: 0,
         max: 2000,
-        alarmHigh: 1600,
-        alarmLow: 0,
       },
       {
         id: "STA1_211_IB",
@@ -133,8 +128,6 @@ export function VariablePanel() {
         group: "供电/400V开关柜",
         min: 0,
         max: 2000,
-        alarmHigh: 1600,
-        alarmLow: 0,
       },
       {
         id: "STA1_BUS_VOLTAGE",
@@ -147,8 +140,6 @@ export function VariablePanel() {
         group: "供电/400V开关柜",
         min: 0,
         max: 500,
-        alarmHigh: 450,
-        alarmLow: 350,
       },
       {
         id: "STA1_FAN_1_STATUS",
@@ -161,8 +152,6 @@ export function VariablePanel() {
         group: "BAS/环控",
         min: 0,
         max: 1,
-        alarmHigh: 0,
-        alarmLow: 0,
       },
       {
         id: "STA1_FAN_1_SPEED",
@@ -175,8 +164,6 @@ export function VariablePanel() {
         group: "BAS/环控",
         min: 0,
         max: 3000,
-        alarmHigh: 2800,
-        alarmLow: 0,
       },
       {
         id: "STA1_TEMP_ZONE1",
@@ -189,8 +176,6 @@ export function VariablePanel() {
         group: "BAS/环控",
         min: 0,
         max: 50,
-        alarmHigh: 30,
-        alarmLow: 15,
       },
     ];
     varManager.defineMany(presets);

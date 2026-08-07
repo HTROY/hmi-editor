@@ -10,6 +10,12 @@ import type {
   PointUpsert,
   RedundancyConfig,
   RedundancyStatus,
+  AlarmRule,
+  AlarmRuleUpsert,
+  AlarmOccurrence,
+  AlarmStreamEvent,
+  SoeRecord,
+  Paged,
 } from "./types";
 
 export class ApiError extends Error {
@@ -39,6 +45,14 @@ async function request<T>(
   }
   if (ct.includes("application/json") && text) return JSON.parse(text) as T;
   return text as T;
+}
+
+function qs(params: Record<string, string | number | undefined>): string {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== "") sp.set(k, String(v));
+  }
+  return sp.toString();
 }
 
 export const api = {
@@ -73,6 +87,8 @@ export const api = {
       "GET",
       `/api/points?plugin_id=${pluginId}&include_backup=${includeBackup}`,
     ),
+  listAllPoints: (includeBackup = true) =>
+    request<PointRow[]>("GET", `/api/points?include_backup=${includeBackup}`),
   createPoint: (p: PointUpsert) =>
     request<{ id: number }>("POST", "/api/points", p),
   updatePoint: (id: number, p: PointUpsert) =>
@@ -108,6 +124,45 @@ export const api = {
   // Files
   exportExcelUrl: (pluginId: number) => `/api/plugins/${pluginId}/export`,
   exportConfig: () => request<ConfigExport>("GET", "/api/config/export"),
+
+  // Alarm rules
+  listAlarmRules: () => request<AlarmRule[]>("GET", "/api/alarm/rules"),
+  createAlarmRule: (r: AlarmRuleUpsert) =>
+    request<AlarmRule>("POST", "/api/alarm/rules", r),
+  updateAlarmRule: (id: string, r: AlarmRuleUpsert) =>
+    request<AlarmRule>(
+      "PUT",
+      `/api/alarm/rules/${encodeURIComponent(id)}`,
+      r,
+    ),
+  deleteAlarmRule: (id: string) =>
+    request<void>("DELETE", `/api/alarm/rules/${encodeURIComponent(id)}`),
+
+  // Alarm monitor
+  alarmActive: () => request<AlarmOccurrence[]>("GET", "/api/alarm/active"),
+  alarmHistory: (params: {
+    page?: number;
+    pageSize?: number;
+    severity?: string;
+    status?: string;
+    variableId?: string;
+  }) =>
+    request<Paged<AlarmOccurrence>>("GET", `/api/alarm/history?${qs(params)}`),
+  alarmOccurrenceEvents: (id: string) =>
+    request<AlarmStreamEvent[]>(
+      "GET",
+      `/api/alarm/occurrences/${encodeURIComponent(id)}/events`,
+    ),
+  soeQuery: (params: {
+    page?: number;
+    pageSize?: number;
+    variableId?: string;
+    quality?: string;
+  }) => request<Paged<SoeRecord>>("GET", `/api/soe?${qs(params)}`),
+  alarmAck: (id: string, user: string) =>
+    request<void>("POST", "/api/alarm/ack", { id, user }),
+  alarmAckAll: (user: string) =>
+    request<{ acknowledged: number }>("POST", "/api/alarm/ack-all", { user }),
 };
 
 export async function importExcel(pluginId: number, file: File) {

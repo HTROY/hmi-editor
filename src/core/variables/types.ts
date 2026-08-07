@@ -17,8 +17,6 @@ export interface VariableDef {
   group: string; // 分组，如 "供电/400V开关柜"
   min: number; // 量程下限
   max: number; // 量程上限
-  alarmHigh: number; // 高报警限
-  alarmLow: number; // 低报警限
 }
 
 /** 变量运行时值 */

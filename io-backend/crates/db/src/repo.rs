@@ -44,6 +44,9 @@ pub struct ConfigSnapshot {
     pub batch_interval_ms: u64,
     pub plugin_dir: String,
     pub redundancy: serde_json::Value,
+    pub alarm_retention_days: u32,
+    pub soe_retention_days: u32,
+    pub alarm_rules: Vec<SnapshotAlarmRule>,
     pub plugins: Vec<SnapshotPlugin>,
 }
 
@@ -71,8 +74,141 @@ pub struct SnapshotPoint {
     pub description: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotAlarmRule {
+    pub id: String,
+    pub variable_id: String,
+    pub name: String,
+    pub description: String,
+    pub severity: String,
+    pub group_name: String,
+    pub condition: String,
+    pub threshold: f64,
+    pub enabled: bool,
+    pub hysteresis: f64,
+    pub confirm_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlarmRuleRow {
+    pub id: String,
+    pub variable_id: String,
+    pub name: String,
+    pub description: String,
+    pub severity: String,
+    pub group_name: String,
+    pub condition: String,
+    pub threshold: f64,
+    pub enabled: bool,
+    pub hysteresis: f64,
+    pub confirm_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlarmOccurrenceRow {
+    pub id: String,
+    pub rule_id: String,
+    pub variable_id: String,
+    pub name: String,
+    pub severity: String,
+    pub group_name: String,
+    pub message: String,
+    pub value: String,
+    pub threshold: f64,
+    pub status: String,
+    pub triggered_at: u64,
+    pub recovered_at: Option<u64>,
+    pub recovered_reason: String,
+    pub acknowledged_at: Option<u64>,
+    pub acknowledged_by: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlarmStreamEventRow {
+    pub id: i64,
+    pub occurrence_id: String,
+    pub event_type: String,
+    pub at_ms: u64,
+    pub by_user: String,
+    pub value: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SoeRow {
+    pub id: i64,
+    pub seq: i64,
+    pub variable_id: String,
+    pub value: String,
+    pub quality: String,
+    pub device_time: u64,
+    pub receive_time: u64,
+    pub source: String,
+}
+
 pub struct Repo {
     conn: Mutex<Connection>,
+}
+
+fn map_alarm_rule(row: &rusqlite::Row) -> rusqlite::Result<AlarmRuleRow> {
+    Ok(AlarmRuleRow {
+        id: row.get(0)?,
+        variable_id: row.get(1)?,
+        name: row.get(2)?,
+        description: row.get(3)?,
+        severity: row.get(4)?,
+        group_name: row.get(5)?,
+        condition: row.get(6)?,
+        threshold: row.get(7)?,
+        enabled: row.get::<_, i32>(8)? != 0,
+        hysteresis: row.get(9)?,
+        confirm_ms: row.get(10)?,
+    })
+}
+
+fn map_alarm_occurrence(row: &rusqlite::Row) -> rusqlite::Result<AlarmOccurrenceRow> {
+    Ok(AlarmOccurrenceRow {
+        id: row.get(0)?,
+        rule_id: row.get(1)?,
+        variable_id: row.get(2)?,
+        name: row.get(3)?,
+        severity: row.get(4)?,
+        group_name: row.get(5)?,
+        message: row.get(6)?,
+        value: row.get(7)?,
+        threshold: row.get(8)?,
+        status: row.get(9)?,
+        triggered_at: row.get(10)?,
+        recovered_at: row.get(11)?,
+        recovered_reason: row.get(12)?,
+        acknowledged_at: row.get(13)?,
+        acknowledged_by: row.get(14)?,
+    })
+}
+
+fn map_stream_event(row: &rusqlite::Row) -> rusqlite::Result<AlarmStreamEventRow> {
+    Ok(AlarmStreamEventRow {
+        id: row.get(0)?,
+        occurrence_id: row.get(1)?,
+        event_type: row.get(2)?,
+        at_ms: row.get(3)?,
+        by_user: row.get(4)?,
+        value: row.get(5)?,
+        message: row.get(6)?,
+    })
+}
+
+fn map_soe(row: &rusqlite::Row) -> rusqlite::Result<SoeRow> {
+    Ok(SoeRow {
+        id: row.get(0)?,
+        seq: row.get(1)?,
+        variable_id: row.get(2)?,
+        value: row.get(3)?,
+        quality: row.get(4)?,
+        device_time: row.get(5)?,
+        receive_time: row.get(6)?,
+        source: row.get(7)?,
+    })
 }
 
 fn map_plugin(row: &rusqlite::Row) -> rusqlite::Result<PluginRow> {
@@ -300,16 +436,41 @@ impl Repo {
         let tx = conn.transaction()?;
         tx.execute("DELETE FROM points", [])?;
         tx.execute("DELETE FROM plugins", [])?;
+        tx.execute("DELETE FROM alarm_rules", [])?;
         for (key, value) in [
             ("scan_interval_ms", snap.scan_interval_ms.to_string()),
             ("batch_interval_ms", snap.batch_interval_ms.to_string()),
             ("plugin_dir", snap.plugin_dir.clone()),
             ("config_version", snap.config_version.to_string()),
             ("redundancy_config", snap.redundancy.to_string()),
+            (
+                "alarm_retention_days",
+                snap.alarm_retention_days.to_string(),
+            ),
+            ("soe_retention_days", snap.soe_retention_days.to_string()),
         ] {
             tx.execute(
                 "INSERT OR REPLACE INTO server_config(key,value) VALUES(?1,?2)",
                 params![key, value],
+            )?;
+        }
+        for rule in &snap.alarm_rules {
+            tx.execute(
+                "INSERT INTO alarm_rules(id,variable_id,name,description,severity,group_name,condition,threshold,enabled,hysteresis,confirm_ms)
+                 VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+                params![
+                    rule.id,
+                    rule.variable_id,
+                    rule.name,
+                    rule.description,
+                    rule.severity,
+                    rule.group_name,
+                    rule.condition,
+                    rule.threshold,
+                    rule.enabled as i32,
+                    rule.hysteresis,
+                    rule.confirm_ms
+                ],
             )?;
         }
         for pl in &snap.plugins {
@@ -348,6 +509,321 @@ impl Repo {
         tx.commit()?;
         Ok(())
     }
+
+    // ---- Alarm / SOE persistence ----
+
+    pub fn list_alarm_rules(&self) -> anyhow::Result<Vec<AlarmRuleRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut sql = conn.prepare(
+            "SELECT id,variable_id,name,description,severity,group_name,condition,threshold,enabled,hysteresis,confirm_ms
+             FROM alarm_rules ORDER BY id",
+        )?;
+        let rows: Vec<AlarmRuleRow> = sql
+            .query_map([], |r| map_alarm_rule(r))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    pub fn insert_alarm_rule(&self, r: &AlarmRuleRow) -> anyhow::Result<()> {
+        self.conn.lock().unwrap().execute(
+            "INSERT OR REPLACE INTO alarm_rules(id,variable_id,name,description,severity,group_name,condition,threshold,enabled,hysteresis,confirm_ms,updated_at)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,datetime('now'))",
+            params![
+                r.id,
+                r.variable_id,
+                r.name,
+                r.description,
+                r.severity,
+                r.group_name,
+                r.condition,
+                r.threshold,
+                r.enabled as i32,
+                r.hysteresis,
+                r.confirm_ms
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_alarm_rule(&self, id: &str) -> anyhow::Result<()> {
+        self.conn
+            .lock()
+            .unwrap()
+            .execute("DELETE FROM alarm_rules WHERE id=?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn upsert_alarm_occurrence(&self, o: &AlarmOccurrenceRow) -> anyhow::Result<()> {
+        self.conn.lock().unwrap().execute(
+            "INSERT OR REPLACE INTO alarm_occurrences(id,rule_id,variable_id,name,severity,group_name,message,value,threshold,status,triggered_at,recovered_at,recovered_reason,acknowledged_at,acknowledged_by)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+            params![
+                o.id,
+                o.rule_id,
+                o.variable_id,
+                o.name,
+                o.severity,
+                o.group_name,
+                o.message,
+                o.value,
+                o.threshold,
+                o.status,
+                o.triggered_at,
+                o.recovered_at,
+                o.recovered_reason,
+                o.acknowledged_at,
+                o.acknowledged_by
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn insert_alarm_stream_event(&self, e: &mut AlarmStreamEventRow) -> anyhow::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO alarm_stream_events(occurrence_id,event_type,at_ms,by_user,value,message)
+             VALUES(?1,?2,?3,?4,?5,?6)",
+            params![
+                e.occurrence_id,
+                e.event_type,
+                e.at_ms,
+                e.by_user,
+                e.value,
+                e.message
+            ],
+        )?;
+        e.id = conn.last_insert_rowid();
+        Ok(())
+    }
+
+    pub fn insert_soe(&self, s: &mut SoeRow) -> anyhow::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO soe_events(seq,variable_id,value,quality,device_time,receive_time,source)
+             VALUES(?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                s.seq,
+                s.variable_id,
+                s.value,
+                s.quality,
+                s.device_time,
+                s.receive_time,
+                s.source
+            ],
+        )?;
+        s.id = conn.last_insert_rowid();
+        Ok(())
+    }
+
+    pub fn max_soe_seq(&self) -> i64 {
+        self.conn
+            .lock()
+            .unwrap()
+            .query_row("SELECT COALESCE(MAX(seq),0) FROM soe_events", [], |r| {
+                r.get(0)
+            })
+            .unwrap_or(0)
+    }
+
+    pub fn list_active_alarm_occurrences(&self) -> anyhow::Result<Vec<AlarmOccurrenceRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut sql = conn.prepare(
+            "SELECT id,rule_id,variable_id,name,severity,group_name,message,value,threshold,status,triggered_at,recovered_at,recovered_reason,acknowledged_at,acknowledged_by
+             FROM alarm_occurrences WHERE status IN ('active','acknowledged')
+             ORDER BY triggered_at DESC",
+        )?;
+        let rows: Vec<AlarmOccurrenceRow> = sql
+            .query_map([], |r| map_alarm_occurrence(r))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    pub fn list_recovered_unacked(&self) -> anyhow::Result<Vec<AlarmOccurrenceRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut sql = conn.prepare(
+            "SELECT id,rule_id,variable_id,name,severity,group_name,message,value,threshold,status,triggered_at,recovered_at,recovered_reason,acknowledged_at,acknowledged_by
+             FROM alarm_occurrences WHERE status='recovered' AND acknowledged_at IS NULL
+             ORDER BY triggered_at DESC",
+        )?;
+        let rows: Vec<AlarmOccurrenceRow> = sql
+            .query_map([], |r| map_alarm_occurrence(r))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn query_alarm_occurrences(
+        &self,
+        from: Option<u64>,
+        to: Option<u64>,
+        severity: Option<&str>,
+        group: Option<&str>,
+        variable_id: Option<&str>,
+        status: Option<&str>,
+        page: u64,
+        page_size: u64,
+    ) -> anyhow::Result<(u64, Vec<AlarmOccurrenceRow>)> {
+        let mut conds: Vec<String> = Vec::new();
+        let mut args: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+        if let Some(v) = from {
+            conds.push(format!("triggered_at >= ?{}", args.len() + 1));
+            args.push(Box::new(v));
+        }
+        if let Some(v) = to {
+            conds.push(format!("triggered_at <= ?{}", args.len() + 1));
+            args.push(Box::new(v));
+        }
+        if let Some(v) = severity {
+            conds.push(format!("severity = ?{}", args.len() + 1));
+            args.push(Box::new(v.to_string()));
+        }
+        if let Some(v) = group {
+            conds.push(format!("group_name = ?{}", args.len() + 1));
+            args.push(Box::new(v.to_string()));
+        }
+        if let Some(v) = variable_id {
+            conds.push(format!("variable_id = ?{}", args.len() + 1));
+            args.push(Box::new(v.to_string()));
+        }
+        if let Some(v) = status {
+            conds.push(format!("status = ?{}", args.len() + 1));
+            args.push(Box::new(v.to_string()));
+        }
+        let where_sql = if conds.is_empty() {
+            String::new()
+        } else {
+            format!(" WHERE {}", conds.join(" AND "))
+        };
+        let page = page.max(1);
+        let page_size = page_size.clamp(1, 500);
+        let conn = self.conn.lock().unwrap();
+        let total: u64 = conn
+            .query_row(
+                &format!("SELECT COUNT(*) FROM alarm_occurrences{}", where_sql),
+                rusqlite::params_from_iter(args.iter().map(|b| b.as_ref())),
+                |r| r.get(0),
+            )?;
+        let offset = (page - 1) * page_size;
+        let limit_pos = args.len() + 1;
+        let offset_pos = args.len() + 2;
+        let mut sql = conn.prepare(&format!(
+            "SELECT id,rule_id,variable_id,name,severity,group_name,message,value,threshold,status,triggered_at,recovered_at,recovered_reason,acknowledged_at,acknowledged_by
+             FROM alarm_occurrences{} ORDER BY triggered_at DESC LIMIT ?{} OFFSET ?{}",
+            where_sql, limit_pos, offset_pos
+        ))?;
+        let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = args;
+        params.push(Box::new(page_size));
+        params.push(Box::new(offset));
+        let rows: Vec<AlarmOccurrenceRow> = sql
+            .query_map(rusqlite::params_from_iter(params.iter().map(|b| b.as_ref())), |r| {
+                map_alarm_occurrence(r)
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((total, rows))
+    }
+
+    pub fn query_occurrence_stream_events(
+        &self,
+        occurrence_id: &str,
+    ) -> anyhow::Result<Vec<AlarmStreamEventRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut sql = conn.prepare(
+            "SELECT id,occurrence_id,event_type,at_ms,by_user,value,message
+             FROM alarm_stream_events WHERE occurrence_id=?1 ORDER BY id",
+        )?;
+        let rows: Vec<AlarmStreamEventRow> = sql
+            .query_map(params![occurrence_id], |r| map_stream_event(r))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn query_soe(
+        &self,
+        from: Option<u64>,
+        to: Option<u64>,
+        variable_id: Option<&str>,
+        quality: Option<&str>,
+        page: u64,
+        page_size: u64,
+    ) -> anyhow::Result<(u64, Vec<SoeRow>)> {
+        let mut conds: Vec<String> = Vec::new();
+        let mut args: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+        if let Some(v) = from {
+            conds.push(format!("receive_time >= ?{}", args.len() + 1));
+            args.push(Box::new(v));
+        }
+        if let Some(v) = to {
+            conds.push(format!("receive_time <= ?{}", args.len() + 1));
+            args.push(Box::new(v));
+        }
+        if let Some(v) = variable_id {
+            conds.push(format!("variable_id = ?{}", args.len() + 1));
+            args.push(Box::new(v.to_string()));
+        }
+        if let Some(v) = quality {
+            conds.push(format!("quality = ?{}", args.len() + 1));
+            args.push(Box::new(v.to_string()));
+        }
+        let where_sql = if conds.is_empty() {
+            String::new()
+        } else {
+            format!(" WHERE {}", conds.join(" AND "))
+        };
+        let page = page.max(1);
+        let page_size = page_size.clamp(1, 500);
+        let conn = self.conn.lock().unwrap();
+        let total: u64 = conn
+            .query_row(
+                &format!("SELECT COUNT(*) FROM soe_events{}", where_sql),
+                rusqlite::params_from_iter(args.iter().map(|b| b.as_ref())),
+                |r| r.get(0),
+            )?;
+        let offset = (page - 1) * page_size;
+        let limit_pos = args.len() + 1;
+        let offset_pos = args.len() + 2;
+        let mut sql = conn.prepare(&format!(
+            "SELECT id,seq,variable_id,value,quality,device_time,receive_time,source
+             FROM soe_events{} ORDER BY seq DESC LIMIT ?{} OFFSET ?{}",
+            where_sql, limit_pos, offset_pos
+        ))?;
+        let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = args;
+        params.push(Box::new(page_size));
+        params.push(Box::new(offset));
+        let rows: Vec<SoeRow> = sql
+            .query_map(rusqlite::params_from_iter(params.iter().map(|b| b.as_ref())), |r| {
+                map_soe(r)
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((total, rows))
+    }
+
+    /// Prune alarm history and SOE older than the retention windows.
+    /// Returns (alarm_rows_deleted, soe_rows_deleted).
+    pub fn prune_alarm_data(&self, alarm_days: u64, soe_days: u64) -> anyhow::Result<(u64, u64)> {
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let alarm_cutoff = now_ms.saturating_sub(alarm_days.saturating_mul(86_400_000));
+        let soe_cutoff = now_ms.saturating_sub(soe_days.saturating_mul(86_400_000));
+        let conn = self.conn.lock().unwrap();
+        let tx = conn.unchecked_transaction()?;
+        let deleted_occ = tx.execute(
+            "DELETE FROM alarm_occurrences WHERE status='recovered' AND recovered_at IS NOT NULL AND recovered_at < ?1",
+            params![alarm_cutoff],
+        )? as u64;
+        // Remove stream events whose occurrence is gone.
+        tx.execute(
+            "DELETE FROM alarm_stream_events WHERE occurrence_id NOT IN (SELECT id FROM alarm_occurrences)",
+            [],
+        )?;
+        let deleted_soe =
+            tx.execute("DELETE FROM soe_events WHERE receive_time < ?1", params![soe_cutoff])?
+                as u64;
+        tx.commit()?;
+        Ok((deleted_occ, deleted_soe))
+    }
 }
 
 #[cfg(test)]
@@ -381,6 +857,21 @@ mod tests {
             batch_interval_ms: 200,
             plugin_dir: "./plugins".into(),
             redundancy: serde_json::json!({"enabled": true}),
+            alarm_retention_days: 90,
+            soe_retention_days: 30,
+            alarm_rules: vec![SnapshotAlarmRule {
+                id: "ALM_1".into(),
+                variable_id: "P2".into(),
+                name: "test".into(),
+                description: String::new(),
+                severity: "warning".into(),
+                group_name: "g".into(),
+                condition: "high".into(),
+                threshold: 10.0,
+                enabled: true,
+                hysteresis: 0.0,
+                confirm_ms: 0,
+            }],
             plugins: vec![SnapshotPlugin {
                 name: "new".into(),
                 wasm_file: "new.wasm".into(),

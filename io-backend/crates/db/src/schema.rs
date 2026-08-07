@@ -36,12 +36,75 @@ pub fn init_db(conn: &Connection) -> anyhow::Result<()> {
             UNIQUE(plugin_id, variable_id)
         );
 
+        CREATE TABLE IF NOT EXISTS alarm_rules (
+            id          TEXT PRIMARY KEY,
+            variable_id TEXT NOT NULL,
+            name        TEXT NOT NULL DEFAULT '',
+            description TEXT NOT NULL DEFAULT '',
+            severity    TEXT NOT NULL DEFAULT 'warning',
+            group_name  TEXT NOT NULL DEFAULT '',
+            condition   TEXT NOT NULL DEFAULT 'high',
+            threshold   REAL NOT NULL DEFAULT 0,
+            enabled     INTEGER NOT NULL DEFAULT 1,
+            hysteresis  REAL NOT NULL DEFAULT 0,
+            confirm_ms  INTEGER NOT NULL DEFAULT 0,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS alarm_occurrences (
+            id               TEXT PRIMARY KEY,
+            rule_id          TEXT NOT NULL,
+            variable_id      TEXT NOT NULL,
+            name             TEXT NOT NULL DEFAULT '',
+            severity         TEXT NOT NULL DEFAULT 'warning',
+            group_name       TEXT NOT NULL DEFAULT '',
+            message          TEXT NOT NULL DEFAULT '',
+            value            TEXT NOT NULL DEFAULT '0',
+            threshold        REAL NOT NULL DEFAULT 0,
+            status           TEXT NOT NULL DEFAULT 'active',
+            triggered_at     INTEGER NOT NULL,
+            recovered_at     INTEGER,
+            recovered_reason TEXT NOT NULL DEFAULT '',
+            acknowledged_at  INTEGER,
+            acknowledged_by  TEXT NOT NULL DEFAULT ''
+        );
+
+        CREATE TABLE IF NOT EXISTS alarm_stream_events (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            occurrence_id TEXT NOT NULL,
+            event_type    TEXT NOT NULL,
+            at_ms         INTEGER NOT NULL,
+            by_user       TEXT NOT NULL DEFAULT '',
+            value         TEXT NOT NULL DEFAULT '0',
+            message       TEXT NOT NULL DEFAULT ''
+        );
+
+        CREATE TABLE IF NOT EXISTS soe_events (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            seq          INTEGER NOT NULL,
+            variable_id  TEXT NOT NULL,
+            value        TEXT NOT NULL DEFAULT '0',
+            quality      TEXT NOT NULL DEFAULT 'good',
+            device_time  INTEGER NOT NULL,
+            receive_time INTEGER NOT NULL,
+            source       TEXT NOT NULL DEFAULT 'backend'
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_soe_seq ON soe_events(seq);
+        CREATE INDEX IF NOT EXISTS idx_soe_time ON soe_events(receive_time);
+        CREATE INDEX IF NOT EXISTS idx_occ_status_time ON alarm_occurrences(status, triggered_at);
+        CREATE INDEX IF NOT EXISTS idx_occ_rule ON alarm_occurrences(rule_id);
+        CREATE INDEX IF NOT EXISTS idx_stream_occ ON alarm_stream_events(occurrence_id);
+
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('scan_interval_ms', '500');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('batch_interval_ms', '100');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('ws_host', '0.0.0.0');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('ws_port', '8080');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('web_port', '8081');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('plugin_dir', './plugins');
+        INSERT OR IGNORE INTO server_config (key, value) VALUES ('alarm_retention_days', '90');
+        INSERT OR IGNORE INTO server_config (key, value) VALUES ('soe_retention_days', '30');
     ",
     )?;
 

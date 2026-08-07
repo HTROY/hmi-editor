@@ -12,6 +12,11 @@ export type ConfigChangeHandler = (event: {
   pluginId: number;
 }) => void;
 
+export type AlarmMessageHandler = (msg: {
+  type: string;
+  data?: any;
+}) => void;
+
 export class WebSocketClient extends DataSource {
   declare config: WebSocketConfig;
   private ws: WebSocket | null = null;
@@ -20,6 +25,7 @@ export class WebSocketClient extends DataSource {
   private shouldReconnect = false;
   private urlIndex = 0;
   private configChangeHandlers: Set<ConfigChangeHandler> = new Set();
+  private alarmHandlers: Set<AlarmMessageHandler> = new Set();
 
   constructor(config: Partial<WebSocketConfig> = {}) {
     const urls = config.urls?.length
@@ -161,9 +167,31 @@ export class WebSocketClient extends DataSource {
     return () => this.configChangeHandlers.delete(handler);
   }
 
+  /** 订阅报警/SOE 推送（alarm_snapshot/alarm_update/soe/alarm_rules/...） */
+  onAlarmMessage(handler: AlarmMessageHandler): () => void {
+    this.alarmHandlers.add(handler);
+    return () => this.alarmHandlers.delete(handler);
+  }
+
   // ---- 内部 ----
 
   private handleMessage(msg: any): void {
+    // Alarm & SOE push messages
+    if (
+      [
+        "alarm_snapshot",
+        "alarm_update",
+        "soe",
+        "alarm_rules",
+        "alarm_rules_changed",
+      ].includes(msg.type)
+    ) {
+      for (const handler of this.alarmHandlers) {
+        handler(msg);
+      }
+      return;
+    }
+
     // Handle config change notifications
     if (msg.type === "config_change") {
       for (const handler of this.configChangeHandlers) {

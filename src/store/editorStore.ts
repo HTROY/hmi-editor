@@ -1,4 +1,4 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 import {
   SceneGraph,
   Renderer,
@@ -12,6 +12,7 @@ import { BindingEngine, AnimationEngine } from "../core/bindings";
 import { DataBridge, WebSocketClient } from "../core/io";
 import { ProjectManager } from "../core/project";
 import { AlarmManager } from "../core/alarm";
+import type { AlarmRule } from "../core/alarm/types";
 import { Historian } from "../core/historian";
 import { AuthManager } from "../core/auth";
 import { ScriptEngine } from "../core/script";
@@ -82,6 +83,8 @@ interface EditorState {
   syncSceneToProject: () => void;
   acknowledgeAlarm: (id: string) => void;
   acknowledgeAllAlarms: () => void;
+  saveAlarmRule: (rule: AlarmRule) => Promise<void>;
+  deleteAlarmRule: (id: string) => Promise<void>;
   bumpVarRevision: () => void;
   bumpShapeRevision: () => void;
 }
@@ -377,6 +380,15 @@ export const useEditorStore = create<EditorState>((set, get) => {
         s.scriptEngine.stop();
         set({ simRunning: false });
       } else {
+        s.alarmManager.setMode(
+          s.dataBridge.active === "simulation" ? "local" : "remote",
+        );
+        if (s.dataBridge.active !== "simulation") {
+          s.alarmManager.setRemote(
+            s.dataBridge.wsClient,
+            s.dataBridge.getApiBaseUrl(),
+          );
+        }
         if (s.varManager.count === 0) {
           s.varManager.defineMany([
             {
@@ -390,8 +402,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
               group: "供电",
               min: 0,
               max: 1,
-              alarmHigh: 0,
-              alarmLow: 0,
             },
             {
               id: "STA1_211_IA",
@@ -404,8 +414,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
               group: "供电",
               min: 0,
               max: 2000,
-              alarmHigh: 1600,
-              alarmLow: 0,
             },
             {
               id: "STA1_BUS_VOLTAGE",
@@ -418,8 +426,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
               group: "供电",
               min: 0,
               max: 500,
-              alarmHigh: 450,
-              alarmLow: 350,
             },
             {
               id: "STA1_FAN_1_STATUS",
@@ -432,8 +438,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
               group: "BAS",
               min: 0,
               max: 1,
-              alarmHigh: 0,
-              alarmLow: 0,
             },
             {
               id: "STA1_FAN_1_SPEED",
@@ -446,8 +450,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
               group: "BAS",
               min: 0,
               max: 3000,
-              alarmHigh: 2800,
-              alarmLow: 0,
             },
             {
               id: "STA1_TEMP_ZONE1",
@@ -460,11 +462,11 @@ export const useEditorStore = create<EditorState>((set, get) => {
               group: "BAS",
               min: 0,
               max: 50,
-              alarmHigh: 30,
-              alarmLow: 15,
             },
           ]);
-          s.alarmManager.loadPresets();
+          if (s.dataBridge.active === "simulation") {
+            s.alarmManager.loadPresets();
+          }
           s.scriptEngine.loadPresets();
           s.historian.setVariables([
             "STA1_211_IA",
@@ -497,6 +499,12 @@ export const useEditorStore = create<EditorState>((set, get) => {
       get().alarmManager.acknowledgeAll(
         get().authManager.user?.username ?? "operator",
       );
+    },
+    saveAlarmRule: async (rule) => {
+      await get().alarmManager.saveRule(rule);
+    },
+    deleteAlarmRule: async (id) => {
+      await get().alarmManager.deleteRule(id);
     },
     bumpVarRevision: () => set((s) => ({ varRevision: s.varRevision + 1 })),
     bumpShapeRevision: () =>

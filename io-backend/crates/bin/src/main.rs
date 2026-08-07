@@ -5,6 +5,8 @@ use hmi_io_monitor::collector::MonitorCollector;
 use hmi_io_plugin::registry::PluginRegistry;
 use hmi_io_point::manager::PointManager;
 use hmi_io_point::redundancy::{NodeState, RedundancyEngine, RoleCommand};
+use hmi_io_alarm::engine::AlarmEngine;
+use hmi_io_alarm::types::AlarmRule;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 
@@ -17,25 +19,26 @@ fn main() -> anyhow::Result<()> {
     let db_path = "hmi_io.db";
     let repo = Repo::new(db_path)?;
     log::info!("Database: {}", db_path);
+    let repo_arc = Arc::new(repo);
 
     let monitor = MonitorCollector::new();
 
     let config_path = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "config.yaml".to_string());
-    let app_config = build_config(&repo, &config_path)?;
+    let app_config = build_config(repo_arc.as_ref(), &config_path)?;
 
-    let ws_port: u16 = repo
+    let ws_port: u16 = repo_arc
         .get_config("ws_port")
         .unwrap_or_else(|| "8080".into())
         .parse()
         .unwrap_or(app_config.server.port);
-    let web_port: u16 = repo
+    let web_port: u16 = repo_arc
         .get_config("web_port")
         .unwrap_or_else(|| "8081".into())
         .parse()
         .unwrap_or(app_config.server.web_port);
-    let batch_interval_ms: u64 = repo
+    let batch_interval_ms: u64 = repo_arc
         .get_config("batch_interval_ms")
         .unwrap_or_else(|| "100".into())
         .parse()
@@ -47,13 +50,76 @@ fn main() -> anyhow::Result<()> {
         .build()?;
 
     rt.block_on(async move {
+        // Alarm engine: IO-free state machine + persister task.
+        let (alarm_tx, alarm_rx) = mpsc::unbounded_channel::<hmi_io_alarm::types::OutEvent>();
+        let alarm_engine = AlarmEngine::with_soe_seq(alarm_tx, repo_arc.max_soe_seq());
+        let rules: Vec<AlarmRule> = repo_arc
+            .list_alarm_rules()
+            .map(|rows| rows.into_iter().map(AlarmRule::from).collect())
+            .unwrap_or_else(|e| {
+                log::error!("Load alarm rules failed: {}", e);
+                vec![]
+            });
+        alarm_engine.load_rules(rules);
+        let active = repo_arc
+            .list_active_alarm_occurrences()
+            .map(|rows| rows.into_iter().map(hmi_io_alarm::types::AlarmOccurrence::from).collect())
+            .unwrap_or_default();
+        let recovered_unacked = repo_arc
+            .list_recovered_unacked()
+            .map(|rows| rows.into_iter().map(hmi_io_alarm::types::AlarmOccurrence::from).collect())
+            .unwrap_or_default();
+        alarm_engine.restore_occurrences(active, recovered_unacked);
+
         let registry = Arc::new(PluginRegistry::new(monitor.clone())?);
         let point_manager = Arc::new(Mutex::new(PointManager::from_config(&app_config)));
         let point_rx = registry
             .take_point_receiver()
             .ok_or_else(|| anyhow::anyhow!("no point rx"))?;
-        let (bridge, broadcast_tx) =
-            Bridge::new(point_rx, point_manager.clone(), batch_interval_ms);
+        let (bridge, broadcast_tx) = Bridge::new(
+            point_rx,
+            point_manager.clone(),
+            batch_interval_ms,
+            Some(alarm_engine.clone()),
+        );
+        let persister = hmi_io_alarm::persist::spawn_persister(
+            alarm_rx,
+            repo_arc.clone(),
+            broadcast_tx.clone(),
+        );
+
+        // Periodic confirm-candidate finalization (100ms) and retention prune (1h).
+        {
+            let eng = alarm_engine.clone();
+            tokio::spawn(async move {
+                let mut tick = tokio::time::interval(std::time::Duration::from_millis(100));
+                loop {
+                    tick.tick().await;
+                    eng.tick();
+                }
+            });
+        }
+        {
+            let repo_for_prune = repo_arc.clone();
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+                loop {
+                    interval.tick().await;
+                    let alarm_days: u64 = repo_for_prune
+                        .get_config("alarm_retention_days")
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(90);
+                    let soe_days: u64 = repo_for_prune
+                        .get_config("soe_retention_days")
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(30);
+                    match repo_for_prune.prune_alarm_data(alarm_days, soe_days) {
+                        Ok((a, s)) => log::info!("Pruned alarm/SOE rows: {}/{}", a, s),
+                        Err(e) => log::error!("Prune alarm data failed: {}", e),
+                    }
+                }
+            });
+        }
 
         // 冗余引擎：始终构造（disabled 时引擎空转，行为与单机一致）
         let redundancy = RedundancyEngine::new(
@@ -93,6 +159,7 @@ fn main() -> anyhow::Result<()> {
         }
         if initial_state == NodeState::Active {
             registry.start_instances(&app_config).await?;
+            alarm_engine.rebuild(&point_manager.lock().unwrap().get_all_values());
         } else {
             log::info!("Node starts as STANDBY, plugins deferred until promotion");
         }
@@ -105,7 +172,6 @@ fn main() -> anyhow::Result<()> {
             log::info!("  Plugin '{}': {}", n, s);
         }
 
-        let repo_arc = Arc::new(repo);
         let engine_task = {
             let r = redundancy.clone();
             tokio::spawn(async move { r.run().await })
@@ -114,6 +180,8 @@ fn main() -> anyhow::Result<()> {
         let repo_for_roles = repo_arc.clone();
         let reg_for_roles = registry.clone();
         let mon_for_roles = monitor.clone();
+        let alarm_for_roles = alarm_engine.clone();
+        let pm_for_roles = point_manager.clone();
         let role_task = tokio::spawn(async move {
             while let Some(cmd) = role_rx.recv().await {
                 match cmd {
@@ -121,7 +189,18 @@ fn main() -> anyhow::Result<()> {
                         log::info!("Role command: PROMOTE");
                         let cfg = hmi_io_config::AppConfig::from_repo_sync(&repo_for_roles);
                         match reg_for_roles.start_instances(&cfg).await {
-                            Ok(()) => log::info!("Plugins started after promotion"),
+                            Ok(()) => {
+                                log::info!("Plugins started after promotion");
+                                let rules: Vec<AlarmRule> = repo_for_roles
+                                    .list_alarm_rules()
+                                    .map(|rows| {
+                                        rows.into_iter().map(AlarmRule::from).collect()
+                                    })
+                                    .unwrap_or_default();
+                                alarm_for_roles.replace_rules(rules);
+                                alarm_for_roles
+                                    .rebuild(&pm_for_roles.lock().unwrap().get_all_values());
+                            }
                             Err(e) => {
                                 log::error!("Failed to start plugins after promotion: {}", e)
                             }
@@ -177,6 +256,7 @@ let ws_cfg = hmi_io_config::ServerConfig {
         let reg_ws = registry.clone();
         let pm_ws = point_manager.clone();
         let mon_ws = monitor.clone();
+        let alarm_ws = alarm_engine.clone();
         let ws_h = tokio::spawn(async move {
             log::info!(
                 "WS data server on ws://{}:{}{}",
@@ -185,7 +265,7 @@ let ws_cfg = hmi_io_config::ServerConfig {
                 ws_cfg.path
             );
             if let Err(e) =
-        hmi_io_server::ws::run_server(&ws_cfg, bc_ws, reg_ws, pm_ws, mon_ws).await
+        hmi_io_server::ws::run_server(&ws_cfg, bc_ws, reg_ws, pm_ws, mon_ws, Some(alarm_ws)).await
             {
                 log::error!("WS fatal: {}", e);
             }
@@ -197,6 +277,7 @@ let ws_cfg = hmi_io_config::ServerConfig {
         let reg_web = registry.clone();
         let redundancy_web = redundancy.clone();
         let pm_web = point_manager.clone();
+        let alarm_web = alarm_engine.clone();
         tokio::spawn(async move {
             log::info!("Web UI starting on port {}...", web_port_clone);
             match hmi_io_web::server::run_web_server(
@@ -206,6 +287,7 @@ let ws_cfg = hmi_io_config::ServerConfig {
                 bc_web,
                 pm_web,
                 redundancy_web,
+                alarm_web,
                 web_port_clone,
             )
             .await
@@ -236,6 +318,7 @@ let ws_cfg = hmi_io_config::ServerConfig {
             }
         }
         registry.shutdown();
+        persister.abort();
         log::info!("=== Shutdown complete ===");
         Ok::<(), anyhow::Error>(())
     })?;
@@ -284,6 +367,34 @@ fn migrate_yaml_to_db(repo: &Repo, config: &AppConfig) {
         "redundancy_config",
         &serde_json::to_string(&config.redundancy).unwrap_or_else(|_| "{}".into()),
     );
+    let _ = repo.set_config(
+        "alarm_retention_days",
+        &config.alarm.retention_alarm_days.to_string(),
+    );
+    let _ = repo.set_config(
+        "soe_retention_days",
+        &config.alarm.retention_soe_days.to_string(),
+    );
+    for rule in &config.alarm.rules {
+        let row = hmi_io_db::repo::AlarmRuleRow {
+            id: rule.id.clone(),
+            variable_id: rule.variable_id.clone(),
+            name: rule.name.clone(),
+            description: rule.description.clone(),
+            severity: rule.severity.clone(),
+            group_name: rule.group.clone(),
+            condition: rule.condition.clone(),
+            threshold: rule.threshold,
+            enabled: rule.enabled,
+            hysteresis: rule.hysteresis,
+            confirm_ms: rule.confirm_ms,
+        };
+        if let Err(e) = repo.insert_alarm_rule(&row) {
+            log::warn!("  Skip alarm rule '{}': {}", rule.id, e);
+        } else {
+            log::info!("  Migrated alarm rule '{}'", rule.id);
+        }
+    }
     for inst in &config.plugins.instances {
         let cj = serde_json::to_string(&inst.config).unwrap_or_else(|_| "{}".into());
         match repo.insert_plugin_full(

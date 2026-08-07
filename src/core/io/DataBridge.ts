@@ -1,4 +1,4 @@
-import { VariableManager } from "../variables/VariableManager";
+﻿import { VariableManager } from "../variables/VariableManager";
 import type { VariableType } from "../variables/types";
 import { DataSource } from "./DataSource";
 import { WebSocketClient } from "./WebSocketClient";
@@ -235,8 +235,6 @@ export class DataBridge {
         group: string;
         min: number;
         max: number;
-        alarmHigh: number;
-        alarmLow: number;
       }> = [];
 
       for (const p of points) {
@@ -268,8 +266,6 @@ export class DataBridge {
           group: `IO Backend (${groupName})`,
           min: 0,
           max: varType === "AI" || varType === "AO" ? 100 : 1,
-          alarmHigh: 0,
-          alarmLow: 0,
         });
       }
 

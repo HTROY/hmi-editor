@@ -105,7 +105,7 @@ impl PointManager {
         scaled.id = logical_id.clone();
         let is_new = cached.last_value.is_none();
         let is_changed = match &cached.last_value {
-            Some(prev) => prev.value != scaled.value,
+            Some(prev) => prev.value != scaled.value || prev.quality != scaled.quality,
             None => true,
         };
         if is_new || is_changed {

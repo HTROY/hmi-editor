@@ -8,12 +8,14 @@ use hmi_io_point::manager::PointManager;
 use hmi_io_point::types::{PointValue, WsDataMessage};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{broadcast, mpsc};
+use hmi_io_alarm::engine::AlarmEngine;
 
 pub struct Bridge {
     point_rx: mpsc::UnboundedReceiver<PointValue>,
     point_manager: Arc<Mutex<PointManager>>,
     broadcast_tx: broadcast::Sender<String>,
     batch_interval_ms: u64,
+    alarm_engine: Option<Arc<AlarmEngine>>,
 }
 
 impl Bridge {
@@ -21,6 +23,7 @@ impl Bridge {
         point_rx: mpsc::UnboundedReceiver<PointValue>,
         point_manager: Arc<Mutex<PointManager>>,
         batch_interval_ms: u64,
+        alarm_engine: Option<Arc<AlarmEngine>>,
     ) -> (Self, broadcast::Sender<String>) {
         let (broadcast_tx, _) = broadcast::channel::<String>(256);
         let bridge = Self {
@@ -28,6 +31,7 @@ impl Bridge {
             point_manager,
             broadcast_tx: broadcast_tx.clone(),
             batch_interval_ms,
+            alarm_engine,
         };
         (bridge, broadcast_tx)
     }
@@ -46,6 +50,9 @@ impl Bridge {
             tokio::select! {
                 Some(raw_point) = self.point_rx.recv() => {
                     if let Some(pv) = self.point_manager.lock().unwrap().update(raw_point) {
+                        if let Some(eng) = &self.alarm_engine {
+                            eng.on_point(&pv);
+                        }
                         batch.push(pv);
                     }
                 }

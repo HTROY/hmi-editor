@@ -14,6 +14,8 @@ use tokio::sync::broadcast;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
 use hmi_io_config::ServerConfig;
+use hmi_io_alarm::engine::AlarmEngine;
+use hmi_io_alarm::persist::{alarm_rules_json, alarm_snapshot_json};
 use hmi_io_monitor::collector::MonitorCollector;
 use hmi_io_plugin::registry::PluginRegistry;
 use hmi_io_point::manager::PointManager;
@@ -25,6 +27,7 @@ pub async fn run_server(
     registry: Arc<PluginRegistry>,
     point_manager: Arc<Mutex<PointManager>>,
     monitor: Arc<MonitorCollector>,
+    alarm_engine: Option<Arc<AlarmEngine>>,
 ) -> anyhow::Result<()> {
     let addr: std::net::SocketAddr = format!("{}:{}", config.host, config.port).parse()?;
     let socket = tokio::net::TcpSocket::new_v4()?;
@@ -51,8 +54,9 @@ pub async fn run_server(
         let reg = registry.clone();
         let pm = point_manager.clone();
         let mon = monitor.clone();
+        let alarm = alarm_engine.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(stream, bc_rx, reg, pm, mon).await {
+            if let Err(e) = handle_connection(stream, bc_rx, reg, pm, mon, alarm).await {
                 log::error!("Conn error ({}): {}", peer, e);
             }
             log::info!("Conn closed: {}", peer);
@@ -66,6 +70,7 @@ async fn handle_connection(
     registry: Arc<PluginRegistry>,
     point_manager: Arc<Mutex<PointManager>>,
     monitor: Arc<MonitorCollector>,
+    alarm_engine: Option<Arc<AlarmEngine>>,
 ) -> anyhow::Result<()> {
     let ws = accept_async(stream).await?;
     let (mut ws_tx, mut ws_rx) = ws.split();
@@ -92,6 +97,20 @@ async fn handle_connection(
     if let Some(json) = snapshot_json {
         let _ = ws_tx.send(Message::Text(json.into())).await;
         log::info!("Sent snapshot");
+    }
+
+    // Alarm snapshot + rules for the new client
+    if let Some(eng) = &alarm_engine {
+        let active = eng.active_occurrences();
+        let rules = eng.rules();
+        let mut msgs = vec![alarm_snapshot_json(&active), alarm_rules_json(&rules)];
+        // Send rules first so the frontend has definitions before occurrences.
+        msgs.reverse();
+        for json in msgs {
+            if ws_tx.send(Message::Text(json.into())).await.is_err() {
+                break;
+            }
+        }
     }
 
     // Per-connection subscription filter (empty = receive all)

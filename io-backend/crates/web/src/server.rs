@@ -1,4 +1,5 @@
 use hmi_io_db::repo::Repo;
+use hmi_io_alarm::engine::AlarmEngine;
 use hmi_io_monitor::collector::MonitorCollector;
 use hmi_io_plugin::registry::PluginRegistry;
 use hmi_io_point::manager::PointManager;
@@ -20,6 +21,7 @@ pub async fn run_web_server(
     broadcast_tx: broadcast::Sender<String>,
     point_manager: Arc<Mutex<PointManager>>,
     redundancy: Arc<RedundancyEngine>,
+    alarm_engine: Arc<AlarmEngine>,
     port: u16,
 ) -> anyhow::Result<()> {
     // Sampler task: keep the trend history continuous regardless of UI clients
@@ -108,6 +110,25 @@ pub async fn run_web_server(
             get(super::api::monitor_plugin_packets),
         )
         .route("/api/monitor/history", get(super::api::monitor_history))
+        // Alarm & SOE API
+        .route("/api/alarm/rules", get(super::api::list_alarm_rules).post(super::api::upsert_alarm_rule))
+        .route(
+            "/api/alarm/rules/{id}",
+            axum::routing::put(super::api::update_alarm_rule).delete(super::api::delete_alarm_rule),
+        )
+        .route("/api/alarm/active", get(super::api::alarm_active))
+        .route("/api/alarm/history", get(super::api::alarm_history))
+        .route(
+            "/api/alarm/occurrences/{id}/events",
+            get(super::api::alarm_occurrence_events),
+        )
+        .route("/api/alarm/ack", post(super::api::alarm_ack))
+        .route("/api/alarm/ack-all", post(super::api::alarm_ack_all))
+        .route(
+            "/api/alarm/config",
+            get(super::api::get_alarm_config).put(super::api::put_alarm_config),
+        )
+        .route("/api/soe", get(super::api::soe_query))
         // Static files (SPA fallback to index.html)
         .fallback_service(
             ServeDir::new("web-ui/dist").fallback(ServeFile::new("web-ui/dist/index.html")),
@@ -118,6 +139,7 @@ pub async fn run_web_server(
         .layer(Extension(broadcast_tx))
         .layer(Extension(point_manager))
         .layer(Extension(redundancy))
+        .layer(Extension(alarm_engine))
         .with_state(repo);
 
     let addr = format!("0.0.0.0:{}", port);

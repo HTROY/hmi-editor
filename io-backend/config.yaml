@@ -97,3 +97,64 @@ plugins:
           address: "3002"
           data_type: "float32"
           var_type: "AI"
+
+alarm:
+  enabled: true
+  retention_alarm_days: 90
+  retention_soe_days: 30
+  rules:
+    - id: "ALM_IA_OVER"
+      variable_id: "modbus_tcp:STA1_211_IA"
+      name: "A相过流"
+      description: "A相电流超过1600A"
+      severity: "major"
+      group: "供电/400V"
+      condition: "high"
+      threshold: 1600
+      enabled: true
+      hysteresis: 0
+      confirm_ms: 0
+    - id: "ALM_BUS_LOW"
+      variable_id: "modbus_tcp:STA1_BUS_VOLTAGE"
+      name: "母线欠压"
+      description: "母线电压低于350V"
+      severity: "critical"
+      group: "供电/400V"
+      condition: "low"
+      threshold: 350
+      enabled: true
+      hysteresis: 0
+      confirm_ms: 0
+    - id: "ALM_BUS_HIGH"
+      variable_id: "modbus_tcp:STA1_BUS_VOLTAGE"
+      name: "母线过压"
+      description: "母线电压高于450V"
+      severity: "major"
+      group: "供电/400V"
+      condition: "high"
+      threshold: 450
+      enabled: true
+      hysteresis: 0
+      confirm_ms: 0
+    - id: "ALM_FAN_STOP"
+      variable_id: "modbus_tcp:STA1_FAN_1_STATUS"
+      name: "风机停机"
+      description: "1号风机停止运行"
+      severity: "minor"
+      group: "BAS/环控"
+      condition: "equal"
+      threshold: 0
+      enabled: true
+      hysteresis: 0
+      confirm_ms: 0
+    - id: "ALM_TEMP_HIGH"
+      variable_id: "modbus_tcp:STA1_TEMP_ZONE1"
+      name: "站厅高温"
+      description: "站厅温度超过30℃"
+      severity: "warning"
+      group: "BAS/环控"
+      condition: "high"
+      threshold: 30
+      enabled: true
+      hysteresis: 0
+      confirm_ms: 0

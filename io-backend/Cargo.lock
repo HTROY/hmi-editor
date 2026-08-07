@@ -983,11 +983,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "hmi-io-alarm"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "hmi-io-db",
+ "hmi-io-point",
+ "log",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "hmi-io-backend"
 version = "0.3.0"
 dependencies = [
  "anyhow",
  "env_logger",
+ "hmi-io-alarm",
  "hmi-io-bridge",
  "hmi-io-config",
  "hmi-io-db",
@@ -1006,6 +1020,7 @@ dependencies = [
 name = "hmi-io-bridge"
 version = "0.3.0"
 dependencies = [
+ "hmi-io-alarm",
  "hmi-io-point",
  "log",
  "serde_json",
@@ -1080,6 +1095,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "futures-util",
+ "hmi-io-alarm",
  "hmi-io-config",
  "hmi-io-monitor",
  "hmi-io-plugin",
@@ -1097,6 +1113,7 @@ dependencies = [
  "anyhow",
  "axum",
  "calamine",
+ "hmi-io-alarm",
  "hmi-io-config",
  "hmi-io-db",
  "hmi-io-monitor",

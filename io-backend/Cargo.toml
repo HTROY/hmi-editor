@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/alarm",
     "crates/bin",
     "crates/bridge",
     "crates/config",
@@ -19,6 +20,7 @@ members = [
     "crates/test-servers/opcua-server",
 ]
 default-members = [
+    "crates/alarm",
     "crates/bin",
     "crates/bridge",
     "crates/config",
@@ -53,6 +55,7 @@ wasmtime = "47.0.2"
 wasmtime-wasi = "47.0.2"
 wit-bindgen = "0.58"
 hmi-io-bridge = { path = "crates/bridge" }
+hmi-io-alarm = { path = "crates/alarm" }
 hmi-io-config = { path = "crates/config" }
 hmi-io-db = { path = "crates/db" }
 hmi-io-monitor = { path = "crates/monitor" }

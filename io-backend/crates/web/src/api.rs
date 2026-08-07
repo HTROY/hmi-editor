@@ -1,7 +1,12 @@
 //! REST API handlers for plugin/point management
 
 use hmi_io_config::RedundancyConfig;
-use hmi_io_db::repo::{ConfigSnapshot, PluginRow, PointRow, Repo, SnapshotPoint, SnapshotPlugin};
+use hmi_io_alarm::engine::AlarmEngine;
+use hmi_io_alarm::types::{AlarmOccurrence, AlarmRule, AlarmStreamEvent};
+use hmi_io_db::repo::{
+    AlarmRuleRow, ConfigSnapshot, PluginRow, PointRow, Repo, SnapshotAlarmRule, SnapshotPoint,
+    SnapshotPlugin,
+};
 use hmi_io_monitor::collector::MonitorCollector;
 use hmi_io_monitor::types::*;
 use hmi_io_point::manager::PointManager;
@@ -20,6 +25,7 @@ use calamine::Reader;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub type AppState = Arc<Repo>;
 
@@ -619,6 +625,32 @@ fn build_config_snapshot(repo: &Repo) -> ConfigSnapshot {
         .get_config("redundancy_config")
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or(serde_json::json!({}));
+    let alarm_retention_days: u32 = repo
+        .get_config("alarm_retention_days")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(90);
+    let soe_retention_days: u32 = repo
+        .get_config("soe_retention_days")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(30);
+    let alarm_rules: Vec<SnapshotAlarmRule> = repo
+        .list_alarm_rules()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|r| SnapshotAlarmRule {
+            id: r.id,
+            variable_id: r.variable_id,
+            name: r.name,
+            description: r.description,
+            severity: r.severity,
+            group_name: r.group_name,
+            condition: r.condition,
+            threshold: r.threshold,
+            enabled: r.enabled,
+            hysteresis: r.hysteresis,
+            confirm_ms: r.confirm_ms,
+        })
+        .collect();
     let plugins = repo
         .list_plugins_with_points()
         .unwrap_or_default()
@@ -653,6 +685,9 @@ fn build_config_snapshot(repo: &Repo) -> ConfigSnapshot {
         batch_interval_ms: batch_ms,
         plugin_dir,
         redundancy,
+        alarm_retention_days,
+        soe_retention_days,
+        alarm_rules,
         plugins,
     }
 }
@@ -733,6 +768,7 @@ pub async fn redundancy_snapshot(
 pub async fn apply_config_push(
     State(repo): State<AppState>,
     Extension(engine): Extension<Arc<RedundancyEngine>>,
+    Extension(alarm_engine): Extension<Arc<AlarmEngine>>,
     Json(body): Json<ConfigPushBody>,
 ) -> Result<StatusCode, StatusCode> {
     let snap: ConfigSnapshot = serde_json::from_value(body.config).map_err(|e| {
@@ -750,6 +786,17 @@ pub async fn apply_config_push(
         log::error!("apply config snapshot failed: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
+    // Reload alarm rules into the in-memory engine (diff-based recovery).
+    let rules: Vec<AlarmRule> = repo
+        .list_alarm_rules()
+        .map_err(|e| {
+            log::error!("load alarm rules after config push failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .into_iter()
+        .map(AlarmRule::from)
+        .collect();
+    alarm_engine.replace_rules(rules);
     engine.set_config_version(snap.config_version);
     engine
         .state()
@@ -774,6 +821,289 @@ pub async fn redundancy_instance_groups(
     Extension(registry): Extension<Arc<hmi_io_plugin::registry::PluginRegistry>>,
 ) -> Json<Vec<hmi_io_plugin::registry::InstanceGroupStatus>> {
     Json(registry.instance_groups_status())
+}
+
+// ============================================================
+// Alarm & SOE API
+// ============================================================
+
+pub async fn list_alarm_rules(
+    Extension(alarm_engine): Extension<Arc<AlarmEngine>>,
+) -> Json<Vec<AlarmRule>> {
+    Json(alarm_engine.rules())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlarmRuleUpsert {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub variable_id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    pub severity: hmi_io_alarm::types::Severity,
+    #[serde(default)]
+    pub group: String,
+    pub condition: hmi_io_alarm::types::Condition,
+    pub threshold: f64,
+    #[serde(default = "default_rule_enabled")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub hysteresis: f64,
+    #[serde(default)]
+    pub confirm_ms: u64,
+}
+
+fn default_rule_enabled() -> bool {
+    true
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+static RULE_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// Build a rule from the upsert body. `path_id` (PUT /{id}) wins over the body
+/// id; when both are absent, an id is generated server-side.
+fn rule_from_upsert(body: AlarmRuleUpsert, path_id: Option<String>) -> AlarmRule {
+    let id = match path_id.or(body.id) {
+        Some(id) if !id.trim().is_empty() => id,
+        _ => format!(
+            "rule_{}_{}",
+            now_ms(),
+            RULE_SEQ.fetch_add(1, Ordering::Relaxed)
+        ),
+    };
+    AlarmRule {
+        id,
+        variable_id: body.variable_id,
+        name: body.name,
+        description: body.description,
+        severity: body.severity,
+        group: body.group,
+        condition: body.condition,
+        threshold: body.threshold,
+        enabled: body.enabled,
+        hysteresis: body.hysteresis,
+        confirm_ms: body.confirm_ms,
+    }
+}
+
+async fn save_alarm_rule(
+    repo: &Repo,
+    alarm_engine: &AlarmEngine,
+    engine: &RedundancyEngine,
+    rule: AlarmRule,
+) -> Result<Json<AlarmRule>, StatusCode> {
+    let row: AlarmRuleRow = (&rule).into();
+    repo.insert_alarm_rule(&row).map_err(|e| {
+        log::error!("{}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    alarm_engine.set_rule(rule.clone());
+    bump_version_and_push(repo, engine).await;
+    Ok(Json(rule))
+}
+
+pub async fn upsert_alarm_rule(
+    State(repo): State<AppState>,
+    Extension(alarm_engine): Extension<Arc<AlarmEngine>>,
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
+    Json(body): Json<AlarmRuleUpsert>,
+) -> Result<Json<AlarmRule>, StatusCode> {
+    let rule = rule_from_upsert(body, None);
+    save_alarm_rule(&repo, &alarm_engine, &engine, rule).await
+}
+
+pub async fn update_alarm_rule(
+    State(repo): State<AppState>,
+    Extension(alarm_engine): Extension<Arc<AlarmEngine>>,
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
+    Path(id): Path<String>,
+    Json(body): Json<AlarmRuleUpsert>,
+) -> Result<Json<AlarmRule>, StatusCode> {
+    let rule = rule_from_upsert(body, Some(id));
+    save_alarm_rule(&repo, &alarm_engine, &engine, rule).await
+}
+
+pub async fn delete_alarm_rule(
+    State(repo): State<AppState>,
+    Extension(alarm_engine): Extension<Arc<AlarmEngine>>,
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    alarm_engine.remove_rule(&id);
+    repo.delete_alarm_rule(&id).map_err(|e| {
+        log::error!("{}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    bump_version_and_push(&repo, &engine).await;
+    Ok(StatusCode::OK)
+}
+
+pub async fn alarm_active(
+    Extension(alarm_engine): Extension<Arc<AlarmEngine>>,
+) -> Json<Vec<AlarmOccurrence>> {
+    Json(alarm_engine.active_occurrences())
+}
+
+#[derive(Deserialize)]
+pub struct AlarmHistoryQuery {
+    pub from: Option<u64>,
+    pub to: Option<u64>,
+    pub severity: Option<String>,
+    pub group: Option<String>,
+    pub variable_id: Option<String>,
+    pub status: Option<String>,
+    pub page: Option<u64>,
+    pub page_size: Option<u64>,
+}
+
+pub async fn alarm_history(
+    State(repo): State<AppState>,
+    Query(q): Query<AlarmHistoryQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let (total, rows) = repo
+        .query_alarm_occurrences(
+            q.from,
+            q.to,
+            q.severity.as_deref(),
+            q.group.as_deref(),
+            q.variable_id.as_deref(),
+            q.status.as_deref(),
+            q.page.unwrap_or(1),
+            q.page_size.unwrap_or(50),
+        )
+        .map_err(|e| {
+            log::error!("{}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    let items: Vec<AlarmOccurrence> = rows.into_iter().map(AlarmOccurrence::from).collect();
+    Ok(Json(serde_json::json!({ "total": total, "items": items })))
+}
+
+pub async fn alarm_occurrence_events(
+    State(repo): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<AlarmStreamEvent>>, StatusCode> {
+    let items: Vec<AlarmStreamEvent> = repo
+        .query_occurrence_stream_events(&id)
+        .map_err(|e| {
+            log::error!("{}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .into_iter()
+        .map(AlarmStreamEvent::from)
+        .collect();
+    Ok(Json(items))
+}
+
+#[derive(Deserialize)]
+pub struct SoeQuery {
+    pub from: Option<u64>,
+    pub to: Option<u64>,
+    pub variable_id: Option<String>,
+    pub quality: Option<String>,
+    pub page: Option<u64>,
+    pub page_size: Option<u64>,
+}
+
+pub async fn soe_query(
+    State(repo): State<AppState>,
+    Query(q): Query<SoeQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let (total, rows) = repo
+        .query_soe(
+            q.from,
+            q.to,
+            q.variable_id.as_deref(),
+            q.quality.as_deref(),
+            q.page.unwrap_or(1),
+            q.page_size.unwrap_or(50),
+        )
+        .map_err(|e| {
+            log::error!("{}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    let items: Vec<hmi_io_alarm::types::SoeRecord> =
+        rows.into_iter().map(hmi_io_alarm::types::SoeRecord::from).collect();
+    Ok(Json(serde_json::json!({ "total": total, "items": items })))
+}
+
+#[derive(Deserialize)]
+pub struct AckBody {
+    pub id: String,
+    pub user: String,
+}
+
+pub async fn alarm_ack(
+    Extension(alarm_engine): Extension<Arc<AlarmEngine>>,
+    Json(body): Json<AckBody>,
+) -> Result<StatusCode, StatusCode> {
+    if alarm_engine.ack(&body.id, &body.user) {
+        Ok(StatusCode::OK)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+#[derive(Deserialize)]
+pub struct AckAllBody {
+    pub user: String,
+}
+
+pub async fn alarm_ack_all(
+    Extension(alarm_engine): Extension<Arc<AlarmEngine>>,
+    Json(body): Json<AckAllBody>,
+) -> Json<serde_json::Value> {
+    let n = alarm_engine.ack_all(&body.user);
+    Json(serde_json::json!({ "acknowledged": n }))
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AlarmConfigBody {
+    pub alarm_retention_days: u32,
+    pub soe_retention_days: u32,
+}
+
+pub async fn get_alarm_config(
+    State(repo): State<AppState>,
+) -> Json<AlarmConfigBody> {
+    Json(AlarmConfigBody {
+        alarm_retention_days: repo
+            .get_config("alarm_retention_days")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(90),
+        soe_retention_days: repo
+            .get_config("soe_retention_days")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(30),
+    })
+}
+
+pub async fn put_alarm_config(
+    State(repo): State<AppState>,
+    Extension(engine): Extension<Arc<RedundancyEngine>>,
+    Json(body): Json<AlarmConfigBody>,
+) -> Result<StatusCode, StatusCode> {
+    repo.set_config("alarm_retention_days", &body.alarm_retention_days.to_string())
+        .and_then(|_| repo.set_config("soe_retention_days", &body.soe_retention_days.to_string()))
+        .map_err(|e| {
+            log::error!("{}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    if let Err(e) = repo.prune_alarm_data(body.alarm_retention_days as u64, body.soe_retention_days as u64)
+    {
+        log::error!("prune alarm data failed: {}", e);
+    }
+    bump_version_and_push(&repo, &engine).await;
+    Ok(StatusCode::OK)
 }
 
 // ============================================================
@@ -1031,5 +1361,56 @@ mod tests {
         assert_eq!(snap.plugins[0].name, "mb");
         assert_eq!(snap.plugins[0].points[0].variable_id, "P1");
         assert_eq!(snap.redundancy["enabled"], serde_json::Value::Bool(true));
+    }
+
+    #[test]
+    fn alarm_rule_id_is_generated_when_absent() {
+        let body = AlarmRuleUpsert {
+            id: None,
+            variable_id: "P1".into(),
+            name: "测试".into(),
+            description: String::new(),
+            severity: hmi_io_alarm::types::Severity::Major,
+            group: String::new(),
+            condition: hmi_io_alarm::types::Condition::High,
+            threshold: 100.0,
+            enabled: true,
+            hysteresis: 0.0,
+            confirm_ms: 0,
+        };
+        let r1 = rule_from_upsert(body, None);
+        assert!(r1.id.starts_with("rule_"));
+        let body2 = AlarmRuleUpsert {
+            id: Some("body-id".into()),
+            variable_id: "P2".into(),
+            name: String::new(),
+            description: String::new(),
+            severity: hmi_io_alarm::types::Severity::Warning,
+            group: String::new(),
+            condition: hmi_io_alarm::types::Condition::Low,
+            threshold: 1.0,
+            enabled: false,
+            hysteresis: 1.0,
+            confirm_ms: 500,
+        };
+        let r2 = rule_from_upsert(body2, Some("path-id".into()));
+        assert_eq!(r2.id, "path-id");
+        let r3 = rule_from_upsert(
+            AlarmRuleUpsert {
+                id: Some("body-id".into()),
+                variable_id: "P3".into(),
+                name: String::new(),
+                description: String::new(),
+                severity: hmi_io_alarm::types::Severity::Minor,
+                group: String::new(),
+                condition: hmi_io_alarm::types::Condition::NotEqual,
+                threshold: 0.0,
+                enabled: true,
+                hysteresis: 0.0,
+                confirm_ms: 0,
+            },
+            None,
+        );
+        assert_eq!(r3.id, "body-id");
     }
 }
