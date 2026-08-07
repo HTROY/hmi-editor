@@ -115,3 +115,17 @@ Backend (from repo root unless noted):
 - `config.yaml` controls ports, plugin instances, and point mappings; keep secrets out.
 - Redundancy uses `redundancy:` block: `enabled / node_id / role / peer_url / peer_ws_port / heartbeat_interval_ms / failover_threshold / failback_delay_ms / full_snapshot_interval_ms / plugin_unhealthy_threshold / plugin_promotion_cooldown_ms / instance_failover_threshold / instance_failback_enabled / instance_failback_delay_ms / instance_switch_cooldown_ms`；`server.web_port` 控制管理端口。
 - Never commit `hmi_io.db` (local SQLite). Load `.wasm` plugins only from `plugins/`; treat plugin binaries as untrusted code.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in the repo's GitHub Issues, accessed via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-label vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: one root `CONTEXT.md` plus `docs/adr/`. See `docs/agents/domain.md`.
