@@ -160,7 +160,7 @@ describe("applyResize — 圆/文本/路径", () => {
     expect(c.height).toBe(100);
   });
 
-  it("scales text font size with the resize ratio", () => {
+  it("scales text font size with the corner resize ratio", () => {
     const t = createShape("text", {
       x: 0,
       y: 0,
@@ -172,7 +172,23 @@ describe("applyResize — 圆/文本/路径", () => {
     expect(t.width).toBe(150);
     expect(t.height).toBe(100);
     expect(t.fontSize).toBe(40);
+  });
 
+  it("shrinks text font size when a corner handle is dragged inward", () => {
+    const t = createShape("text", {
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 50,
+      fontSize: 20,
+    }) as TextShape;
+    applyResize(t, "se", { x: 50, y: 25 }, { snap: false });
+    expect(t.width).toBe(50);
+    expect(t.height).toBe(25);
+    expect(t.fontSize).toBe(10);
+  });
+
+  it("keeps text font size when resizing from an edge handle", () => {
     const t2 = createShape("text", {
       x: 0,
       y: 0,
@@ -181,7 +197,50 @@ describe("applyResize — 圆/文本/路径", () => {
       fontSize: 20,
     }) as TextShape;
     applyResize(t2, "e", { x: 200, y: 0 }, { snap: false });
-    expect(t2.fontSize).toBe(40);
+    expect(t2.width).toBe(200);
+    expect(t2.height).toBe(50);
+    expect(t2.fontSize).toBe(20);
+  });
+
+  it("keeps text font size when resizing from the other edge handles", () => {
+    const t = createShape("text", {
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 50,
+      fontSize: 20,
+    }) as TextShape;
+    applyResize(t, "s", { x: 0, y: 100 }, { snap: false });
+    expect(t.width).toBe(100);
+    expect(t.height).toBe(100);
+    expect(t.fontSize).toBe(20);
+  });
+
+  it("keeps text font size on Shift + edge handle proportional resize", () => {
+    const t = createShape("text", {
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 50,
+      fontSize: 20,
+    }) as TextShape;
+    applyResize(t, "e", { x: 200, y: 0 }, { snap: false, proportional: true });
+    expect(t.width).toBe(200);
+    expect(t.height).toBe(100);
+    expect(t.fontSize).toBe(20);
+  });
+
+  it("keeps text font size on a rotated text when resizing from an edge handle", () => {
+    const t = createShape("text", {
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 50,
+      fontSize: 20,
+      rotation: 45,
+    }) as TextShape;
+    applyResize(t, "e", { x: 150, y: 0 }, { snap: false });
+    expect(t.fontSize).toBe(20);
   });
 
   it("scales path data with the box", () => {

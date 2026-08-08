@@ -11,7 +11,7 @@ import type { BoundingBox, Point } from "../types";
 // 规则：
 // - 8 个手柄按“屏幕轴对齐外接框（AABB）”定位，旋转图元同样按 AABB 调整；
 // - Shift 等比；Alt 关闭 20px 网格吸附；最小尺寸 1px；
-// - 文本字号随缩放比例联动，直线直接改端点，metro 专用图元始终等比，
+// - 文本字号仅在对角锚点缩放时联动（边锚点只改文本框），直线直接改端点，metro 专用图元始终等比，
 //   组整体缩放时子图元相对布局保持不变。
 // ============================================================
 
@@ -319,7 +319,7 @@ function applyBoxResize(
     }
   }
 
-  if (shape.type === "text") {
+  if (shape.type === "text" && dir.x !== 0 && dir.y !== 0) {
     const kFont = Math.max(target.width / bb.width, target.height / bb.height);
     (shape as TextShape).fontSize = Math.max(
       1,
