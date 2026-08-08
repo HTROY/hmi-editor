@@ -141,4 +141,39 @@ describe("CommandHistory", () => {
     expect(history.undoCount).toBe(0);
     expect(history.redoCount).toBe(0);
   });
+
+  it("undo restores every shape in a batch and redo re-applies them", () => {
+    const scene = new SceneGraph();
+    addRect(scene, "r1", 10);
+    addRect(scene, "r2", 20);
+    const history = new CommandHistory();
+    const before1 = scene.get("r1")!.toJSON();
+    scene.get("r1")!.x = 50;
+    const before2 = scene.get("r2")!.toJSON();
+    scene.get("r2")!.y = 80;
+    history.pushBatch([
+      {
+        id: "r1",
+        before: before1,
+        after: scene.get("r1")!.toJSON(),
+        index: 0,
+      },
+      {
+        id: "r2",
+        before: before2,
+        after: scene.get("r2")!.toJSON(),
+        index: 1,
+      },
+    ]);
+
+    history.undo(scene);
+    expect(scene.get("r1")!.x).toBe(10);
+    expect(scene.get("r2")!.y).toBe(0);
+    expect(history.canRedo).toBe(true);
+
+    history.redo(scene);
+    expect(scene.get("r1")!.x).toBe(50);
+    expect(scene.get("r2")!.y).toBe(80);
+    expect(history.canUndo).toBe(true);
+  });
 });

@@ -1,5 +1,12 @@
 ﻿import React, { useState } from "react";
+import { useEffect } from "react";
 import { useEditorStore } from "../../store/editorStore";
+import {
+  RESOLUTION_PRESETS,
+  findResolutionPreset,
+  MIN_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+} from "../../core";
 
 // ============================================================
 // PagePanel — 页面管理面板
@@ -15,11 +22,25 @@ export function PagePanel() {
     addPage,
     deletePage,
     renamePage,
+    pageWidth,
+    pageHeight,
+    setPageResolution,
+    scaleShapesToResolution,
+    outOfBounds,
   } = useEditorStore();
   const pages = projectManager?.getPages() ?? [];
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+  const [resW, setResW] = useState(pageWidth);
+  const [resH, setResH] = useState(pageHeight);
+
+  useEffect(() => {
+    setResW(pageWidth);
+    setResH(pageHeight);
+  }, [pageWidth, pageHeight]);
+
+  const activePreset = findResolutionPreset(resW, resH)?.label ?? "__custom__";
 
   const handleRename = (pageId: string) => {
     if (editText.trim()) {
@@ -51,6 +72,84 @@ export function PagePanel() {
         <button className="btn btn-sm" onClick={addPage}>
           + 新建
         </button>
+      </div>
+
+      <div className="panel-section">
+        <div className="panel-section-title">当前画面分辨率</div>
+        <div className="res-preset-row">
+          <select
+            className="res-preset-select"
+            value={activePreset}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "__custom__") return;
+              const preset = RESOLUTION_PRESETS.find((p) => p.label === v);
+              if (preset) {
+                setResW(preset.width);
+                setResH(preset.height);
+              }
+            }}
+          >
+            <option value="__custom__">自定义…</option>
+            {RESOLUTION_PRESETS.map((p) => (
+              <option key={p.label} value={p.label}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="res-input-row">
+          <input
+            type="number"
+            min={MIN_PAGE_SIZE}
+            max={MAX_PAGE_SIZE}
+            value={resW}
+            onChange={(e) => setResW(Number(e.target.value))}
+          />
+          <span className="res-times">×</span>
+          <input
+            type="number"
+            min={MIN_PAGE_SIZE}
+            max={MAX_PAGE_SIZE}
+            value={resH}
+            onChange={(e) => setResH(Number(e.target.value))}
+          />
+        </div>
+        <div className="res-actions">
+          <button
+            className="btn btn-sm"
+            title="仅修改分辨率，图元坐标保持不变"
+            onClick={() => setPageResolution(activePageId, resW, resH)}
+          >
+            应用（保持坐标）
+          </button>
+          <button
+            className="btn btn-sm"
+            title="把全部图元按比例缩放到新的分辨率并应用"
+            onClick={() => scaleShapesToResolution(resW, resH)}
+          >
+            按比例缩放图元
+          </button>
+        </div>
+        {outOfBounds.length > 0 && (
+          <div className="res-warning">
+            <div className="res-warning-title">
+              ⚠ {outOfBounds.length} 个图元超出页面边界
+            </div>
+            <ul className="res-warning-list">
+              {outOfBounds.slice(0, 6).map((o) => (
+                <li key={o.id}>
+                  {o.name}（{Math.round(o.bbox.x)}, {Math.round(o.bbox.y)}）
+                </li>
+              ))}
+            </ul>
+            {outOfBounds.length > 6 && (
+              <div className="res-warning-more">
+                等 {outOfBounds.length} 个图元在页面外
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="page-list">

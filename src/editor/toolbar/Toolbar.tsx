@@ -28,6 +28,10 @@ export function Toolbar() {
     toggleSimulation,
     projectManager,
     setRightPanel,
+    zoom,
+    zoomBy,
+    zoomTo,
+    fitPage,
   } = useEditorStore();
 
   return (
@@ -50,6 +54,33 @@ export function Toolbar() {
 
       {/* 工程工具栏 */}
       <ProjectToolbar />
+
+      <div className="toolbar-divider" />
+
+      {/* 视图缩放 */}
+      <div className="toolbar-group">
+        <button
+          className="tool-btn"
+          title="缩小"
+          onClick={() => zoomBy(1 / 1.2)}
+        >
+          <span className="tool-label zoom-glyph">−</span>
+        </button>
+        <button
+          className="tool-btn zoom-value"
+          title="恢复到 100%"
+          onClick={() => zoomTo(1)}
+        >
+          <span className="tool-label">{Math.round(zoom * 100)}%</span>
+        </button>
+        <button className="tool-btn" title="放大" onClick={() => zoomBy(1.2)}>
+          <span className="tool-label zoom-glyph">+</span>
+        </button>
+        <button className="tool-btn" title="适应页面" onClick={fitPage}>
+          <Icon name="expand" className="tool-icon" />
+          <span className="tool-label">适应</span>
+        </button>
+      </div>
 
       <div className="toolbar-divider" />
 

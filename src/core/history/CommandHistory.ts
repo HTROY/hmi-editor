@@ -11,6 +11,8 @@ export interface ShapeCommand {
   after: ShapeProps | null;
   /** 图元在场景 z 序中的位置（新增/删除恢复时保持叠放顺序） */
   index: number;
+  /** 批量命令：一组图元的一次编辑（如整页等比缩放），非空时整体撤销/重做 */
+  batch?: ShapeCommand[];
 }
 
 /**
@@ -43,11 +45,25 @@ export class CommandHistory {
     this.redoStack = [];
   }
 
+  /** 压入一组命令作为一个整体（一次撤销/重做恢复全部图元） */
+  pushBatch(commands: ShapeCommand[]): void {
+    if (commands.length === 0) return;
+    this.undoStack.push({
+      id: commands[0].id,
+      before: null,
+      after: null,
+      index: 0,
+      batch: commands,
+    });
+    this.redoStack = [];
+  }
+
   /** 撤销最近一条命令，返回被撤销的命令；无可撤销时返回 null */
   undo(scene: SceneGraph): ShapeCommand | null {
     const command = this.undoStack.pop();
     if (!command) return null;
-    this.applyUndo(scene, command);
+    const items = command.batch ?? [command];
+    for (const item of items) this.applyUndo(scene, item);
     this.redoStack.push(command);
     return command;
   }
@@ -56,7 +72,8 @@ export class CommandHistory {
   redo(scene: SceneGraph): ShapeCommand | null {
     const command = this.redoStack.pop();
     if (!command) return null;
-    this.applyRedo(scene, command);
+    const items = command.batch ?? [command];
+    for (const item of items) this.applyRedo(scene, item);
     this.undoStack.push(command);
     return command;
   }

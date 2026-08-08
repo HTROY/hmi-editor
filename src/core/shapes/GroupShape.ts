@@ -67,6 +67,11 @@ export class GroupShape extends ShapeBase {
     return new GroupShape(this.toJSON());
   }
 
+  scale(sx: number, sy: number): void {
+    super.scale(sx, sy);
+    for (const child of this.children) child.scale(sx, sy);
+  }
+
   fromJSON(props: ShapeProps): void {
     super.fromJSON(props);
     this.children = (Array.isArray(props.children) ? props.children : []).map(

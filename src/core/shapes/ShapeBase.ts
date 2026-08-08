@@ -128,4 +128,15 @@ export abstract class ShapeBase {
   fromJSON(props: ShapeProps): void {
     Object.assign(this, props);
   }
+
+  /** 等比缩放几何属性（子类扩展点） */
+  scale(sx: number, sy: number): void {
+    this.x *= sx;
+    this.y *= sy;
+    this.width *= sx;
+    this.height *= sy;
+    const s = Math.min(sx, sy);
+    this.strokeWidth *= s;
+    this.dashArray = this.dashArray.map((v) => v * s);
+  }
 }

@@ -51,6 +51,11 @@ export class RectShape extends ShapeBase {
     return c;
   }
 
+  scale(sx: number, sy: number): void {
+    super.scale(sx, sy);
+    this.cornerRadius *= Math.min(sx, sy);
+  }
+
   toJSON(): ShapeProps {
     return { ...super.toJSON(), cornerRadius: this.cornerRadius };
   }

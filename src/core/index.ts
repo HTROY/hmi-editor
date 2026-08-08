@@ -1,6 +1,7 @@
 ﻿export * from "./types";
 export * from "./shapes";
 export * from "./scene";
+export * from "./view";
 export * from "./history";
 export * from "./serialization";
 export * from "./variables";
@@ -12,3 +13,4 @@ export * from "./historian";
 export * from "./auth";
 export * from "./script";
 export * from "./report";
+export * from "./autosave";

@@ -1,5 +1,6 @@
 import { ShapeBase } from "./ShapeBase";
 import type { ShapeProps, Point } from "../types";
+import { transformPathData } from "./pathTransform";
 
 // ============================================================
 // PathShape — 路径图元（SVG path 数据，矢量导入/编辑的基础）
@@ -41,6 +42,11 @@ export class PathShape extends ShapeBase {
 
   clone(): PathShape {
     return new PathShape(this.toJSON());
+  }
+
+  scale(sx: number, sy: number): void {
+    super.scale(sx, sy);
+    this.d = transformPathData(this.d, sx, sy);
   }
 
   toJSON(): ShapeProps {

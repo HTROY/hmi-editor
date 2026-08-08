@@ -84,6 +84,18 @@ export class LineShape extends ShapeBase {
     return c;
   }
 
+  scale(sx: number, sy: number): void {
+    super.scale(sx, sy);
+    this.startPoint = {
+      x: this.startPoint.x * sx,
+      y: this.startPoint.y * sy,
+    };
+    this.endPoint = {
+      x: this.endPoint.x * sx,
+      y: this.endPoint.y * sy,
+    };
+  }
+
   toJSON(): ShapeProps {
     return {
       ...super.toJSON(),

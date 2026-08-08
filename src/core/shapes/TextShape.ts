@@ -52,6 +52,11 @@ export class TextShape extends ShapeBase {
     return new TextShape(this.toJSON());
   }
 
+  scale(sx: number, sy: number): void {
+    super.scale(sx, sy);
+    this.fontSize *= Math.min(sx, sy);
+  }
+
   toJSON(): ShapeProps {
     return {
       ...super.toJSON(),
