@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import { Renderer, SceneGraph } from "../../core";
+import { Renderer, SceneGraph, hitTestResizeHandle } from "../../core";
+import type { ResizeHandle } from "../../core";
 import { useEditorStore } from "../../store/editorStore";
 import type { ToolMode } from "../../store/editorStore";
 
@@ -9,10 +10,29 @@ import type { ToolMode } from "../../store/editorStore";
 // 交互：点击选中、拖拽移动、画布上创建图元（均按世界坐标换算）
 // ============================================================
 
+function resizeCursor(handle: ResizeHandle): string {
+  switch (handle) {
+    case "nw":
+    case "se":
+      return "nwse-resize";
+    case "ne":
+    case "sw":
+      return "nesw-resize";
+    case "n":
+    case "s":
+      return "ns-resize";
+    case "e":
+    case "w":
+      return "ew-resize";
+  }
+}
+
 export function EditorCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
+  const isResizing = useRef(false);
+  const resizeHandleRef = useRef<ResizeHandle | null>(null);
   const dragStart = useRef({ x: 0, y: 0 });
   const shapeStartPos = useRef({ x: 0, y: 0 });
   const isPanning = useRef(false);
@@ -20,6 +40,7 @@ export function EditorCanvas() {
   const spaceDownRef = useRef(false);
   const [spaceDown, setSpaceDown] = useState(false);
   const [panning, setPanning] = useState(false);
+  const [hoverHandle, setHoverHandle] = useState<ResizeHandle | null>(null);
 
   const {
     scene,
@@ -29,6 +50,7 @@ export function EditorCanvas() {
     selectShape,
     addShape,
     updateShape,
+    applyShapeResize,
     beginShapeEdit,
     endShapeEdit,
   } = useEditorStore();
@@ -127,8 +149,24 @@ export function EditorCanvas() {
       if (e.button !== 0) return;
 
       if (mode === "select") {
-        // 点击测试：屏幕坐标 -> 世界坐标
         const world = store.viewport.screenToWorld(pos.x, pos.y);
+        // 先命中已选中图元的手柄（旋转图元按屏幕轴对齐外接框）
+        const selected = selectedId ? scene.get(selectedId) : null;
+        if (selected && !selected.locked) {
+          const handle = hitTestResizeHandle(
+            selected,
+            world,
+            8 / store.viewport.zoom
+          );
+          if (handle) {
+            beginShapeEdit(selected.id);
+            isResizing.current = true;
+            resizeHandleRef.current = handle;
+            setHoverHandle(handle);
+            return;
+          }
+        }
+        // 点击测试：屏幕坐标 -> 世界坐标
         const hit = scene.hitTest(world.x, world.y);
         if (hit) {
           selectShape(hit.id);
@@ -156,15 +194,49 @@ export function EditorCanvas() {
         }
       }
     },
-    [mode, scene, selectShape, addShape, beginShapeEdit, getCanvasPos, startPan]
+    [
+      mode,
+      scene,
+      selectedId,
+      selectShape,
+      addShape,
+      beginShapeEdit,
+      getCanvasPos,
+      startPan,
+    ]
   );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (isPanning.current) return;
-      if (!isDragging.current || !selectedId) return;
       const store = useEditorStore.getState();
       const pos = getCanvasPos(e.clientX, e.clientY);
+
+      // 手柄拖拽调整大小
+      if (isResizing.current && resizeHandleRef.current && selectedId) {
+        const world = store.viewport.screenToWorld(pos.x, pos.y);
+        applyShapeResize(selectedId, resizeHandleRef.current, world, {
+          proportional: e.shiftKey,
+          snap: !e.altKey,
+        });
+        return;
+      }
+
+      // 未拖拽时悬停手柄显示对应光标
+      if (!isDragging.current || !selectedId) {
+        const selected = selectedId ? scene.get(selectedId) : null;
+        const nextHover =
+          mode === "select" && selected && !selected.locked
+            ? hitTestResizeHandle(
+                selected,
+                store.viewport.screenToWorld(pos.x, pos.y),
+                8 / store.viewport.zoom
+              )
+            : null;
+        if (nextHover !== hoverHandle) setHoverHandle(nextHover);
+        return;
+      }
+
       const startWorld = store.viewport.screenToWorld(
         dragStart.current.x,
         dragStart.current.y
@@ -179,11 +251,24 @@ export function EditorCanvas() {
         false
       );
     },
-    [selectedId, updateShape, getCanvasPos]
+    [
+      selectedId,
+      updateShape,
+      applyShapeResize,
+      getCanvasPos,
+      hoverHandle,
+      mode,
+      scene,
+    ]
   );
 
   const handleMouseUp = useCallback(() => {
+    if (isResizing.current) {
+      isResizing.current = false;
+      resizeHandleRef.current = null;
+    }
     isDragging.current = false;
+    setHoverHandle(null);
     endShapeEdit();
   }, [endShapeEdit]);
 
@@ -245,9 +330,11 @@ export function EditorCanvas() {
             ? "grabbing"
             : spaceDown
               ? "grab"
-              : mode === "select"
-                ? "default"
-                : "crosshair",
+              : mode !== "select"
+                ? "crosshair"
+                : hoverHandle
+                  ? resizeCursor(hoverHandle)
+                  : "default",
         }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}

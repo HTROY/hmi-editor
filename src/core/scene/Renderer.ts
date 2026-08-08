@@ -2,6 +2,7 @@ import { SceneGraph } from "./SceneGraph";
 import { ShapeBase } from "../shapes/ShapeBase";
 import { ImageShape } from "../shapes/ImageShape";
 import { Viewport } from "../view";
+import { getRotatedAABB } from "./resize";
 
 // ============================================================
 // Renderer — Canvas 渲染器
@@ -135,7 +136,8 @@ export class Renderer {
   /** 绘制选中边框（线宽与手柄大小按缩放换算，保证屏幕观感一致） */
   private drawSelection(shape: ShapeBase, zoom: number): void {
     const ctx = this.ctx;
-    const bb = shape.boundingBox;
+    // 旋转图元按屏幕轴对齐外接框显示手柄
+    const bb = getRotatedAABB(shape);
     ctx.save();
 
     // 蓝色选中边框

@@ -11,8 +11,15 @@ import {
   getOutOfBoundsShapes,
   scaleShape,
   computeScaleFactor,
+  applyResize,
 } from "../core";
-import type { ShapeCommand, ShapeProps, OutOfBoundsShape } from "../core";
+import type {
+  ShapeCommand,
+  ShapeProps,
+  OutOfBoundsShape,
+  ResizeHandle,
+  ResizeOptions,
+} from "../core";
 import { generateId } from "../core/shapes";
 import { VariableManager } from "../core/variables";
 import { BindingEngine, AnimationEngine } from "../core/bindings";
@@ -96,6 +103,12 @@ interface EditorState {
   updateShape: (id: string, props: any, record?: boolean) => void;
   beginShapeEdit: (id: string) => void;
   endShapeEdit: () => void;
+  applyShapeResize: (
+    id: string,
+    handle: ResizeHandle,
+    pointer: { x: number; y: number },
+    options?: ResizeOptions
+  ) => void;
   undo: () => void;
   redo: () => void;
   renderScene: () => void;
@@ -491,6 +504,15 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const after = sh.toJSON();
       if (JSON.stringify(before) === JSON.stringify(after)) return;
       pushCommand({ id, before, after, index });
+    },
+    applyShapeResize: (id, handle, pointer, options) => {
+      const s = get();
+      const sh = s.scene.get(id);
+      if (!sh || sh.locked) return;
+      applyResize(sh, handle, pointer, options);
+      s.renderer?.render();
+      s.bumpShapeRevision();
+      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
     },
     undo: () => {
       const s = get();
