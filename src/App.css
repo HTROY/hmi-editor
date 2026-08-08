@@ -1459,6 +1459,67 @@ button {
 }
 
 /* ============================================================
+   动画面板
+   ============================================================ */
+.anim-type-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  background: var(--purple-dim);
+  color: var(--purple);
+  border: 1px solid rgba(184, 146, 255, 0.35);
+  flex-shrink: 0;
+}
+.anim-type-badge.blink {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border-color: rgba(246, 184, 75, 0.35);
+}
+.anim-type-badge.rotate {
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  border-color: var(--cyan-border);
+}
+.anim-type-badge.move {
+  background: var(--ok-dim);
+  color: var(--ok);
+  border-color: rgba(62, 220, 152, 0.35);
+}
+.anim-type-badge.scale {
+  background: var(--info-dim);
+  color: var(--info);
+  border-color: rgba(111, 168, 255, 0.35);
+}
+.anim-type-badge.colorShift {
+  background: var(--alarm-dim);
+  color: var(--alarm-hi);
+  border-color: rgba(255, 94, 94, 0.35);
+}
+.anim-enabled {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--ink2);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.anim-enabled input {
+  margin: 0;
+  accent-color: var(--cyan);
+}
+.binding-smooth {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line1);
+}
+.binding-smooth .anim-enabled {
+  margin-bottom: 4px;
+}
+
+/* ============================================================
    连接面板
    ============================================================ */
 .conn-section {

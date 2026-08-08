@@ -79,6 +79,10 @@ export interface Binding {
   variableType: "AI" | "DI" | "AO" | "DO";
   targetProp: string;
   mapping: ValueMapping;
+  /** 数值型属性是否启用平滑过渡（默认开启，300ms ease-out） */
+  smooth?: boolean;
+  /** 平滑过渡时长（毫秒，默认 300） */
+  smoothMs?: number;
 }
 
 export interface EventHandler {
@@ -87,10 +91,45 @@ export interface EventHandler {
   params: Record<string, any>;
 }
 
+/** 五类动画的可调参数（按类型取用） */
+export interface AnimationParams {
+  // blink —— 闪烁
+  frequency?: number; // Hz，默认 1
+  minOpacity?: number; // 最低不透明度，默认 0.2
+  // rotate —— 旋转
+  angleSpeed?: number; // 角速度 deg/s，默认 60
+  direction?: 1 | -1; // 方向，默认 1（顺时针）
+  // move —— 位移
+  amplitudeX?: number; // X 振幅 px，默认 20
+  amplitudeY?: number; // Y 振幅 px，默认 0
+  moveFrequency?: number; // 频率 Hz，默认 1
+  phase?: number; // 初相 rad，默认 0
+  // scale —— 缩放
+  minScale?: number; // 最小缩放，默认 1
+  maxScale?: number; // 最大缩放，默认 1.2
+  scaleFrequency?: number; // 频率 Hz，默认 1
+  // colorShift —— 变色
+  hueRange?: number; // 色相摆动范围 deg，默认 180
+  hueSpeed?: number; // 色相速度 deg/s，默认 120
+}
+
+/** 动画变量控制：复用值映射（ValueMapping）把变量映射为速度/强度/启停 */
+export interface AnimationControl {
+  variableId: string;
+  control: "speed" | "strength" | "enabled";
+  mapping: ValueMapping;
+}
+
 export interface AnimationDef {
+  id: string;
   type: "blink" | "rotate" | "move" | "colorShift" | "scale";
   enabled: boolean;
+  /** 速度倍率（0.1~3，默认 1）；变量 speed 控制会再乘一重 */
   speed: number;
+  params: AnimationParams;
+  /** 绑定变量控制；未绑定时按固定参数循环 */
+  bind?: AnimationControl | null;
+  /** 旧版字段（已由 bind 取代），加载时归一化 */
   bindVariable?: string;
 }
 

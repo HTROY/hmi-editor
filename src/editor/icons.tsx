@@ -23,6 +23,7 @@ export type IconName =
   | "library"
   | "sliders"
   | "link"
+  | "motion"
   | "pulse"
   | "plug"
   | "page"
@@ -39,7 +40,8 @@ export type IconName =
   | "up"
   | "down"
   | "sun"
-  | "moon";
+  | "moon"
+  | "eye";
 
 const STROKE: Record<string, React.ReactNode> = {
   cursor: <path d="M4 3l6.6 16 2.5-6.3 6.4-2.5L4 3z" />,
@@ -142,6 +144,13 @@ const STROKE: Record<string, React.ReactNode> = {
       <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
     </>
   ),
+  motion: (
+    <>
+      <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
+      <path d="M12 5v3M12 16v3M5 12h3M16 12h3" />
+      <path d="M7.7 7.7l2.1 2.1M14.2 14.2l2.1 2.1M16.3 7.7l-2.1 2.1M9.8 14.2l-2.1 2.1" />
+    </>
+  ),
   pulse: <path d="M3 12h4l2-6 4 12 2-6h6" />,
   plug: (
     <>
@@ -213,6 +222,12 @@ const STROKE: Record<string, React.ReactNode> = {
     </>
   ),
   moon: <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z" />,
+  eye: (
+    <>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
 };
 
 export function Icon({

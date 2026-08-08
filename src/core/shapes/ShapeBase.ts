@@ -9,6 +9,7 @@
   EventHandler,
   ShapeGradient,
 } from "../types";
+import { normalizeAnimations } from "../bindings/animation";
 
 // ============================================================
 // ShapeBase — 所有图元的基类
@@ -66,7 +67,7 @@ export abstract class ShapeBase {
     this.strokeGradient = props?.strokeGradient ?? null;
 
     this.bindings = props?.bindings ?? [];
-    this.animations = props?.animations ?? [];
+    this.animations = normalizeAnimations(props?.animations);
     this.events = props?.events ?? [];
   }
 
@@ -136,6 +137,8 @@ export abstract class ShapeBase {
   /** 从普通对象恢复 */
   fromJSON(props: ShapeProps): void {
     Object.assign(this, props);
+    // 旧工程动画缺少 id/params/bind 时补默认值
+    this.animations = normalizeAnimations(this.animations);
   }
 
   /** 等比缩放几何属性（子类扩展点） */

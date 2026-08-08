@@ -3,6 +3,7 @@ import { Toolbar } from "./editor/toolbar/Toolbar";
 import { EditorCanvas } from "./editor/canvas/EditorCanvas";
 import { PropertyPanel } from "./editor/panels/PropertyPanel";
 import { BindingPanel } from "./editor/panels/BindingPanel";
+import { AnimationPanel } from "./editor/panels/AnimationPanel";
 import { VariablePanel } from "./editor/panels/VariablePanel";
 import { ConnectionPanel } from "./editor/panels/ConnectionPanel";
 import { PagePanel } from "./editor/panels/PagePanel";
@@ -20,6 +21,7 @@ import "./App.css";
 const PanelIcon: Record<string, IconName> = {
   properties: "sliders",
   bindings: "link",
+  animations: "motion",
   variables: "pulse",
   connections: "plug",
   pages: "page",
@@ -33,6 +35,7 @@ const PanelIcon: Record<string, IconName> = {
 const TABS = [
   { key: "properties" as const, label: "\u{5C5E}\u{6027}" },
   { key: "bindings" as const, label: "\u{7ED1}\u{5B9A}" },
+  { key: "animations" as const, label: "\u{52A8}\u{753B}" },
   { key: "variables" as const, label: "\u{70B9}\u{8868}" },
   { key: "connections" as const, label: "\u{8FDE}\u{63A5}" },
   { key: "pages" as const, label: "\u{9875}\u{9762}" },
@@ -46,6 +49,7 @@ const TABS = [
 const PANELS: Record<string, React.ReactNode> = {
   properties: <PropertyPanel />,
   bindings: <BindingPanel />,
+  animations: <AnimationPanel />,
   variables: <VariablePanel />,
   connections: <ConnectionPanel />,
   pages: <PagePanel />,

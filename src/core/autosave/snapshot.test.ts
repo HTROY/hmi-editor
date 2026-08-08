@@ -85,7 +85,16 @@ describe("autosave snapshot", () => {
         mapping: { type: "range", from: [0, 2000], to: [0, 255] },
       },
     ]);
-    expect(r1.animations).toEqual([{ type: "blink", enabled: true, speed: 2 }]);
+    expect(r1.animations).toEqual([
+      {
+        id: expect.any(String),
+        type: "blink",
+        enabled: true,
+        speed: 2,
+        params: { frequency: 1, minOpacity: 0.2 },
+        bind: null,
+      },
+    ]);
 
     expect(restoredViews[pages[0].id]).toEqual({
       zoom: 1.5,

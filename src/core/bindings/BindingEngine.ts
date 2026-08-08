@@ -1,18 +1,29 @@
-﻿import { SceneGraph } from "../scene/SceneGraph";
+import { SceneGraph } from "../scene/SceneGraph";
 import { Renderer } from "../scene/Renderer";
 import { VariableManager } from "../variables/VariableManager";
 import { ShapeBase } from "../shapes/ShapeBase";
-import type { Binding, ValueMapping } from "../types";
+import type { Binding } from "../types";
+import { applyValueMapping } from "./mapping";
 
 // ============================================================
 // BindingEngine — 绑定引擎
 // 监听变量变化 → 查绑定索引 → 执行值映射 → 更新图元属性 → 重绘
+// 数值型属性默认 300ms ease-out 平滑过渡，每条绑定可单独关闭。
 // ============================================================
 
 interface BindingRecord {
   shapeId: string;
   binding: Binding;
 }
+
+interface Transition {
+  from: number;
+  to: number;
+  start: number; // 毫秒时间戳
+  duration: number; // 毫秒
+}
+
+const DEFAULT_SMOOTH_MS = 300;
 
 export class BindingEngine {
   private scene: SceneGraph;
@@ -24,9 +35,19 @@ export class BindingEngine {
 
   private unsubAll: (() => void) | null = null;
 
-  constructor(scene: SceneGraph, variables: VariableManager) {
+  // 平滑过渡表：key = shapeId + "\u0000" + prop
+  private transitions: Map<string, Transition> = new Map();
+  private rafId: number | null = null;
+  private now: () => number;
+
+  constructor(
+    scene: SceneGraph,
+    variables: VariableManager,
+    now: () => number = () => performance.now()
+  ) {
     this.scene = scene;
     this.variables = variables;
+    this.now = now;
   }
 
   setRenderer(r: Renderer): void {
@@ -75,10 +96,7 @@ export class BindingEngine {
       for (const binding of shape.bindings) {
         const vv = this.variables.getValue(binding.variableId);
         if (!vv) continue;
-        const newValue = this.applyMapping(binding, vv.value);
-        if (newValue !== undefined) {
-          (shape as any)[binding.targetProp] = newValue;
-        }
+        this.applyBinding(shape, binding, vv.value);
       }
       this.renderer?.render();
     }
@@ -96,11 +114,7 @@ export class BindingEngine {
       for (const record of records) {
         const shape = this.scene.get(record.shapeId);
         if (!shape) continue;
-
-        const newValue = this.applyMapping(record.binding, vv.value);
-        if (newValue !== undefined) {
-          (shape as any)[record.binding.targetProp] = newValue;
-        }
+        this.applyBinding(shape, record.binding, vv.value);
       }
 
       // 通知渲染器重绘
@@ -112,61 +126,107 @@ export class BindingEngine {
   stop(): void {
     this.unsubAll?.();
     this.unsubAll = null;
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+    this.transitions.clear();
   }
 
   // ============================================================
-  // 值映射引擎（核心）
+  // 值映射 + 平滑过渡
   // ============================================================
 
-  private applyMapping(binding: Binding, rawValue: number | boolean): any {
-    const mapping = binding.mapping;
-    switch (mapping.type) {
-      case "direct":
-        return rawValue;
+  private applyBinding(
+    shape: ShapeBase,
+    binding: Binding,
+    rawValue: number | boolean
+  ): void {
+    const newValue = applyValueMapping(binding.mapping, rawValue);
+    const current = (shape as any)[binding.targetProp];
+    const smooth = binding.smooth !== false;
 
-      case "enum": {
-        // DI 0/1 → 颜色字符串
-        const key = String(rawValue);
-        return mapping.map[key] ?? rawValue;
-      }
+    if (smooth && typeof current === "number" && typeof newValue === "number") {
+      this.startTransition(
+        shape.id,
+        binding.targetProp,
+        current,
+        newValue,
+        binding.smoothMs ?? DEFAULT_SMOOTH_MS
+      );
+      return;
+    }
 
-      case "range": {
-        if (typeof rawValue !== "number") return rawValue;
-        // 将 rawValue 从 [from[0], from[1]] 线性映射到 [to[0], to[1]]
-        const [fromMin, fromMax] = mapping.from;
-        const [toMin, toMax] = mapping.to;
-        if (fromMax === fromMin) return toMin;
-        const ratio = (rawValue - fromMin) / (fromMax - fromMin);
-        return Math.round((toMin + ratio * (toMax - toMin)) * 100) / 100;
-      }
-
-      case "stateColor": {
-        // 数值直接作为颜色值使用 (0xFF0000 格式)
-        if (typeof rawValue === "number") {
-          return "#" + rawValue.toString(16).padStart(6, "0");
-        }
-        return rawValue ? "#00FF00" : "#808080";
-      }
-
-      case "bitmask":
-        return this.applyBitmask(binding, rawValue);
-
-      default:
-        return rawValue;
+    this.cancelTransition(shape.id, binding.targetProp);
+    if (newValue !== undefined) {
+      (shape as any)[binding.targetProp] = newValue;
     }
   }
 
-  private applyBitmask(binding: Binding, rawValue: number | boolean): string[] {
-    const mapping = binding.mapping as ValueMapping & { type: "bitmask" };
-    if (typeof rawValue !== "number") return [];
-    const activeStates: string[] = [];
-    for (const bit of mapping.bits) {
-      if (rawValue & Math.pow(2, bit)) {
-        const state = mapping.states[Math.pow(2, bit)];
-        if (state) activeStates.push(state);
-      }
+  private startTransition(
+    shapeId: string,
+    prop: string,
+    from: number,
+    to: number,
+    duration: number
+  ): void {
+    if (from === to) {
+      this.cancelTransition(shapeId, prop);
+      return;
     }
-    return activeStates;
+    this.transitions.set(this.key(shapeId, prop), {
+      from,
+      to,
+      start: this.now(),
+      duration: Math.max(1, duration),
+    });
+    this.ensureLoop();
+  }
+
+  private cancelTransition(shapeId: string, prop: string): void {
+    this.transitions.delete(this.key(shapeId, prop));
+  }
+
+  private key(shapeId: string, prop: string): string {
+    return shapeId + "\u0000" + prop;
+  }
+
+  private ensureLoop(): void {
+    if (this.rafId !== null) return;
+    if (typeof requestAnimationFrame !== "function") return;
+    this.rafId = requestAnimationFrame(this.loop);
+  }
+
+  private loop = (): void => {
+    this.rafId = null;
+    if (this.transitions.size === 0) return;
+    this.tick(this.now());
+    if (this.transitions.size > 0) {
+      this.rafId = requestAnimationFrame(this.loop);
+    }
+  };
+
+  /** 推进全部平滑过渡（测试可传入固定时间戳） */
+  tick(now: number): void {
+    if (this.transitions.size === 0) return;
+    const changed = new Set<string>();
+
+    for (const [key, tr] of this.transitions) {
+      const sep = key.indexOf("\u0000");
+      const shapeId = key.slice(0, sep);
+      const prop = key.slice(sep + 1);
+      const progress = Math.min(1, (now - tr.start) / tr.duration);
+      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      const value = tr.from + (tr.to - tr.from) * eased;
+      const shape = this.scene.get(shapeId);
+      if (shape) {
+        (shape as any)[prop] = progress >= 1 ? tr.to : value;
+        changed.add(shapeId);
+      }
+      if (progress >= 1) this.transitions.delete(key);
+    }
+
+    if (changed.size > 0) this.renderer?.render();
   }
 
   /** 手动触发一个变量更新（用于模拟/测试） */

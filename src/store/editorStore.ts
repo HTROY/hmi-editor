@@ -54,6 +54,7 @@ export type ToolMode = "select" | "rect" | "circle" | "line" | "text";
 export type RightPanel =
   | "properties"
   | "bindings"
+  | "animations"
   | "variables"
   | "connections"
   | "pages"
@@ -87,6 +88,7 @@ interface EditorState {
   activePageId: string;
   rightPanel: RightPanel;
   simRunning: boolean;
+  previewRunning: boolean;
   wsConfig: { url: string; backupUrl?: string };
   pageViews: Record<string, PageViewState>;
   pageRevision: number;
@@ -134,6 +136,7 @@ interface EditorState {
   importSvgFile: (file: File) => void;
   importRasterFile: (file: File) => void;
   toggleSimulation: () => void;
+  togglePreview: () => void;
   setWsConfig: (c: { url: string; backupUrl?: string }) => void;
   setPageView: (pageId: string, view: PageViewState) => void;
   restoreSession: () => Promise<boolean>;
@@ -198,7 +201,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
   // 绑定引擎常驻监听变量变化：无论数据来自模拟、io_backend 还是手动测试，
   // 绑定都立即应用到画布，不需要等到「启动模拟」
   bindingEngine.start();
-  const animEngine = new AnimationEngine(scene);
+  const animEngine = new AnimationEngine(scene, varManager);
   const dataBridge = new DataBridge(varManager);
   dataBridge.setOnVarsRefreshed(() => {
     setTimeout(() => {
@@ -323,6 +326,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     activePageId: dp.id,
     rightPanel: "properties",
     simRunning: false,
+    previewRunning: false,
     wsConfig: { url: "ws://localhost:8080/iscs/data" },
     pageViews: { [dp.id]: { ...DEFAULT_PAGE_VIEW } },
     pageRevision: 0,
@@ -988,7 +992,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const s = get();
       if (s.simRunning) {
         s.varManager.stopSimulation();
-        s.animEngine.stop();
+        if (!s.previewRunning) s.animEngine.stop();
         s.dataBridge.stop();
         s.alarmManager.stop();
         s.historian.stop();
@@ -1090,13 +1094,23 @@ export const useEditorStore = create<EditorState>((set, get) => {
             "STA1_TEMP_ZONE1",
           ]);
         }
-        s.animEngine.start();
+        if (!s.previewRunning) s.animEngine.start();
         s.alarmManager.start();
         s.scriptEngine.start();
         if (s.dataBridge.active === "simulation")
           s.varManager.startSimulation(800);
         s.historian.start();
         set({ simRunning: true });
+      }
+    },
+    togglePreview: () => {
+      const s = get();
+      if (s.previewRunning) {
+        if (!s.simRunning) s.animEngine.stop();
+        set({ previewRunning: false });
+      } else {
+        if (!s.simRunning && !s.animEngine.isRunning) s.animEngine.start();
+        set({ previewRunning: true });
       }
     },
     setWsConfig: (c) => {

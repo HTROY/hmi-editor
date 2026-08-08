@@ -26,6 +26,8 @@ export function Toolbar() {
     history,
     simRunning,
     toggleSimulation,
+    previewRunning,
+    togglePreview,
     projectManager,
     setRightPanel,
     zoom,
@@ -167,6 +169,16 @@ export function Toolbar() {
         >
           <Icon name={simRunning ? "stop" : "play"} className="tool-icon" />
           <span className="tool-label">{simRunning ? "停止" : "模拟"}</span>
+        </button>
+        <button
+          className={"tool-btn" + (previewRunning ? " active" : "")}
+          title={previewRunning ? "停止预览动画" : "预览单页动画"}
+          onClick={togglePreview}
+        >
+          <Icon name="eye" className="tool-icon" />
+          <span className="tool-label">
+            {previewRunning ? "停预览" : "预览"}
+          </span>
         </button>
       </div>
     </div>

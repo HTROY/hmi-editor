@@ -2,12 +2,28 @@
 import { useEditorStore } from "../../store/editorStore";
 import type { Binding, ValueMapping } from "../../core/types";
 import type { VariableDef } from "../../core/variables/types";
+import { MappingEditor } from "./MappingEditor";
 
 // ============================================================
 // BindingPanel — 图元变量绑定面板
 // 为选中的图元添加/编辑/删除变量绑定
 // ============================================================
 import { Icon } from "../icons";
+
+// 数值型绑定属性支持平滑过渡
+const NUMERIC_PROPS = new Set([
+  "rotation",
+  "x",
+  "y",
+  "width",
+  "height",
+  "opacity",
+  "fontSize",
+  "strokeWidth",
+  "cornerRadius",
+  "speedPercent",
+  "value",
+]);
 
 export function BindingPanel() {
   const {
@@ -54,6 +70,8 @@ export function BindingPanel() {
       variableType: "DI",
       targetProp: "fill",
       mapping: { type: "enum", map: { "0": "#808080", "1": "#00FF00" } },
+      smooth: true,
+      smoothMs: 300,
     };
     const bindings = [...(shape?.bindings ?? []), newBinding];
     updateShape(selectedId, { bindings });
@@ -190,145 +208,47 @@ export function BindingPanel() {
                   </select>
                 </div>
 
-                <div className="prop-group">
-                  <label>映射</label>
-                  <select
-                    value={binding.mapping.type}
-                    onChange={(e) =>
-                      updateMapping(idx, {
-                        type: e.target.value as ValueMapping["type"],
-                      })
-                    }
-                  >
-                    <option value="direct">直接值</option>
-                    <option value="enum">枚举映射</option>
-                    <option value="range">范围映射</option>
-                    <option value="stateColor">状态颜色</option>
-                  </select>
-                </div>
+                <MappingEditor
+                  mapping={binding.mapping}
+                  colorPickers={
+                    binding.targetProp === "fill" ||
+                    binding.targetProp === "stroke"
+                  }
+                  onChange={(m) => updateMapping(idx, m)}
+                />
 
-                {binding.mapping.type === "enum" && (
-                  <div className="binding-mapping-config">
-                    <div className="prop-group">
-                      <label>0→</label>
-                      <input
-                        value={(binding.mapping as any).map?.["0"] ?? ""}
-                        onChange={(e) => {
-                          const map = {
-                            ...(binding.mapping as any).map,
-                            "0": e.target.value,
-                          };
-                          updateMapping(idx, { map });
-                        }}
-                        placeholder="#808080"
-                      />
-                      <input
-                        type="color"
-                        value={(binding.mapping as any).map?.["0"] ?? "#808080"}
-                        onChange={(e) => {
-                          const map = {
-                            ...(binding.mapping as any).map,
-                            "0": e.target.value,
-                          };
-                          updateMapping(idx, { map });
-                        }}
-                      />
-                    </div>
-                    <div className="prop-group">
-                      <label>1→</label>
-                      <input
-                        value={(binding.mapping as any).map?.["1"] ?? ""}
-                        onChange={(e) => {
-                          const map = {
-                            ...(binding.mapping as any).map,
-                            "1": e.target.value,
-                          };
-                          updateMapping(idx, { map });
-                        }}
-                        placeholder="#00FF00"
-                      />
-                      <input
-                        type="color"
-                        value={(binding.mapping as any).map?.["1"] ?? "#00FF00"}
-                        onChange={(e) => {
-                          const map = {
-                            ...(binding.mapping as any).map,
-                            "1": e.target.value,
-                          };
-                          updateMapping(idx, { map });
-                        }}
-                      />
-                    </div>
-                    {vDef?.type === "AI" && (
-                      <div className="panel-hint">
-                        提示：AI 变量可配置多段枚举
-                      </div>
-                    )}
-                  </div>
+                {vDef?.type === "AI" && binding.mapping.type === "enum" && (
+                  <div className="panel-hint">提示：AI 变量可配置多段枚举</div>
                 )}
 
-                {binding.mapping.type === "range" && (
-                  <div className="binding-mapping-config">
-                    <div className="prop-group">
-                      <label>输入范围</label>
+                {NUMERIC_PROPS.has(binding.targetProp) && (
+                  <div className="binding-smooth">
+                    <label className="anim-enabled">
                       <input
-                        type="number"
-                        style={{ width: "45%" }}
-                        value={(binding.mapping as any).from?.[0] ?? 0}
+                        type="checkbox"
+                        checked={binding.smooth !== false}
                         onChange={(e) =>
-                          updateMapping(idx, {
-                            from: [
-                              Number(e.target.value),
-                              (binding.mapping as any).from?.[1] ?? 100,
-                            ] as [number, number],
-                          })
+                          updateBinding(idx, { smooth: e.target.checked })
                         }
                       />
-                      <span>~</span>
-                      <input
-                        type="number"
-                        style={{ width: "45%" }}
-                        value={(binding.mapping as any).from?.[1] ?? 100}
-                        onChange={(e) =>
-                          updateMapping(idx, {
-                            from: [
-                              (binding.mapping as any).from?.[0] ?? 0,
-                              Number(e.target.value),
-                            ] as [number, number],
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="prop-group">
-                      <label>输出范围</label>
-                      <input
-                        type="number"
-                        style={{ width: "45%" }}
-                        value={(binding.mapping as any).to?.[0] ?? 0}
-                        onChange={(e) =>
-                          updateMapping(idx, {
-                            to: [
-                              Number(e.target.value),
-                              (binding.mapping as any).to?.[1] ?? 270,
-                            ] as [number, number],
-                          })
-                        }
-                      />
-                      <span>~</span>
-                      <input
-                        type="number"
-                        style={{ width: "45%" }}
-                        value={(binding.mapping as any).to?.[1] ?? 270}
-                        onChange={(e) =>
-                          updateMapping(idx, {
-                            to: [
-                              (binding.mapping as any).to?.[0] ?? 0,
-                              Number(e.target.value),
-                            ] as [number, number],
-                          })
-                        }
-                      />
-                    </div>
+                      平滑过渡
+                    </label>
+                    {binding.smooth !== false && (
+                      <div className="prop-group">
+                        <label>时长 (ms)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={50}
+                          value={binding.smoothMs ?? 300}
+                          onChange={(e) =>
+                            updateBinding(idx, {
+                              smoothMs: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
 

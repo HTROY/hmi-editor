@@ -3,6 +3,7 @@ import { ShapeBase } from "../shapes/ShapeBase";
 import { ImageShape } from "../shapes/ImageShape";
 import { Viewport } from "../view";
 import { getRotatedAABB } from "./resize";
+import type { AnimationFrameState } from "../bindings/animation";
 
 // ============================================================
 // Renderer — Canvas 渲染器
@@ -21,6 +22,7 @@ export class Renderer {
   // 选中的图元 ID 集合
   selectedIds: Set<string> = new Set();
   private attachedImages = new WeakSet<ImageShape>();
+  private animationState: Map<string, AnimationFrameState> = new Map();
 
   constructor(canvas: HTMLCanvasElement, scene: SceneGraph) {
     this.canvas = canvas;
@@ -48,6 +50,11 @@ export class Renderer {
     this.pageBackground = background;
   }
 
+  /** 绑定动画引擎算出的逐图元帧状态（空 Map 表示静态） */
+  setAnimationState(state: Map<string, AnimationFrameState>): void {
+    this.animationState = state;
+  }
+
   /** 全图重绘 */
   render(): void {
     const ctx = this.ctx;
@@ -70,7 +77,7 @@ export class Renderer {
     // 绘制所有图元（世界坐标，视图变换不影响图元坐标）
     const shapes = this.scene.getAll();
     for (const shape of shapes) {
-      shape.render(ctx);
+      this.renderShape(ctx, shape);
       if (shape instanceof ImageShape) this.attachImageReload(shape);
     }
 
@@ -82,6 +89,53 @@ export class Renderer {
     }
 
     ctx.restore();
+  }
+
+  /** 绘制单个图元；有动画帧状态时先叠加位移/旋转/缩放/透明度/色相 */
+  private renderShape(ctx: CanvasRenderingContext2D, shape: ShapeBase): void {
+    const anim = this.animationState.get(shape.id);
+    if (!anim) {
+      shape.render(ctx);
+      return;
+    }
+
+    const prevOpacity = shape.opacity;
+    if (anim.opacity !== undefined) {
+      shape.opacity = Math.min(1, Math.max(0, anim.opacity));
+    }
+    try {
+      ctx.save();
+      this.applyAnimationTransform(ctx, shape, anim);
+      if (anim.hueRotate !== undefined && anim.hueRotate !== 0) {
+        ctx.filter = "hue-rotate(" + anim.hueRotate + "deg)";
+      }
+      shape.render(ctx);
+      ctx.restore();
+    } finally {
+      shape.opacity = prevOpacity;
+    }
+  }
+
+  /** 以图元包围盒中心为基准叠加动画变换（不修改图元坐标） */
+  private applyAnimationTransform(
+    ctx: CanvasRenderingContext2D,
+    shape: ShapeBase,
+    anim: AnimationFrameState
+  ): void {
+    const cx = shape.x + shape.width / 2;
+    const cy = shape.y + shape.height / 2;
+    const dx = anim.dx ?? 0;
+    const dy = anim.dy ?? 0;
+    const rotation = anim.rotation ?? 0;
+    const sx = anim.scaleX ?? 1;
+    const sy = anim.scaleY ?? 1;
+    if (dx === 0 && dy === 0 && rotation === 0 && sx === 1 && sy === 1) {
+      return;
+    }
+    ctx.translate(cx + dx, cy + dy);
+    ctx.rotate((rotation * Math.PI) / 180);
+    ctx.scale(sx, sy);
+    ctx.translate(-cx, -cy);
   }
 
   /** 图片加载完成后自动重绘 */
