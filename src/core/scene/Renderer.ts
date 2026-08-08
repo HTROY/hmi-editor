@@ -2,7 +2,7 @@ import { SceneGraph } from "./SceneGraph";
 import { ShapeBase } from "../shapes/ShapeBase";
 import { ImageShape } from "../shapes/ImageShape";
 import { Viewport } from "../view";
-import { getRotatedAABB } from "./resize";
+import { getAnimatedAABB, getRotatedAABB } from "./resize";
 import type { AnimationFrameState } from "../bindings/animation";
 
 // ============================================================
@@ -190,8 +190,9 @@ export class Renderer {
   /** 绘制选中边框（线宽与手柄大小按缩放换算，保证屏幕观感一致） */
   private drawSelection(shape: ShapeBase, zoom: number): void {
     const ctx = this.ctx;
-    // 旋转图元按屏幕轴对齐外接框显示手柄
-    const bb = getRotatedAABB(shape);
+    // 旋转图元按屏幕轴对齐外接框显示手柄；动画运行中跟随动画几何
+    const anim = this.animationState.get(shape.id);
+    const bb = anim ? getAnimatedAABB(shape, anim) : getRotatedAABB(shape);
     ctx.save();
 
     // 蓝色选中边框

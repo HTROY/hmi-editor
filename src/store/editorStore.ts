@@ -16,6 +16,9 @@ import {
   isRasterFile,
   rasterDataUrlToImageShape,
   sanitizePageBackground,
+  DEFAULT_CONNECTION_CONFIG,
+  loadConnectionConfig,
+  saveConnectionConfig,
 } from "../core";
 import type {
   ShapeCommand,
@@ -24,6 +27,7 @@ import type {
   ResizeHandle,
   ResizeOptions,
   ProjectData,
+  ConnectionConfig,
 } from "../core";
 import { generateId } from "../core/shapes";
 import { importSvg } from "../core/svg";
@@ -93,6 +97,7 @@ interface EditorState {
   simRunning: boolean;
   previewRunning: boolean;
   wsConfig: { url: string; backupUrl?: string };
+  connectionConfig: ConnectionConfig;
   pageViews: Record<string, PageViewState>;
   pageRevision: number;
   varRevision: number;
@@ -143,6 +148,7 @@ interface EditorState {
   toggleSimulation: () => void;
   togglePreview: () => void;
   setWsConfig: (c: { url: string; backupUrl?: string }) => void;
+  setConnectionConfig: (c: ConnectionConfig) => void;
   setPageView: (pageId: string, view: PageViewState) => void;
   restoreSession: () => Promise<boolean>;
   flushAutosave: () => void;
@@ -357,6 +363,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     simRunning: false,
     previewRunning: false,
     wsConfig: { url: "ws://localhost:8080/iscs/data" },
+    connectionConfig: loadConnectionConfig() ?? DEFAULT_CONNECTION_CONFIG,
     pageViews: { [dp.id]: { ...DEFAULT_PAGE_VIEW } },
     pageRevision: 0,
     varRevision: 0,
@@ -1135,6 +1142,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
       set({ wsConfig: c });
       const urls = [c.url, ...(c.backupUrl ? [c.backupUrl] : [])];
       get().dataBridge.wsClient.updateConfig({ urls });
+    },
+    setConnectionConfig: (c) => {
+      set({ connectionConfig: c });
+      saveConnectionConfig(c);
     },
     setPageView: (pageId, view) => {
       set((st) => ({

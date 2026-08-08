@@ -8,6 +8,7 @@ import {
 } from "../shapes";
 import {
   applyResize,
+  getAnimatedAABB,
   getResizeHandles,
   getRotatedAABB,
   hitTestResizeHandle,
@@ -79,6 +80,18 @@ describe("getResizeHandles", () => {
 });
 
 describe("hitTestResizeHandle", () => {
+  it("动画位移后的手柄按动画位置命中", () => {
+    const r = createShape("rect", { x: 0, y: 0, width: 100, height: 50 });
+    expect(hitTestResizeHandle(r, { x: 0, y: 0 }, 6)).toBe("nw");
+    expect(hitTestResizeHandle(r, { x: 30, y: 0 }, 6, { dx: 30 })).toBe("nw");
+    expect(hitTestResizeHandle(r, { x: 0, y: 0 }, 6, { dx: 30 })).toBeNull();
+  });
+
+  it("getAnimatedAABB 与 getRotatedAABB 在无动画时一致", () => {
+    const r = createShape("rect", { x: 10, y: 20, width: 100, height: 50 });
+    expect(getAnimatedAABB(r, {})).toEqual(getRotatedAABB(r));
+  });
+
   it("finds the nearest handle inside the tolerance", () => {
     const r = createShape("rect", { x: 0, y: 0, width: 100, height: 100 });
     expect(hitTestResizeHandle(r, { x: 103, y: 50 }, 6)).toBe("e");
