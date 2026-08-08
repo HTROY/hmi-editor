@@ -82,6 +82,20 @@ Backend (from repo root unless noted):
 
 完成标准：`cargo build` 退出码为 0 且产物已就位。普通（非沙箱）终端里 `.\scripts\build.ps1` 无需任何变通。
 
+### Node/npm 命令（Codex 沙箱）
+
+沙箱 shell 的 PATH 没有 `node`/`npm`，直接跑 `npm` 会报 `The term 'npm' is not recognized`。通用做法：
+
+1. 先调用 `load_workspace_dependencies` 获取捆绑运行时。当前路径形如 `C:\Users\huangcheng\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe`（随 bundle 版本变化，以工具返回为准）。
+2. 不依赖 `npm`，用 node 直接调 `node_modules` 里的 CLI：
+   - 测试：`& $node "node_modules\vitest\vitest.mjs" run [<测试文件>...]`
+   - 类型检查：`& $node "node_modules\typescript\bin\tsc" -b`
+   - 构建：`& $node "node_modules\vite\bin\vite.js" build`
+   - 格式化/检查：`& $node "node_modules\prettier\bin\prettier.cjs" --write <文件>`（`--check` 同理）
+3. 需要安装依赖时用捆绑 pnpm：`C:\Users\huangcheng\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\fallback\pnpm.cmd install`；仓库已有 `node_modules` 时通常不需要。
+4. `git` 不在 PATH 时用捆绑路径 `...\dependencies\native\git\cmd\git.exe`；`gh` 固定用 `C:\Program Files\GitHub CLI\gh.exe`（见“GitHub 操作”一节）。
+5. PowerShell 会把子进程的 stderr 当 `NativeCommandError` 显示并让命令“退出码 1”——以实际输出为准：vitest 看 `N passed`，tsc 无错误输出即通过。
+
 ## WASM Plugin Contract
 
 - Single source of truth: `io-backend/wit/hmi-plugin.wit` — package `hmi:plugin`, exports `lifecycle` (init/connect/disconnect/scan-points/write-point/get-name/get-status), imports `events` (log/on-point/on-packet); all functions are `async`.
@@ -120,6 +134,18 @@ Backend (from repo root unless noted):
 4. 发布后回读正文（`gh issue view <n>` 或 REST 取 body），确认标题与正文里的中文完好再交付。
 5. GitHub 原生依赖边回读时，`issue_dependencies_summary.blocked_by` 是整数计数而不是数组，直接与预期依赖数比较。
 
+## 编码与 apply_patch（UTF-8 BOM / CRLF）
+
+本仓库大量源文件是 **UTF-8 with BOM**（首字节 `EF BB BF`，如 `src/App.tsx`）。`apply_patch` 按行精确匹配上下文，BOM 属于第一行的内容，因此**以第一行开头的 hunk 会报 `Failed to find expected lines`**，即使肉眼看起来一致；CRLF 行尾同理，patch 中的 LF 上下文也可能匹配不上。
+
+通用处理方案（按优先级）：
+
+1. **读文件显式 UTF-8**：中文 Windows 的 PowerShell 默认按 GBK 解码，`Get-Content` 一律加 `-Encoding UTF8`；怀疑 BOM 时用 `Format-Hex -Path <file>` 检查前三个字节是否为 `EF BB BF`。
+2. **hunk 避开第一行**：上下文从第二行开始写，需要改动第一行时把插入/修改放到第二行之后；这是最常用的做法。
+3. **重建整个文件**：必须修改第一行、删除或重写文件时，用 `*** Delete File` + `*** Add File` 重建；新文件为 UTF-8 无 BOM。
+4. **只追加**：新增内容放文件末尾时，用末尾唯一段落作为上下文。
+5. 新建文件统一 UTF-8 无 BOM；Vite/TypeScript/Rust 均不要求 BOM，无需刻意保留。文件编辑统一走 `apply_patch`，不要用 `cat`/`Set-Content` 写文件（会破坏编码与行尾约定）。
+
 ## Security & Configuration Tips
 
 - `config.yaml` controls ports, plugin instances, and point mappings; keep secrets out.
@@ -128,13 +154,8 @@ Backend (from repo root unless noted):
 
 ## Codex 多代理操作
 
-启动子代理的标准操作：
+调用code_review skills时不启动子代理
 
-1. 调用 `spawn_agent`：`task_name` 使用唯一的小写标识，`message` 写入完整任务文本，`fork_turns` 使用 `"all"`（或省略该参数）以继承完整上下文。
-2. 检查子代理首次回复：应复述任务或直接开始执行，而不是回复占位消息。
-3. 核对最终回复：必须包含任务要求的交付物（审查结论、文件变更、测试结果等）。
-
-若子代理回复 "I don't see a request yet" 等占位消息，说明初始任务未送达：重新 `spawn_agent` 并携带全量历史；`followup_task` 只能补充消息，不能找回已丢失的初始任务。
 
 ## Agent skills
 
