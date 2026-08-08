@@ -1,5 +1,7 @@
 ﻿import { ShapeBase } from "../shapes/ShapeBase";
 import type { BoundingBox } from "../types";
+import type { AnimationFrameState } from "../bindings/animation";
+import { inverseAnimationToStatic } from "./animationGeometry";
 
 // ============================================================
 // SceneGraph — 场景图：管理所有图元、zIndex 排序、增删改查
@@ -51,6 +53,7 @@ export class SceneGraph {
   /** 获取指定区域内的图元 */
   getInRect(rect: BoundingBox): ShapeBase[] {
     return this.getAll().filter((s) => {
+      if (!s.visible || s.locked) return false;
       const bb = s.boundingBox;
       return (
         bb.x < rect.x + rect.width &&
@@ -61,14 +64,26 @@ export class SceneGraph {
     });
   }
 
-  /** 点击测试：返回最上层命中的图元（从 zIndex 高到低遍历） */
-  hitTest(x: number, y: number): ShapeBase | null {
+  /**
+   * 点击测试：返回最上层命中的图元（从 zIndex 高到低遍历）。
+   * animationState 提供动画帧状态时，命中点先按逆动画变换还原到静态坐标，
+   * 与渲染叠加的动画几何保持一致。
+   */
+  hitTest(
+    x: number,
+    y: number,
+    animationState?: ReadonlyMap<string, AnimationFrameState>
+  ): ShapeBase | null {
     const all = this.getAll();
     // 从后往前（zIndex 高的先被选中）
     for (let i = all.length - 1; i >= 0; i--) {
       const shape = all[i];
       if (!shape.visible || shape.locked) continue;
-      if (shape.hitTest({ x, y })) return shape;
+      const anim = animationState?.get(shape.id);
+      const point = anim
+        ? inverseAnimationToStatic(shape, { x, y }, anim)
+        : { x, y };
+      if (shape.hitTest(point)) return shape;
     }
     return null;
   }

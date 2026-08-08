@@ -113,4 +113,9 @@ export class AnimationEngine {
   get isRunning(): boolean {
     return this.running;
   }
+
+  /** 当前帧状态（只读）：命中测试/选中框与渲染保持一致 */
+  getState(): ReadonlyMap<string, AnimationFrameState> {
+    return this.state;
+  }
 }

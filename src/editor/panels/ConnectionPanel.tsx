@@ -2,6 +2,7 @@
 import { useEditorStore } from "../../store/editorStore";
 import type { ActiveSource } from "../../core/io";
 import type { VariableDef } from "../../core/variables/types";
+import type { ConnectionConfig } from "../../core/settings";
 import { Icon } from "../icons";
 
 // ============================================================
@@ -10,30 +11,38 @@ import { Icon } from "../icons";
 // ============================================================
 
 export function ConnectionPanel() {
-  const { dataBridge, simRunning, toggleSimulation, wsConfig, setWsConfig } =
-    useEditorStore();
+  const {
+    dataBridge,
+    simRunning,
+    toggleSimulation,
+    setWsConfig,
+    connectionConfig,
+    setConnectionConfig,
+  } = useEditorStore();
   const varManager = useEditorStore((s) => s.varManager);
 
-  const [activeSource, setActiveSource] = useState<ActiveSource>("simulation");
+  const [activeSource, setActiveSource] = useState<ActiveSource>(
+    connectionConfig.activeSource
+  );
   const [statuses, setStatuses] = useState<Record<string, string>>({
     iec104: "disconnected",
     websocket: "disconnected",
   });
-  const [wsUrl, setWsUrl] = useState(
-    wsConfig?.url ?? "ws://localhost:8080/iscs/data"
-  );
-  const [iec104Host, setIec104Host] = useState("192.168.1.100");
-  const [iec104Port, setIec104Port] = useState(2404);
+  const [wsUrl, setWsUrl] = useState(connectionConfig.wsUrl);
+  const [iec104Host, setIec104Host] = useState(connectionConfig.iec104Host);
+  const [iec104Port, setIec104Port] = useState(connectionConfig.iec104Port);
   const [ioBackendUrl, setIoBackendUrl] = useState(
-    "ws://localhost:8080/iscs/data"
+    connectionConfig.ioBackendUrl
   );
   const [ioBackendApiUrl, setIoBackendApiUrl] = useState(
-    "http://localhost:8081"
+    connectionConfig.ioBackendApiUrl
   );
   const [ioBackendBackupUrl, setIoBackendBackupUrl] = useState(
-    wsConfig?.backupUrl ?? ""
+    connectionConfig.ioBackendBackupUrl
   );
-  const [ioBackendBackupApiUrl, setIoBackendBackupApiUrl] = useState("");
+  const [ioBackendBackupApiUrl, setIoBackendBackupApiUrl] = useState(
+    connectionConfig.ioBackendBackupApiUrl
+  );
   const [fetchingVars, setFetchingVars] = useState(false);
   const [varFetchMsg, setVarFetchMsg] = useState<string | null>(null);
 
@@ -49,6 +58,18 @@ export function ConnectionPanel() {
   hasFetchedRef.current = hasFetched;
   const ioBackendApiUrlRef = React.useRef(ioBackendApiUrl);
   ioBackendApiUrlRef.current = ioBackendApiUrl;
+
+  // 组装当前面板配置（用于切换数据源/点击连接时持久化）
+  const buildConfig = (source: ActiveSource): ConnectionConfig => ({
+    activeSource: source,
+    wsUrl,
+    iec104Host,
+    iec104Port,
+    ioBackendUrl,
+    ioBackendApiUrl,
+    ioBackendBackupUrl,
+    ioBackendBackupApiUrl,
+  });
 
   // 连接后端时自动启用报警/SOE 数据流（remote 模式），无需再点工具栏「模拟」。
   const startBackendAlarmFeed = React.useCallback((apiUrl?: string) => {
@@ -125,6 +146,7 @@ export function ConnectionPanel() {
   const handleSourceChange = (source: ActiveSource) => {
     if (simRunning) toggleSimulation();
     setActiveSource(source);
+    setConnectionConfig(buildConfig(source));
 
     // 只停止当前数据源，不自动连接（等待用户点击「连接」按钮）
     if (dataBridge?.active !== "simulation") {
@@ -189,6 +211,7 @@ export function ConnectionPanel() {
       dataBridge?.wsClient.updateConfig({ url: wsUrl });
       setWsConfig({ url: wsUrl });
     }
+    setConnectionConfig(buildConfig(activeSource));
 
     // 重置拉取状态
     setHasFetched(false);

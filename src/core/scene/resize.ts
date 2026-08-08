@@ -5,6 +5,8 @@ import { PathShape } from "../shapes/PathShape";
 import { TextShape } from "../shapes/TextShape";
 import { transformPathData } from "../shapes/pathTransform";
 import type { BoundingBox, Point } from "../types";
+import type { AnimationFrameState } from "../bindings/animation";
+import { applyAnimationToPoint } from "./animationGeometry";
 
 // ============================================================
 // resize — 手柄调整图元大小（core 层纯几何）
@@ -120,11 +122,41 @@ export function getRotatedAABB(shape: ShapeBase): BoundingBox {
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
+/**
+ * 叠加动画帧状态后的屏幕轴对齐外接框。
+ * 先按静态旋转得到 AABB，再把它 4 个角点经过动画变换（位移/旋转/缩放）后重取 AABB。
+ */
+export function getAnimatedAABB(
+  shape: ShapeBase,
+  anim: AnimationFrameState
+): BoundingBox {
+  const bb = getRotatedAABB(shape);
+  const corners: Point[] = [
+    { x: bb.x, y: bb.y },
+    { x: bb.x + bb.width, y: bb.y },
+    { x: bb.x + bb.width, y: bb.y + bb.height },
+    { x: bb.x, y: bb.y + bb.height },
+  ];
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const c of corners) {
+    const t = applyAnimationToPoint(shape, c, anim);
+    minX = Math.min(minX, t.x);
+    minY = Math.min(minY, t.y);
+    maxX = Math.max(maxX, t.x);
+    maxY = Math.max(maxY, t.y);
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
 /** 返回 8 个手柄的世界坐标（按 AABB 排布） */
 export function getResizeHandles(
-  shape: ShapeBase
+  shape: ShapeBase,
+  anim?: AnimationFrameState
 ): Record<ResizeHandle, Point> {
-  const bb = getRotatedAABB(shape);
+  const bb = anim ? getAnimatedAABB(shape, anim) : getRotatedAABB(shape);
   return {
     nw: { x: bb.x, y: bb.y },
     n: { x: bb.x + bb.width / 2, y: bb.y },
@@ -141,9 +173,10 @@ export function getResizeHandles(
 export function hitTestResizeHandle(
   shape: ShapeBase,
   point: Point,
-  tolerance = 6
+  tolerance = 6,
+  anim?: AnimationFrameState
 ): ResizeHandle | null {
-  const handles = getResizeHandles(shape);
+  const handles = getResizeHandles(shape, anim);
   let best: ResizeHandle | null = null;
   let bestDist = Infinity;
   for (const key of HANDLE_ORDER) {

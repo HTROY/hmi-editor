@@ -43,10 +43,19 @@ export function EditorCanvas() {
   const isPanning = useRef(false);
   const panLast = useRef({ x: 0, y: 0 });
   const spaceDownRef = useRef(false);
+  const isMarqueeSelecting = useRef(false);
+  const marqueeStart = useRef({ x: 0, y: 0 });
+  const marqueeEnd = useRef({ x: 0, y: 0 });
   const [spaceDown, setSpaceDown] = useState(false);
   const [panning, setPanning] = useState(false);
   const [hoverHandle, setHoverHandle] = useState<ResizeHandle | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [marqueeRect, setMarqueeRect] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
 
   const {
     scene,
@@ -156,13 +165,15 @@ export function EditorCanvas() {
 
       if (mode === "select") {
         const world = store.viewport.screenToWorld(pos.x, pos.y);
+        const animState = store.animEngine.getState();
         // 先命中已选中图元的手柄（旋转图元按屏幕轴对齐外接框）
         const selected = selectedId ? scene.get(selectedId) : null;
         if (selected && !selected.locked) {
           const handle = hitTestResizeHandle(
             selected,
             world,
-            8 / store.viewport.zoom
+            8 / store.viewport.zoom,
+            animState.get(selected.id)
           );
           if (handle) {
             beginShapeEdit(selected.id);
@@ -173,7 +184,7 @@ export function EditorCanvas() {
           }
         }
         // 点击测试：屏幕坐标 -> 世界坐标
-        const hit = scene.hitTest(world.x, world.y);
+        const hit = scene.hitTest(world.x, world.y, animState);
         if (hit) {
           selectShape(hit.id);
           beginShapeEdit(hit.id);
@@ -181,6 +192,10 @@ export function EditorCanvas() {
           dragStart.current = pos;
           shapeStartPos.current = { x: hit.x, y: hit.y };
         } else {
+          isMarqueeSelecting.current = true;
+          marqueeStart.current = pos;
+          marqueeEnd.current = pos;
+          setMarqueeRect({ x: pos.x, y: pos.y, width: 0, height: 0 });
           selectShape(null);
         }
       } else {
@@ -232,6 +247,18 @@ export function EditorCanvas() {
         return;
       }
 
+      // 框选拖拽
+      if (isMarqueeSelecting.current) {
+        marqueeEnd.current = pos;
+        setMarqueeRect({
+          x: Math.min(marqueeStart.current.x, pos.x),
+          y: Math.min(marqueeStart.current.y, pos.y),
+          width: Math.abs(pos.x - marqueeStart.current.x),
+          height: Math.abs(pos.y - marqueeStart.current.y),
+        });
+        return;
+      }
+
       // 未拖拽时悬停手柄显示对应光标
       if (!isDragging.current || !selectedId) {
         const selected = selectedId ? scene.get(selectedId) : null;
@@ -240,7 +267,8 @@ export function EditorCanvas() {
             ? hitTestResizeHandle(
                 selected,
                 store.viewport.screenToWorld(pos.x, pos.y),
-                8 / store.viewport.zoom
+                8 / store.viewport.zoom,
+                store.animEngine.getState().get(selected.id)
               )
             : null;
         if (nextHover !== hoverHandle) setHoverHandle(nextHover);
@@ -272,15 +300,40 @@ export function EditorCanvas() {
     ]
   );
 
-  const handleMouseUp = useCallback(() => {
-    if (isResizing.current) {
-      isResizing.current = false;
-      resizeHandleRef.current = null;
-    }
-    isDragging.current = false;
-    setHoverHandle(null);
-    endShapeEdit();
-  }, [endShapeEdit]);
+  const handleMouseUp = useCallback(
+    (e?: React.MouseEvent<HTMLCanvasElement>) => {
+      if (isResizing.current) {
+        isResizing.current = false;
+        resizeHandleRef.current = null;
+      }
+      if (isMarqueeSelecting.current) {
+        isMarqueeSelecting.current = false;
+        const store = useEditorStore.getState();
+        const end = e ? getCanvasPos(e.clientX, e.clientY) : marqueeEnd.current;
+        const start = marqueeStart.current;
+        const width = Math.abs(end.x - start.x);
+        const height = Math.abs(end.y - start.y);
+        if (width >= 3 || height >= 3) {
+          const worldTL = store.viewport.screenToWorld(
+            Math.min(start.x, end.x),
+            Math.min(start.y, end.y)
+          );
+          const hits = store.scene.getInRect({
+            x: worldTL.x,
+            y: worldTL.y,
+            width: width / store.viewport.zoom,
+            height: height / store.viewport.zoom,
+          });
+          store.selectShapes(hits.map((s) => s.id).reverse());
+        }
+        setMarqueeRect(null);
+      }
+      isDragging.current = false;
+      setHoverHandle(null);
+      endShapeEdit();
+    },
+    [endShapeEdit, getCanvasPos]
+  );
 
   // SVG / PNG / JPG 文件拖放导入
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -360,7 +413,7 @@ export function EditorCanvas() {
   return (
     <div
       ref={containerRef}
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", position: "relative" }}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -384,6 +437,21 @@ export function EditorCanvas() {
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       />
+      {marqueeRect && (
+        <div
+          style={{
+            position: "absolute",
+            left: marqueeRect.x,
+            top: marqueeRect.y,
+            width: marqueeRect.width,
+            height: marqueeRect.height,
+            border: "1px dashed #1890FF",
+            background: "rgba(24, 144, 255, 0.08)",
+            pointerEvents: "none",
+            zIndex: 10,
+          }}
+        />
+      )}
       {dragOver && (
         <div className="svg-drop-overlay">
           <span className="svg-drop-icon">图片/SVG</span>
