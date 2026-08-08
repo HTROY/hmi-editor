@@ -23,6 +23,7 @@ import type {
   OutOfBoundsShape,
   ResizeHandle,
   ResizeOptions,
+  ProjectData,
 } from "../core";
 import { generateId } from "../core/shapes";
 import { importSvg } from "../core/svg";
@@ -45,8 +46,10 @@ import {
   buildAutosaveSnapshot,
   createIndexedDbAutosaveStore,
   defaultPageViews,
+  isProjectPackageFile,
   isAutosaveSnapshot,
   normalizePageView,
+  unpackProjectPackage,
 } from "../core";
 import type { AutosaveSnapshot, PageViewState } from "../core";
 
@@ -132,6 +135,8 @@ interface EditorState {
   setPageBackground: (pageId: string, background: string) => void;
   exportProject: () => void;
   importProject: (j: string) => void;
+  exportProjectPackage: () => Promise<void>;
+  openProjectPackage: (file: File) => Promise<void>;
   importSvgText: (svgText: string) => SvgImportResult;
   importSvgFile: (file: File) => void;
   importRasterFile: (file: File) => void;
@@ -300,6 +305,30 @@ export const useEditorStore = create<EditorState>((set, get) => {
     historyByPage.set(pageId, h);
     activeHistory = h;
     set({ history: h, historyRevision: 0 });
+  };
+
+  /** 用工程数据替换当前编辑内容（打开/导入共用） */
+  const loadProjectData = (data: ProjectData) => {
+    const s = get();
+    s.projectManager.importProject(data);
+    const f = s.projectManager.activePage;
+    if (!f) throw new Error("工程没有页面");
+    s.scene.clear();
+    for (const sh of f.scene.getAll()) s.scene.add(sh);
+    resetHistory(f.meta.id);
+    set({
+      activePageId: f.meta.id,
+      pageTitle: f.meta.title,
+      pageWidth: f.meta.width,
+      pageHeight: f.meta.height,
+      pageBackground: f.meta.background,
+      selectedId: null,
+      pageViews: defaultPageViews(s.projectManager),
+    });
+    s.bindingEngine.rebuildIndex();
+    activateViewport(true);
+    s.renderer?.render();
+    flushAutosave();
   };
 
   return {
@@ -672,34 +701,29 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     openProject: (file) => {
       const s = get();
+      if (isProjectPackageFile(file)) {
+        void s.openProjectPackage(file);
+        return;
+      }
       const r = new FileReader();
       r.onload = () => {
         try {
-          s.projectManager.fromJSON(r.result as string);
-          const f = s.projectManager.activePage;
-          if (f) {
-            s.scene.clear();
-            for (const sh of f.scene.getAll()) s.scene.add(sh);
-            resetHistory(f.meta.id);
-            set({
-              activePageId: f.meta.id,
-              pageTitle: f.meta.title,
-              pageWidth: f.meta.width,
-              pageHeight: f.meta.height,
-              pageBackground: f.meta.background,
-              selectedId: null,
-              pageViews: defaultPageViews(s.projectManager),
-            });
-            s.bindingEngine.rebuildIndex();
-            activateViewport(true);
-            s.renderer?.render();
-            flushAutosave();
-          }
+          loadProjectData(JSON.parse(r.result as string));
         } catch {
           alert("打开失败");
         }
       };
       r.readAsText(file);
+    },
+    openProjectPackage: async (file) => {
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        loadProjectData(await unpackProjectPackage(bytes));
+      } catch (e) {
+        alert(
+          "打开工程包失败：" + (e instanceof Error ? e.message : String(e))
+        );
+      }
     },
     exportScene: () => {
       const s = get();
@@ -707,30 +731,24 @@ export const useEditorStore = create<EditorState>((set, get) => {
       flushAutosave();
       s.projectManager.downloadProject();
     },
+    exportProjectPackage: async () => {
+      const s = get();
+      s.syncSceneToProject();
+      flushAutosave();
+      try {
+        await s.projectManager.downloadProjectPackage();
+      } catch (e) {
+        alert(
+          "导出工程包失败：" + (e instanceof Error ? e.message : String(e))
+        );
+      }
+    },
     importScene: (json) => {
       const s = get();
       try {
         const d = JSON.parse(json);
         if (d.pages) {
-          s.projectManager.fromJSON(d);
-          const f = s.projectManager.activePage;
-          if (f) {
-            s.scene.clear();
-            for (const sh of f.scene.getAll()) s.scene.add(sh);
-            resetHistory(f.meta.id);
-            set({
-              activePageId: f.meta.id,
-              pageTitle: f.meta.title,
-              pageWidth: f.meta.width,
-              pageHeight: f.meta.height,
-              pageBackground: f.meta.background,
-              selectedId: null,
-              pageViews: defaultPageViews(s.projectManager),
-            });
-            activateViewport(true);
-            s.renderer?.render();
-            flushAutosave();
-          }
+          loadProjectData(d);
         } else if (d.shapes) {
           s.scene.clear();
           for (const sp of d.shapes) s.scene.add(createShape(sp.type, sp));

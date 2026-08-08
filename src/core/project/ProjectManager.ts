@@ -1,6 +1,8 @@
 ﻿import { SceneGraph } from "../scene/SceneGraph";
 import { createShape, ShapeBase } from "../shapes";
 import type { PageMeta, ProjectMeta, ProjectData, RecentFile } from "./types";
+import { PROJECT_SCHEMA_VERSION, upgradeProjectData } from "./upgrade";
+import { packProjectPackage, unpackProjectPackage } from "./package";
 
 // ============================================================
 // ProjectManager — 工程管理器
@@ -56,7 +58,7 @@ export class ProjectManager {
   /** 获取所有页面元数据 */
   getPages(): PageMeta[] {
     return Array.from(this.pageMetas.values()).sort(
-      (a, b) => a.order - b.order,
+      (a, b) => a.order - b.order
     );
   }
 
@@ -76,7 +78,7 @@ export class ProjectManager {
     const now = new Date().toISOString();
     const maxOrder = Math.max(
       0,
-      ...Array.from(this.pageMetas.values()).map((p) => p.order),
+      ...Array.from(this.pageMetas.values()).map((p) => p.order)
     );
     const meta: PageMeta = {
       id,
@@ -175,6 +177,7 @@ export class ProjectManager {
     });
 
     return {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
       meta: { ...this.meta, updatedAt: new Date().toISOString() },
       pages,
     };
@@ -182,15 +185,17 @@ export class ProjectManager {
 
   /** 导入工程数据 */
   importProject(data: ProjectData): void {
+    const upgraded = upgradeProjectData(data);
+
     // 清空当前
     this.pageMetas.clear();
     this.pageScenes.clear();
 
     // 导入元信息
-    this.meta = { ...data.meta };
+    this.meta = { ...upgraded.meta };
 
     // 导入页面
-    for (const pageData of data.pages) {
+    for (const pageData of upgraded.pages) {
       const scene = new SceneGraph();
       for (const shapeProps of pageData.shapes) {
         try {
@@ -227,6 +232,29 @@ export class ProjectManager {
     return new Blob([this.toJSON()], { type: "application/json" });
   }
 
+  /** 导出为 .hmi.zip 工程包字节流（含 assets/ 资源） */
+  async toPackageBytes(): Promise<Uint8Array> {
+    return packProjectPackage(this.exportProject());
+  }
+
+  /** 从 .hmi.zip 工程包字节流导入 */
+  async fromPackageBytes(bytes: Uint8Array): Promise<void> {
+    this.importProject(await unpackProjectPackage(bytes));
+  }
+
+  /** 下载 .hmi.zip 工程包 */
+  async downloadProjectPackage(): Promise<void> {
+    const bytes = await this.toPackageBytes();
+    const blob = new Blob([bytes], { type: "application/zip" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (this.meta.name || "未命名工程") + ".hmi.zip";
+    a.click();
+    URL.revokeObjectURL(url);
+    this.dirty = false;
+  }
+
   /** 创建新工程 */
   newProject(): void {
     this.pageMetas.clear();
@@ -253,7 +281,7 @@ export class ProjectManager {
     try {
       localStorage.setItem(
         "hmi_recent_files",
-        JSON.stringify(this.recentFiles.slice(0, 10)),
+        JSON.stringify(this.recentFiles.slice(0, 10))
       );
     } catch {
       /* ignore */

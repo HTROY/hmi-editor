@@ -1,5 +1,6 @@
 ﻿import React, { useRef } from "react";
 import { useEditorStore } from "../../store/editorStore";
+import { isProjectPackageFile } from "../../core";
 
 // ============================================================
 // ProjectToolbar — 工程操作（新建/保存/打开/导出/工程属性）
@@ -16,6 +17,7 @@ export function ProjectToolbar() {
     saveProject,
     openProject,
     exportScene,
+    exportProjectPackage,
     importScene,
     importSvgFile,
     importRasterFile,
@@ -54,7 +56,7 @@ export function ProjectToolbar() {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".hmi.json,.json"
+        accept=".hmi.json,.hmi.zip,.json,.zip"
         style={{ display: "none" }}
         onChange={handleFileSelected}
       />
@@ -104,18 +106,30 @@ export function ProjectToolbar() {
 
       <button
         className="tool-btn"
-        title="导入画面 JSON"
+        title="导出 .hmi.zip 工程包（含资源）"
+        onClick={exportProjectPackage}
+      >
+        <Icon name="export" className="tool-icon" />
+        <span className="tool-label">导出包</span>
+      </button>
+
+      <button
+        className="tool-btn"
+        title="导入工程（.hmi.zip / .hmi.json）"
         onClick={() => {
           const input = document.createElement("input");
           input.type = "file";
-          input.accept = ".hmi.json,.json";
+          input.accept = ".hmi.json,.hmi.zip,.json,.zip";
           input.onchange = (e: any) => {
             const file = e.target?.files?.[0];
-            if (file) {
-              const reader = new FileReader();
-              reader.onload = () => importScene(reader.result as string);
-              reader.readAsText(file);
+            if (!file) return;
+            if (isProjectPackageFile(file)) {
+              openProject(file);
+              return;
             }
+            const reader = new FileReader();
+            reader.onload = () => importScene(reader.result as string);
+            reader.readAsText(file);
           };
           input.click();
         }}

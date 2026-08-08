@@ -29,6 +29,8 @@ export interface ProjectMeta {
 
 /** 完整的工程数据结构 */
 export interface ProjectData {
+  /** 工程结构版本；旧 .hmi.json 无此字段，导入时按 v1 升级 */
+  schemaVersion?: number;
   meta: ProjectMeta;
   pages: {
     meta: PageMeta;
