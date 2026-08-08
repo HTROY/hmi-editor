@@ -22,6 +22,7 @@ export function PagePanel() {
     addPage,
     deletePage,
     renamePage,
+    movePage,
     pageWidth,
     pageHeight,
     setPageResolution,
@@ -58,10 +59,10 @@ export function PagePanel() {
     const idx = pages.findIndex((p) => p.id === pageId);
     if (direction === "up" && idx > 0) {
       const target = pages[idx - 1];
-      projectManager?.movePage(pageId, target.order);
+      movePage(pageId, target.order);
     } else if (direction === "down" && idx < pages.length - 1) {
       const target = pages[idx + 1];
-      projectManager?.movePage(pageId, target.order);
+      movePage(pageId, target.order);
     }
   };
 

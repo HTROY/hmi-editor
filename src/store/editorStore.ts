@@ -75,6 +75,7 @@ interface EditorState {
   simRunning: boolean;
   wsConfig: { url: string; backupUrl?: string };
   pageViews: Record<string, PageViewState>;
+  pageRevision: number;
   varRevision: number;
   shapeRevision: number;
   historyRevision: number;
@@ -121,6 +122,7 @@ interface EditorState {
   addPage: () => void;
   deletePage: (id: string) => void;
   renamePage: (id: string, t: string) => void;
+  movePage: (id: string, newOrder: number) => void;
   syncSceneToProject: () => void;
   acknowledgeAlarm: (id: string) => void;
   acknowledgeAllAlarms: () => void;
@@ -297,6 +299,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     simRunning: false,
     wsConfig: { url: "ws://localhost:8080/iscs/data" },
     pageViews: { [dp.id]: { ...DEFAULT_PAGE_VIEW } },
+    pageRevision: 0,
     varRevision: 0,
     shapeRevision: 0,
     historyRevision: 0,
@@ -767,6 +770,11 @@ export const useEditorStore = create<EditorState>((set, get) => {
       if (pageId === s.activePageId) set({ pageTitle: newTitle });
       flushAutosave();
     },
+    movePage: (pageId, newOrder) => {
+      const s = get();
+      s.projectManager.movePage(pageId, newOrder);
+      set((st) => ({ pageRevision: st.pageRevision + 1 }));
+    },
     setPageResolution: (pageId, width, height) => {
       const s = get();
       const meta = s.projectManager.getPageMeta(pageId);
@@ -985,6 +993,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
             pageViews: views,
           });
           s.bindingEngine.rebuildIndex();
+          syncOutOfBounds(s.scene, f.meta.width, f.meta.height);
           activateViewport(false);
           s.renderer?.render();
           autosaveReady = true;
@@ -1027,7 +1036,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
 useEditorStore.subscribe((state, prev) => {
   if (
     state.shapeRevision !== prev.shapeRevision ||
-    state.historyRevision !== prev.historyRevision
+    state.historyRevision !== prev.historyRevision ||
+    state.pageRevision !== prev.pageRevision
   ) {
     scheduleAutosave();
   }
