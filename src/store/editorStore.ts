@@ -548,13 +548,23 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     setZoom: (zoom, anchorX, anchorY) => {
       const s = get();
-      s.viewport.setZoom(zoom, anchorX ?? 0, anchorY ?? 0);
+      const r = s.renderer;
+      s.viewport.setZoom(
+        zoom,
+        anchorX ?? (r ? r.width / 2 : 0),
+        anchorY ?? (r ? r.height / 2 : 0)
+      );
       syncView(s);
       s.renderer?.render();
     },
     zoomBy: (factor, anchorX, anchorY) => {
       const s = get();
-      s.viewport.zoomBy(factor, anchorX ?? 0, anchorY ?? 0);
+      const r = s.renderer;
+      s.viewport.zoomBy(
+        factor,
+        anchorX ?? (r ? r.width / 2 : 0),
+        anchorY ?? (r ? r.height / 2 : 0)
+      );
       syncView(s);
       s.renderer?.render();
     },
@@ -567,9 +577,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
     zoomTo: (zoom) => {
       const s = get();
       const r = s.renderer;
-      s.viewport.setZoom(zoom, r ? r.width / 2 : 0, r ? r.height / 2 : 0);
+      if (!r) return;
+      s.viewport.zoomToPage(zoom, s.pageWidth, s.pageHeight, r.width, r.height);
       syncView(s);
-      s.renderer?.render();
+      r.render();
     },
     fitPage: () => {
       const s = get();
@@ -779,12 +790,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       if (!meta) return;
       const { width: newW, height: newH } = sanitizeResolution(width, height);
       if (meta.width === newW && meta.height === newH) return;
-      const factor = computeScaleFactor(
-        meta.width,
-        meta.height,
-        newW,
-        newH,
-      );
+      const factor = computeScaleFactor(meta.width, meta.height, newW, newH);
       const shapes = s.scene.getAll();
       const commands: ShapeCommand[] = [];
       for (const shape of shapes) {

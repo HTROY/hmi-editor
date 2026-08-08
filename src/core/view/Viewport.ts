@@ -73,6 +73,20 @@ export class Viewport {
     this.panY = (canvasHeight - pageHeight * this.zoom) / 2;
   }
 
+  /** 按指定缩放显示页面并居中（100%/百分比按钮用） */
+  zoomToPage(
+    zoom: number,
+    pageWidth: number,
+    pageHeight: number,
+    canvasWidth: number,
+    canvasHeight: number
+  ): void {
+    const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+    this.zoom = next;
+    this.panX = (canvasWidth - pageWidth * next) / 2;
+    this.panY = (canvasHeight - pageHeight * next) / 2;
+  }
+
   /** 恢复 100% 且不平移 */
   reset(): void {
     this.zoom = 1;

@@ -1,4 +1,5 @@
 import { ProjectManager } from "../project/ProjectManager";
+import { MIN_ZOOM, MAX_ZOOM } from "../view/Viewport";
 import {
   AUTOSAVE_SCHEMA_VERSION,
   DEFAULT_PAGE_VIEW,
@@ -20,7 +21,7 @@ export function normalizePageView(
   const zoom = view?.zoom;
   const panX = view?.panX;
   const panY = view?.panY;
-  const validZoom = finiteNumber(zoom) && zoom >= 0.1 && zoom <= 8;
+  const validZoom = finiteNumber(zoom) && zoom >= MIN_ZOOM && zoom <= MAX_ZOOM;
   return {
     zoom: validZoom ? zoom : DEFAULT_PAGE_VIEW.zoom,
     panX: finiteNumber(panX) ? panX : DEFAULT_PAGE_VIEW.panX,

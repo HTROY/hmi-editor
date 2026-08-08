@@ -69,4 +69,21 @@ describe("Viewport", () => {
     expect(center.x).toBeCloseTo(600);
     expect(center.y).toBeCloseTo(400);
   });
+
+  it("zoomToPage centers the page at the requested zoom", () => {
+    const vp = new Viewport();
+    vp.panBy(-500, 300);
+    vp.zoomToPage(1, 1920, 1080, 1200, 800);
+    expect(vp.zoom).toBe(1);
+    expect(vp.worldToScreen(960, 540)).toEqual({ x: 600, y: 400 });
+    expect(vp.worldToScreen(0, 0)).toEqual({ x: -360, y: -140 });
+  });
+
+  it("zoomToPage clamps to the 10%..800% range", () => {
+    const vp = new Viewport();
+    vp.zoomToPage(0.02, 1920, 1080, 1200, 800);
+    expect(vp.zoom).toBe(MIN_ZOOM);
+    vp.zoomToPage(25, 1920, 1080, 1200, 800);
+    expect(vp.zoom).toBe(MAX_ZOOM);
+  });
 });
