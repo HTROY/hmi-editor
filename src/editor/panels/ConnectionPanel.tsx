@@ -2,6 +2,7 @@
 import { useEditorStore } from "../../store/editorStore";
 import type { ActiveSource } from "../../core/io";
 import type { VariableDef } from "../../core/variables/types";
+import { Icon } from "../icons";
 
 // ============================================================
 // ConnectionPanel — 数据连接管理面板
@@ -19,18 +20,18 @@ export function ConnectionPanel() {
     websocket: "disconnected",
   });
   const [wsUrl, setWsUrl] = useState(
-    wsConfig?.url ?? "ws://localhost:8080/iscs/data",
+    wsConfig?.url ?? "ws://localhost:8080/iscs/data"
   );
   const [iec104Host, setIec104Host] = useState("192.168.1.100");
   const [iec104Port, setIec104Port] = useState(2404);
   const [ioBackendUrl, setIoBackendUrl] = useState(
-    "ws://localhost:8080/iscs/data",
+    "ws://localhost:8080/iscs/data"
   );
   const [ioBackendApiUrl, setIoBackendApiUrl] = useState(
-    "http://localhost:8081",
+    "http://localhost:8081"
   );
   const [ioBackendBackupUrl, setIoBackendBackupUrl] = useState(
-    wsConfig?.backupUrl ?? "",
+    wsConfig?.backupUrl ?? ""
   );
   const [ioBackendBackupApiUrl, setIoBackendBackupApiUrl] = useState("");
   const [fetchingVars, setFetchingVars] = useState(false);
@@ -55,7 +56,7 @@ export function ConnectionPanel() {
     s.alarmManager.setMode("remote");
     s.alarmManager.setRemote(
       s.dataBridge.wsClient,
-      apiUrl || s.dataBridge.getApiBaseUrl() || "http://localhost:8081",
+      apiUrl || s.dataBridge.getApiBaseUrl() || "http://localhost:8081"
     );
     s.alarmManager.start();
   }, []);
@@ -134,7 +135,10 @@ export function ConnectionPanel() {
     // 预配置 io_backend 的 WebSocket URL
     if (source === "io_backend") {
       dataBridge?.wsClient.updateConfig({
-        urls: [ioBackendUrl, ...(ioBackendBackupUrl ? [ioBackendBackupUrl] : [])],
+        urls: [
+          ioBackendUrl,
+          ...(ioBackendBackupUrl ? [ioBackendBackupUrl] : []),
+        ],
       });
     }
 
@@ -171,7 +175,10 @@ export function ConnectionPanel() {
     // 配置 WebSocket URL
     if (activeSource === "io_backend") {
       dataBridge?.wsClient.updateConfig({
-        urls: [ioBackendUrl, ...(ioBackendBackupUrl ? [ioBackendBackupUrl] : [])],
+        urls: [
+          ioBackendUrl,
+          ...(ioBackendBackupUrl ? [ioBackendBackupUrl] : []),
+        ],
       });
       dataBridge?.setBackupApiBaseUrl(ioBackendBackupApiUrl);
       setWsConfig({
@@ -363,7 +370,7 @@ export function ConnectionPanel() {
                 style={{ marginTop: 8 }}
                 onClick={handleRefreshVariables}
               >
-                🔄 刷新变量列表
+                <Icon name="refresh" size={13} /> 刷新变量列表
               </button>
             )}
         </div>
@@ -470,7 +477,7 @@ export function ConnectionPanel() {
                           d.name
                             .toLowerCase()
                             .includes(subFilterText.toLowerCase())
-                        : true,
+                        : true
                     )
                     ?.map((d: VariableDef) => {
                       const isSubbed =
@@ -594,10 +601,10 @@ export function ConnectionPanel() {
               className="btn btn-primary btn-full"
               onClick={handleConnect}
             >
-              🔗 连接
+              <Icon name="plug" size={14} /> 连接
             </button>
             <button className="btn btn-full" onClick={handleDisconnect}>
-              ⚡ 断开
+              <Icon name="power" size={14} /> 断开
             </button>
           </>
         )}

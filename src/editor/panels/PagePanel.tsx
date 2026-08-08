@@ -5,6 +5,7 @@ import { useEditorStore } from "../../store/editorStore";
 // PagePanel — 页面管理面板
 // 多页面切换、增删改、排序
 // ============================================================
+import { Icon } from "../icons";
 
 export function PagePanel() {
   const {
@@ -61,7 +62,9 @@ export function PagePanel() {
               className={"page-item" + (isActive ? " active" : "")}
               onClick={() => switchPage(page.id)}
             >
-              <div className="page-item-icon">{isActive ? "📄" : "📋"}</div>
+              <div className={"page-item-icon" + (isActive ? " active" : "")}>
+                <Icon name="page" size={15} />
+              </div>
 
               <div className="page-item-info">
                 {editingId === page.id ? (
@@ -97,7 +100,7 @@ export function PagePanel() {
                     setEditText(page.title);
                   }}
                 >
-                  ✎
+                  <Icon name="pencil" size={12} />
                 </button>
                 <button
                   className="btn-icon"
@@ -105,7 +108,7 @@ export function PagePanel() {
                   onClick={() => handleMove(page.id, "up")}
                   disabled={pages.indexOf(page) === 0}
                 >
-                  ↑
+                  <Icon name="up" size={12} />
                 </button>
                 <button
                   className="btn-icon"
@@ -113,7 +116,7 @@ export function PagePanel() {
                   onClick={() => handleMove(page.id, "down")}
                   disabled={pages.indexOf(page) === pages.length - 1}
                 >
-                  ↓
+                  <Icon name="down" size={12} />
                 </button>
                 <button
                   className="btn-icon"
@@ -125,7 +128,7 @@ export function PagePanel() {
                       pages.length <= 1 ? "var(--border)" : "var(--danger)",
                   }}
                 >
-                  ✕
+                  <Icon name="close" size={12} />
                 </button>
               </div>
             </div>

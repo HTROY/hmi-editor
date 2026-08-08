@@ -4,6 +4,7 @@ import { useEditorStore } from "../../../store/editorStore";
 // ============================================================
 // ReportPanel — 报表面板
 // ============================================================
+import { Icon } from "../../icons";
 
 export function ReportPanel() {
   const { reportEngine } = useEditorStore();
@@ -18,7 +19,7 @@ export function ReportPanel() {
       const data = reportEngine.generate(selectedCfg);
       reportEngine.download(data, format);
       setReportOutput(
-        "已生成: " + data.config.name + " (" + data.rows.length + " 行)",
+        "已生成: " + data.config.name + " (" + data.rows.length + " 行)"
       );
     } catch (err: any) {
       setReportOutput("错误: " + err.message);
@@ -61,13 +62,13 @@ export function ReportPanel() {
             className="btn btn-primary btn-full"
             onClick={() => handleGenerate("csv")}
           >
-            📥 导出 CSV
+            <Icon name="export" size={14} /> 导出 CSV
           </button>
           <button
             className="btn btn-full"
             onClick={() => handleGenerate("html")}
           >
-            📄 导出 HTML
+            <Icon name="page" size={14} /> 导出 HTML
           </button>
         </div>
       )}

@@ -2,6 +2,7 @@
 import { useEditorStore } from "../../store/editorStore";
 import type { ShapeType } from "../../core/types";
 import type { ToolMode } from "../../store/editorStore";
+import { Icon, type IconName } from "../icons";
 
 // ============================================================
 // ShapeLibrary — 图元库面板
@@ -11,24 +12,25 @@ import type { ToolMode } from "../../store/editorStore";
 interface ShapeLibItem {
   type: ShapeType;
   label: string;
-  icon: string;
+  icon?: IconName;
+  glyph?: string;
   category: string;
 }
 
 const shapeItems: ShapeLibItem[] = [
   // ---- 基本图元 ----
-  { type: "rect", label: "矩形", icon: "▬", category: "基本" },
-  { type: "circle", label: "圆形", icon: "●", category: "基本" },
-  { type: "line", label: "直线", icon: "╱", category: "基本" },
-  { type: "text", label: "文本", icon: "T", category: "基本" },
+  { type: "rect", label: "矩形", icon: "rect", category: "基本" },
+  { type: "circle", label: "圆形", icon: "circle", category: "基本" },
+  { type: "line", label: "直线", icon: "line", category: "基本" },
+  { type: "text", label: "文本", icon: "text", category: "基本" },
 
   // ---- 轨道交通专用图元 ----
-  { type: "metro-breaker", label: "断路器", icon: "⨯", category: "供电" },
-  { type: "metro-busbar", label: "母线", icon: "≡", category: "供电" },
-  { type: "metro-transformer", label: "变压器", icon: "⏀", category: "供电" },
-  { type: "metro-fan", label: "风机", icon: "◉", category: "BAS" },
-  { type: "metro-signal", label: "信号灯", icon: "◍", category: "通用" },
-  { type: "metro-gauge", label: "仪表", icon: "◠", category: "通用" },
+  { type: "metro-breaker", label: "断路器", glyph: "⨯", category: "供电" },
+  { type: "metro-busbar", label: "母线", glyph: "≡", category: "供电" },
+  { type: "metro-transformer", label: "变压器", glyph: "⏀", category: "供电" },
+  { type: "metro-fan", label: "风机", glyph: "◉", category: "BAS" },
+  { type: "metro-signal", label: "信号灯", glyph: "◍", category: "通用" },
+  { type: "metro-gauge", label: "仪表", glyph: "◠", category: "通用" },
 ];
 
 export function ShapeLibrary() {
@@ -63,7 +65,13 @@ export function ShapeLibrary() {
                   title={"添加 " + item.label}
                   onClick={() => handleAdd(item)}
                 >
-                  <span className="shape-grid-icon">{item.icon}</span>
+                  <span className="shape-grid-icon">
+                    {item.icon ? (
+                      <Icon name={item.icon} size={22} />
+                    ) : (
+                      item.glyph
+                    )}
+                  </span>
                   <span className="shape-grid-label">{item.label}</span>
                 </button>
               ))}

@@ -1,17 +1,20 @@
 ﻿import React from "react";
 import { useEditorStore } from "../../store/editorStore";
 import { ProjectToolbar } from "./ProjectToolbar";
+import { Icon, type IconName } from "../icons";
+import { useTheme } from "../useTheme";
 import type { ToolMode } from "../../store/editorStore";
 
-const tools: { mode: ToolMode; label: string; icon: string }[] = [
-  { mode: "select", label: "选择", icon: "↖" },
-  { mode: "rect", label: "矩形", icon: "▬" },
-  { mode: "circle", label: "圆形", icon: "●" },
-  { mode: "line", label: "直线", icon: "╱" },
-  { mode: "text", label: "文本", icon: "T" },
+const tools: { mode: ToolMode; label: string; icon: IconName }[] = [
+  { mode: "select", label: "选择", icon: "cursor" },
+  { mode: "rect", label: "矩形", icon: "rect" },
+  { mode: "circle", label: "圆形", icon: "circle" },
+  { mode: "line", label: "直线", icon: "line" },
+  { mode: "text", label: "文本", icon: "text" },
 ];
 
 export function Toolbar() {
+  const { theme, toggleTheme } = useTheme();
   const {
     mode,
     setMode,
@@ -34,7 +37,7 @@ export function Toolbar() {
             title={t.label}
             onClick={() => setMode(t.mode)}
           >
-            <span className="tool-icon">{t.icon}</span>
+            <Icon name={t.icon} className="tool-icon" />
             <span className="tool-label">{t.label}</span>
           </button>
         ))}
@@ -53,7 +56,7 @@ export function Toolbar() {
           title="复制 (Ctrl+C)"
           onClick={copySelected}
         >
-          <span className="tool-icon">📋</span>
+          <Icon name="copy" className="tool-icon" />
           <span className="tool-label">复制</span>
         </button>
         <button
@@ -61,7 +64,7 @@ export function Toolbar() {
           title="粘贴 (Ctrl+V)"
           onClick={pasteClipboard}
         >
-          <span className="tool-icon">📌</span>
+          <Icon name="paste" className="tool-icon" />
           <span className="tool-label">粘贴</span>
         </button>
         <button
@@ -69,7 +72,7 @@ export function Toolbar() {
           title="删除 (Delete)"
           onClick={deleteSelected}
         >
-          <span className="tool-icon">🗑</span>
+          <Icon name="trash" className="tool-icon" />
           <span className="tool-label">删除</span>
         </button>
       </div>
@@ -81,7 +84,9 @@ export function Toolbar() {
         className="toolbar-project-name"
         onClick={() => setRightPanel("pages")}
       >
-        <span className="toolbar-project-icon">🏗</span>
+        <span className="toolbar-project-icon">
+          <Icon name="project" size={14} />
+        </span>
         <span>{projectManager?.meta?.name ?? "未命名"}</span>
         {projectManager?.dirty && <span className="toolbar-dirty">*</span>}
       </div>
@@ -90,11 +95,25 @@ export function Toolbar() {
 
       <div className="toolbar-group">
         <button
+          className="tool-btn"
+          title={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
+          onClick={toggleTheme}
+        >
+          <Icon
+            name={theme === "dark" ? "sun" : "moon"}
+            className="tool-icon"
+          />
+          <span className="tool-label">
+            {theme === "dark" ? "浅色" : "深色"}
+          </span>
+        </button>
+        <div className="toolbar-divider" />
+        <button
           className={"tool-btn" + (simRunning ? " active" : "")}
           title={simRunning ? "停止模拟" : "启动模拟"}
           onClick={toggleSimulation}
         >
-          <span className="tool-icon">{simRunning ? "⏹" : "▶"}</span>
+          <Icon name={simRunning ? "stop" : "play"} className="tool-icon" />
           <span className="tool-label">{simRunning ? "停止" : "模拟"}</span>
         </button>
       </div>

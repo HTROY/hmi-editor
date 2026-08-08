@@ -14,6 +14,7 @@ import {
   SoeRowItem,
 } from "./alarm-ui";
 import { RuleEditor } from "./RuleEditor";
+import { Icon } from "../../icons";
 
 const CONDITION_LABEL: Record<string, string> = {
   high: "高于阈值",
@@ -39,7 +40,9 @@ export function AlarmCenter({ onClose }: { onClose: () => void }) {
 
   const [histPage, setHistPage] = useState(1);
   const [histSeverity, setHistSeverity] = useState<AlarmSeverity | "">("");
-  const [histStatus, setHistStatus] = useState<AlarmStatus | "unacknowledged" | "">("");
+  const [histStatus, setHistStatus] = useState<
+    AlarmStatus | "unacknowledged" | ""
+  >("");
   const [histVar, setHistVar] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [streamEvents, setStreamEvents] = useState<
@@ -118,7 +121,8 @@ export function AlarmCenter({ onClose }: { onClose: () => void }) {
     <div className="alarm-center">
       <div className="alarm-center-header">
         <span className="alarm-center-title">
-          🚨 报警中心
+          <Icon name="alarm" size={17} />
+          <span>报警中心</span>
           <span className="alarm-mode-badge">
             {alarmManager?.getMode() === "remote" ? "后端" : "模拟"}
           </span>
@@ -127,7 +131,7 @@ export function AlarmCenter({ onClose }: { onClose: () => void }) {
           )}
         </span>
         <button className="btn btn-sm" onClick={onClose}>
-          关闭 ✕
+          <Icon name="close" size={12} /> 关闭
         </button>
       </div>
       <div className="alarm-center-body">
@@ -175,7 +179,9 @@ export function AlarmCenter({ onClose }: { onClose: () => void }) {
             </button>
             {mode === "local" && (
               <button
-                className={"alarm-tab" + (rightTab === "rules" ? " active" : "")}
+                className={
+                  "alarm-tab" + (rightTab === "rules" ? " active" : "")
+                }
                 onClick={() => setRightTab("rules")}
               >
                 规则管理
@@ -220,13 +226,11 @@ export function AlarmCenter({ onClose }: { onClose: () => void }) {
                   }}
                 >
                   <option value="">全部变量</option>
-                  {varManager
-                    ?.getAllDefs()
-                    .map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.id}
-                      </option>
-                    ))}
+                  {varManager?.getAllDefs().map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.id}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="alarm-center-scroll">
@@ -261,13 +265,11 @@ export function AlarmCenter({ onClose }: { onClose: () => void }) {
                   onChange={(e) => setSoeVar(e.target.value)}
                 >
                   <option value="">全部变量</option>
-                  {varManager
-                    ?.getAllDefs()
-                    .map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.id}
-                      </option>
-                    ))}
+                  {varManager?.getAllDefs().map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.id}
+                    </option>
+                  ))}
                 </select>
                 <select
                   value={soeQuality}
@@ -277,16 +279,16 @@ export function AlarmCenter({ onClose }: { onClose: () => void }) {
                   <option value="good">良好</option>
                   <option value="bad">无效</option>
                   <option value="uncertain">不确定</option>
-              </select>
-            </div>
-            <div className="soe-list-head">
-              <span>时间</span>
-              <span>变量</span>
-              <span>值</span>
-              <span>质量</span>
-              <span>来源</span>
-            </div>
-            <div className="soe-list alarm-center-scroll">
+                </select>
+              </div>
+              <div className="soe-list-head">
+                <span>时间</span>
+                <span>变量</span>
+                <span>值</span>
+                <span>质量</span>
+                <span>来源</span>
+              </div>
+              <div className="soe-list alarm-center-scroll">
                 {soeRecords.length === 0 && (
                   <div className="panel-hint">暂无 SOE 记录</div>
                 )}
@@ -339,7 +341,8 @@ export function AlarmCenter({ onClose }: { onClose: () => void }) {
                       </div>
                       <div className="rule-row-detail">
                         {rule.id} · {rule.variableId} ·{" "}
-                        {CONDITION_LABEL[rule.condition] ?? rule.condition} {rule.threshold}
+                        {CONDITION_LABEL[rule.condition] ?? rule.condition}{" "}
+                        {rule.threshold}
                         {rule.hysteresis > 0 && ` · 滞回 ${rule.hysteresis}`}
                         {rule.confirmMs > 0 && ` · 确认 ${rule.confirmMs}ms`}
                         {rule.group && ` · ${rule.group}`}

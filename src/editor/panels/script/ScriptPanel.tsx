@@ -4,6 +4,7 @@ import { useEditorStore } from "../../../store/editorStore";
 // ============================================================
 // ScriptPanel — 脚本管理面板
 // ============================================================
+import { Icon } from "../../icons";
 
 export function ScriptPanel() {
   const { scriptEngine } = useEditorStore();
@@ -79,7 +80,7 @@ export function ScriptPanel() {
                   {s.enabled ? "运行中" : "已停止"}
                 </button>
                 <button className="btn btn-sm" onClick={() => handleRun(s.id)}>
-                  ▶
+                  <Icon name="play" size={12} />
                 </button>
                 <button
                   className="btn btn-sm"
@@ -88,7 +89,7 @@ export function ScriptPanel() {
                     setEditCode(s.code);
                   }}
                 >
-                  ✎
+                  <Icon name="pencil" size={12} />
                 </button>
               </div>
             </div>

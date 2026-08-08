@@ -12,20 +12,22 @@ import { AuthPanel } from "./editor/panels/alarm/AuthPanel";
 import { ScriptPanel } from "./editor/panels/script/ScriptPanel";
 import { ReportPanel } from "./editor/panels/script/ReportPanel";
 import { ShapeLibrary } from "./editor/panels/ShapeLibrary";
+import { StatusBar } from "./editor/StatusBar";
+import { Icon, type IconName } from "./editor/icons";
 import { useEditorStore } from "./store/editorStore";
 import "./App.css";
 
-const PanelIcon: Record<string, string> = {
-  properties: "\u{1F4CB}",
-  bindings: "\u{1F517}",
-  variables: "\u{1F4CA}",
-  connections: "\u{1F310}",
-  pages: "\u{1F4C4}",
-  alarm: "\u{1F6A8}",
-  trend: "\u{1F4C8}",
-  auth: "\u{1F512}",
-  script: "\u{2328}\u{FE0F}",
-  report: "\u{1F4CA}",
+const PanelIcon: Record<string, IconName> = {
+  properties: "sliders",
+  bindings: "link",
+  variables: "pulse",
+  connections: "plug",
+  pages: "page",
+  alarm: "alarm",
+  trend: "chart",
+  auth: "lock",
+  script: "code",
+  report: "table",
 };
 
 const TABS = [
@@ -61,7 +63,7 @@ function App() {
   // 记录已访问过的面板：首次访问后保持挂载（切走时隐藏而非卸载），
   // 避免切回面板时本地状态全部重置
   const [visitedPanels, setVisitedPanels] = useState<Set<string>>(
-    () => new Set([rp]),
+    () => new Set([rp])
   );
 
   return (
@@ -71,13 +73,17 @@ function App() {
         {showLib ? (
           <div className="left-sidebar slide-in">
             <div className="left-sidebar-header">
-              <span>{PanelIcon.properties} 图元库</span>
+              <span className="lib-header">
+                <Icon name="library" size={13} />
+                <span>图元库</span>
+                <span className="lib-code">LIB</span>
+              </span>
               <button
                 className="btn-icon"
                 title="收起"
                 onClick={() => setShowLib(false)}
               >
-                ✕
+                <Icon name="close" size={13} />
               </button>
             </div>
             <ShapeLibrary />
@@ -88,15 +94,31 @@ function App() {
             title="展开图元库"
             onClick={() => setShowLib(true)}
           >
-            📦
+            <Icon name="library" size={16} />
           </button>
         )}
 
         <div className="canvas-area">
           <EditorCanvas />
+          <div className="canvas-frame" aria-hidden="true">
+            <span className="frame-corner tl" />
+            <span className="frame-corner tr" />
+            <span className="frame-corner bl" />
+            <span className="frame-corner br" />
+            <span className="frame-tag">CAN · 画面编辑</span>
+          </div>
         </div>
 
         <div className="right-panel">
+          <div className="right-panel-header">
+            <span className="rp-code">INSP</span>
+            <span className="rp-icon">
+              <Icon name={PanelIcon[rp]} size={13} />
+            </span>
+            <span className="rp-title">
+              {TABS.find((t) => t.key === rp)?.label ?? ""}
+            </span>
+          </div>
           <div className="panel-tabs">
             {TABS.map((t) => (
               <button
@@ -105,12 +127,12 @@ function App() {
                 onClick={() => {
                   setRp(t.key);
                   setVisitedPanels((prev) =>
-                    prev.has(t.key) ? prev : new Set(prev).add(t.key),
+                    prev.has(t.key) ? prev : new Set(prev).add(t.key)
                   );
                 }}
                 title={t.label}
               >
-                {t.label}
+                <Icon name={PanelIcon[t.key]} size={15} />
               </button>
             ))}
           </div>
@@ -124,7 +146,7 @@ function App() {
                 >
                   {PANELS[t.key]}
                 </div>
-              ) : null,
+              ) : null
             )}
             {!visitedPanels.has(rp) && (
               <div className="panel-hint">← 选择上方面板查看内容</div>
@@ -132,6 +154,7 @@ function App() {
           </div>
         </div>
       </div>
+      <StatusBar />
     </div>
   );
 }

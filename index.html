@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HMI 组态编辑器</title>
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0c1520" />
+    <title>HMI 组态编辑器 — 轨道交通监控</title>
     <style>
       * {
         margin: 0;
@@ -21,6 +23,22 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function () {
+        var theme = null;
+        try {
+          theme = localStorage.getItem("hmi-editor-theme");
+        } catch (e) {}
+        if (theme !== "light" && theme !== "dark") {
+          theme =
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: light)").matches
+              ? "light"
+              : "dark";
+        }
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

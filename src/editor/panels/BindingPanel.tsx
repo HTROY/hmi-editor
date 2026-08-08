@@ -7,6 +7,7 @@ import type { VariableDef } from "../../core/variables/types";
 // BindingPanel — 图元变量绑定面板
 // 为选中的图元添加/编辑/删除变量绑定
 // ============================================================
+import { Icon } from "../icons";
 
 export function BindingPanel() {
   const {
@@ -30,7 +31,7 @@ export function BindingPanel() {
   }, [varManager]);
 
   const [editingBindingIdx, setEditingBindingIdx] = useState<number | null>(
-    null,
+    null
   );
 
   if (!shape) {
@@ -141,7 +142,7 @@ export function BindingPanel() {
                   removeBinding(idx);
                 }}
               >
-                ✕
+                <Icon name="close" size={12} />
               </button>
             </div>
 
@@ -339,7 +340,7 @@ export function BindingPanel() {
                       className="btn btn-sm"
                       onClick={() => {
                         const current = varManager?.getValue(
-                          binding.variableId,
+                          binding.variableId
                         )?.value;
                         const newVal = current ? 0 : 1;
                         varManager?.setValue(binding.variableId, newVal);
@@ -356,7 +357,7 @@ export function BindingPanel() {
                         if (e.key === "Enter") {
                           varManager?.setValue(
                             binding.variableId,
-                            Number((e.target as HTMLInputElement).value),
+                            Number((e.target as HTMLInputElement).value)
                           );
                         }
                       }}

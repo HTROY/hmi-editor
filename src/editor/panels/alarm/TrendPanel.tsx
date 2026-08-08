@@ -7,6 +7,7 @@ import type { HistoryPoint, TrendConfig } from "../../../core/historian/types";
 // TrendPanel — 趋势曲线面板
 // 显示历史数据曲线（实时更新）
 // ============================================================
+import { Icon } from "../../icons";
 
 export function TrendPanel() {
   const { historian, varManager, simRunning } = useEditorStore();
@@ -85,7 +86,7 @@ export function TrendPanel() {
                   {vid}
                 </span>
                 <button className="btn-icon" onClick={() => handleRemove(vid)}>
-                  ✕
+                  <Icon name="close" size={12} />
                 </button>
               </div>
               <TrendChart points={points} config={cfg} />

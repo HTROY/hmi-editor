@@ -4,6 +4,7 @@ import { useEditorStore } from "../../store/editorStore";
 // ============================================================
 // ProjectToolbar — 工程操作（新建/保存/打开/导出/工程属性）
 // ============================================================
+import { Icon } from "../icons";
 
 export function ProjectToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -41,12 +42,12 @@ export function ProjectToolbar() {
       />
 
       <button className="tool-btn" title="新建工程" onClick={newProject}>
-        <span className="tool-icon">📄</span>
+        <Icon name="file-new" className="tool-icon" />
         <span className="tool-label">新建</span>
       </button>
 
       <button className="tool-btn" title="打开工程" onClick={handleOpenClick}>
-        <span className="tool-icon">📂</span>
+        <Icon name="folder" className="tool-icon" />
         <span className="tool-label">打开</span>
       </button>
 
@@ -55,7 +56,7 @@ export function ProjectToolbar() {
         title={dirty ? "保存 (有未保存修改)" : "保存"}
         onClick={saveProject}
       >
-        <span className="tool-icon">💾</span>
+        <Icon name="save" className="tool-icon" />
         <span className="tool-label">保存</span>
         {dirty && <span className="tool-dot" />}
       </button>
@@ -65,7 +66,7 @@ export function ProjectToolbar() {
         title="导出画面为 JSON"
         onClick={exportScene}
       >
-        <span className="tool-icon">📥</span>
+        <Icon name="export" className="tool-icon" />
         <span className="tool-label">导出</span>
       </button>
 
@@ -87,7 +88,7 @@ export function ProjectToolbar() {
           input.click();
         }}
       >
-        <span className="tool-icon">📤</span>
+        <Icon name="import" className="tool-icon" />
         <span className="tool-label">导入</span>
       </button>
     </>

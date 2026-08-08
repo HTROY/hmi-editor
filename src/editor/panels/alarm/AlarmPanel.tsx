@@ -5,13 +5,9 @@ import type {
   AlarmSeverity,
   AlarmStatus,
 } from "../../../core/alarm/types";
-import {
-  ActiveAlarmRow,
-  HistoryAlarmRow,
-  Pager,
-  SoeRowItem,
-} from "./alarm-ui";
+import { ActiveAlarmRow, HistoryAlarmRow, Pager, SoeRowItem } from "./alarm-ui";
 import { AlarmCenter } from "./AlarmCenter";
+import { Icon } from "../../icons";
 
 type TabKey = "active" | "history" | "soe";
 
@@ -24,7 +20,9 @@ export function AlarmPanel() {
 
   const [histPage, setHistPage] = useState(1);
   const [histSeverity, setHistSeverity] = useState<AlarmSeverity | "">("");
-  const [histStatus, setHistStatus] = useState<AlarmStatus | "unacknowledged" | "">("");
+  const [histStatus, setHistStatus] = useState<
+    AlarmStatus | "unacknowledged" | ""
+  >("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [streamEvents, setStreamEvents] = useState<
     Map<string, AlarmStreamEvent[]>
@@ -41,9 +39,7 @@ export function AlarmPanel() {
     if (!alarmManager) return;
     const unsub = alarmManager.onChange(() => forceUpdate((n) => n + 1));
     alarmManager.queryHistory({ page: 1, pageSize: 100 }).catch(() => {});
-    alarmManager
-      .querySOE({ page: 1, pageSize: soePageSize })
-      .catch(() => {});
+    alarmManager.querySOE({ page: 1, pageSize: soePageSize }).catch(() => {});
     return unsub;
   }, [alarmManager]);
 
@@ -118,7 +114,7 @@ export function AlarmPanel() {
             title="全屏报警中心"
             onClick={() => setShowCenter(true)}
           >
-            ⛶
+            <Icon name="expand" size={13} />
           </button>
         </div>
 
@@ -189,13 +185,13 @@ export function AlarmPanel() {
                   setHistStatus(e.target.value as AlarmStatus | "");
                   setHistPage(1);
                 }}
-                >
-                  <option value="">全部状态</option>
-                  <option value="unacknowledged">未确认</option>
-                  <option value="acknowledged">已确认</option>
-                  <option value="active">未恢复</option>
-                  <option value="recovered">已恢复</option>
-                </select>
+              >
+                <option value="">全部状态</option>
+                <option value="unacknowledged">未确认</option>
+                <option value="acknowledged">已确认</option>
+                <option value="active">未恢复</option>
+                <option value="recovered">已恢复</option>
+              </select>
             </div>
             {historyAlarms.length === 0 && (
               <div className="panel-hint">暂无报警历史</div>
@@ -222,15 +218,16 @@ export function AlarmPanel() {
         {activeTab === "soe" && (
           <div className="alarm-content">
             <div className="alarm-filter-row">
-              <select value={soeVar} onChange={(e) => setSoeVar(e.target.value)}>
+              <select
+                value={soeVar}
+                onChange={(e) => setSoeVar(e.target.value)}
+              >
                 <option value="">全部变量</option>
-                {varManager
-                  ?.getAllDefs()
-                  .map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.id}
-                    </option>
-                  ))}
+                {varManager?.getAllDefs().map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.id}
+                  </option>
+                ))}
               </select>
               <select
                 value={soeQuality}
