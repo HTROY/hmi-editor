@@ -22,6 +22,10 @@ export function ProjectToolbar() {
     importSvgFile,
     importRasterFile,
     pageTitle,
+    remoteAuth,
+    remoteBusy,
+    setRemoteDialog,
+    syncToBackend,
   } = useEditorStore();
 
   const handleOpenClick = () => {
@@ -47,6 +51,14 @@ export function ProjectToolbar() {
     if (!file) return;
     importRasterFile(file);
     e.target.value = "";
+  };
+
+  const handleRemoteOpen = () => {
+    if (!remoteAuth.isLoggedIn) {
+      setRemoteDialog("auth");
+    } else {
+      setRemoteDialog("projects");
+    }
   };
 
   const dirty = projectManager?.dirty ?? false;
@@ -93,6 +105,26 @@ export function ProjectToolbar() {
         <Icon name="save" className="tool-icon" />
         <span className="tool-label">保存</span>
         {dirty && <span className="tool-dot" />}
+      </button>
+
+      <button
+        className="tool-btn"
+        title="同步到后端（需登录）"
+        onClick={() => void syncToBackend()}
+        disabled={remoteBusy}
+      >
+        <Icon name="up" className="tool-icon" />
+        <span className="tool-label">同步</span>
+      </button>
+
+      <button
+        className="tool-btn"
+        title="从后端打开工程（需登录）"
+        onClick={handleRemoteOpen}
+        disabled={remoteBusy}
+      >
+        <Icon name="folder" className="tool-icon" />
+        <span className="tool-label">远端</span>
       </button>
 
       <button
