@@ -110,6 +110,16 @@ Backend (from repo root unless noted):
 - Short, imperative, capitalized summaries ("Fix binding refresh and panel state sync"); scoped `fix:`/`feat:` prefixes acceptable; bullet-list body explains what and why.
 - Keep PRs focused, describe intent and testing, add screenshots for UI changes. No CI or templates exist yet.
 
+## GitHub 操作（Windows 中文编码）
+
+在 Windows PowerShell 下用 `gh` 创建或编辑带中文的 GitHub issue 时，正文必须显式以 UTF-8 传输，发布后回读校验：
+
+1. 中文正文先写入 UTF-8 文件，再用 `gh issue create --body-file <文件>` / `gh issue edit <n> --body-file <文件>` 提交。
+2. 走 REST API 时，POST/PATCH 都加 `-ContentType "application/json"`，body 传 `[System.Text.Encoding]::UTF8.GetBytes($json)` 字节数组；这两步能同时避免 `400 Problems parsing JSON` 和中文变 `?`。
+3. `gh` 装在 `C:\Program Files\GitHub CLI\gh.exe`；Codex shell 的 PATH 可能未刷新，直接用完整路径调用。
+4. 发布后回读正文（`gh issue view <n>` 或 REST 取 body），确认标题与正文里的中文完好再交付。
+5. GitHub 原生依赖边回读时，`issue_dependencies_summary.blocked_by` 是整数计数而不是数组，直接与预期依赖数比较。
+
 ## Security & Configuration Tips
 
 - `config.yaml` controls ports, plugin instances, and point mappings; keep secrets out.
