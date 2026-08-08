@@ -73,6 +73,23 @@ export abstract class ShapeBase {
     return { x: this.x + this.width / 2, y: this.y + this.height / 2 };
   }
 
+  /** 旋转感知的包围盒命中测试（子类可复用） */
+  protected hitTestLocalBox(point: Point): boolean {
+    const dx = point.x - this.center.x;
+    const dy = point.y - this.center.y;
+    const rad = -this.rotation * (Math.PI / 180);
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const localX = dx * cos - dy * sin + this.width / 2;
+    const localY = dx * sin + dy * cos + this.height / 2;
+    return (
+      localX >= 0 &&
+      localX <= this.width &&
+      localY >= 0 &&
+      localY <= this.height
+    );
+  }
+
   /** 判断点是否在形状内（子类重写实现精确碰撞） */
   abstract hitTest(point: Point): boolean;
 

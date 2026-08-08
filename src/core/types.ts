@@ -9,6 +9,7 @@ export type ShapeType =
   | "polygon"
   | "path"
   | "group"
+  | "image"
   | "metro-breaker"
   | "metro-busbar"
   | "metro-fan"
@@ -83,6 +84,9 @@ export interface ShapeProps {
   fontFamily?: string;
   text?: string;
   points?: Point[];
+  d?: string;
+  children?: ShapeProps[];
+  src?: string;
 
   // 轨道交通图元扩展
   breakerStatus?: string;

@@ -167,6 +167,35 @@ export const useEditorStore = create<EditorState>((set, get) => {
         strokeWidth: 2,
         text: type === "text" ? "双击编辑" : undefined,
         fontSize: type === "text" ? 24 : undefined,
+        d: type === "path" ? "M15 10 L105 10 L105 70 L15 70 Z" : undefined,
+        children:
+          type === "group"
+            ? [
+                {
+                  id: generateId(),
+                  type: "rect",
+                  x: 0,
+                  y: 0,
+                  width: 70,
+                  height: 60,
+                  fill: "#4A90D9",
+                  stroke: "#333333",
+                  strokeWidth: 2,
+                },
+                {
+                  id: generateId(),
+                  type: "circle",
+                  x: 80,
+                  y: 5,
+                  width: 55,
+                  height: 55,
+                  fill: "#E67E22",
+                  stroke: "#333333",
+                  strokeWidth: 2,
+                },
+              ]
+            : undefined,
+        src: type === "image" ? "" : undefined,
         breakerStatus: "open",
         signalColor: type === "metro-signal" ? "gray" : undefined,
         running: false,

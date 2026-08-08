@@ -1,6 +1,12 @@
 ﻿import React from "react";
 import { useEditorStore } from "../../store/editorStore";
-import { RectShape, TextShape } from "../../core/shapes";
+import {
+  RectShape,
+  TextShape,
+  PathShape,
+  GroupShape,
+  ImageShape,
+} from "../../core/shapes";
 import {
   MetroBreaker,
   MetroFan,
@@ -33,6 +39,9 @@ export function PropertyPanel() {
 
   const isRect = shape instanceof RectShape;
   const isText = shape instanceof TextShape;
+  const isPath = shape instanceof PathShape;
+  const isGroup = shape instanceof GroupShape;
+  const isImage = shape instanceof ImageShape;
   const isBreaker = shape instanceof MetroBreaker;
   const isFan = shape instanceof MetroFan;
   const isSignal = shape instanceof MetroSignal;
@@ -217,6 +226,42 @@ export function PropertyPanel() {
             />
           </div>
         </>
+      )}
+
+      {/* ---- 路径特有 ---- */}
+      {isPath && (
+        <div className="prop-group">
+          <label>路径数据 (d)</label>
+          <textarea
+            rows={3}
+            style={{ width: "100%", fontFamily: "monospace", fontSize: 11 }}
+            value={(shape as PathShape).d}
+            onChange={(e) => setProp("d", e.target.value)}
+          />
+        </div>
+      )}
+
+      {/* ---- 组特有 ---- */}
+      {isGroup && (
+        <div className="prop-group">
+          <label>子图元</label>
+          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+            {(shape as GroupShape).children.length} 个
+          </span>
+        </div>
+      )}
+
+      {/* ---- 栅格图特有 ---- */}
+      {isImage && (
+        <div className="prop-group">
+          <label>图片数据</label>
+          <input
+            value={(shape as ImageShape).src}
+            onChange={(e) => setProp("src", e.target.value)}
+            placeholder="data:image/png;base64,... 或图片 URL"
+            style={{ fontFamily: "monospace", fontSize: 10 }}
+          />
+        </div>
       )}
 
       {/* ============================================================ */}

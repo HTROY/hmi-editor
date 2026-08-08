@@ -24,19 +24,7 @@ export class TextShape extends ShapeBase {
   }
 
   hitTest(point: Point): boolean {
-    const dx = point.x - this.center.x;
-    const dy = point.y - this.center.y;
-    const rad = -this.rotation * (Math.PI / 180);
-    const cos = Math.cos(rad);
-    const sin = Math.sin(rad);
-    const localX = dx * cos - dy * sin + this.width / 2;
-    const localY = dx * sin + dy * cos + this.height / 2;
-    return (
-      localX >= 0 &&
-      localX <= this.width &&
-      localY >= 0 &&
-      localY <= this.height
-    );
+    return this.hitTestLocalBox(point);
   }
 
   render(ctx: CanvasRenderingContext2D): void {

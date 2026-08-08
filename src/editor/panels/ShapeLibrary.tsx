@@ -23,6 +23,9 @@ const shapeItems: ShapeLibItem[] = [
   { type: "circle", label: "圆形", icon: "circle", category: "基本" },
   { type: "line", label: "直线", icon: "line", category: "基本" },
   { type: "text", label: "文本", icon: "text", category: "基本" },
+  { type: "path", label: "路径", glyph: "⌒", category: "基本" },
+  { type: "group", label: "组", glyph: "⊞", category: "基本" },
+  { type: "image", label: "栅格图", glyph: "▧", category: "基本" },
 
   // ---- 轨道交通专用图元 ----
   { type: "metro-breaker", label: "断路器", glyph: "⨯", category: "供电" },

@@ -32,7 +32,8 @@ export class Serializer {
 
   static importPage(data: PageData): SceneGraph {
     const scene = new SceneGraph();
-    for (const shapeProps of data.shapes) {
+    for (const shapeProps of data.shapes ?? []) {
+      if (!shapeProps) continue;
       const shape = createShape(shapeProps.type, shapeProps);
       scene.add(shape);
     }

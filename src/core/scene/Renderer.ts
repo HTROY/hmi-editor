@@ -1,5 +1,6 @@
 ﻿import { SceneGraph } from "./SceneGraph";
 import { ShapeBase } from "../shapes/ShapeBase";
+import { ImageShape } from "../shapes/ImageShape";
 
 // ============================================================
 // Renderer — Canvas 渲染器
@@ -13,6 +14,7 @@ export class Renderer {
 
   // 选中的图元 ID 集合
   selectedIds: Set<string> = new Set();
+  private attachedImages = new WeakSet<ImageShape>();
 
   constructor(canvas: HTMLCanvasElement, scene: SceneGraph) {
     this.canvas = canvas;
@@ -35,6 +37,7 @@ export class Renderer {
     const shapes = this.scene.getAll();
     for (const shape of shapes) {
       shape.render(ctx);
+      if (shape instanceof ImageShape) this.attachImageReload(shape);
     }
 
     // 绘制选中状态（包围框 + 手柄）
@@ -43,6 +46,13 @@ export class Renderer {
         this.drawSelection(shape);
       }
     }
+  }
+
+  /** 图片加载完成后自动重绘 */
+  private attachImageReload(shape: ImageShape): void {
+    if (this.attachedImages.has(shape)) return;
+    this.attachedImages.add(shape);
+    shape.addLoadListener(() => this.render());
   }
 
   /** 绘制网格 */
