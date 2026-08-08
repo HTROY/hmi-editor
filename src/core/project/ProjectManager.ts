@@ -120,6 +120,16 @@ export class ProjectManager {
     }
   }
 
+  /** 设置页面背景色 */
+  setPageBackground(pageId: string, background: string): void {
+    const meta = this.pageMetas.get(pageId);
+    if (meta) {
+      meta.background = background;
+      meta.updatedAt = new Date().toISOString();
+      this.dirty = true;
+    }
+  }
+
   /** 移动页面顺序 */
   movePage(pageId: string, newOrder: number): void {
     const meta = this.pageMetas.get(pageId);

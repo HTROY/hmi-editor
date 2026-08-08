@@ -6,6 +6,8 @@ import {
   findResolutionPreset,
   MIN_PAGE_SIZE,
   MAX_PAGE_SIZE,
+  DEFAULT_PAGE_BACKGROUND,
+  sanitizePageBackground,
 } from "../../core";
 
 // ============================================================
@@ -25,7 +27,9 @@ export function PagePanel() {
     movePage,
     pageWidth,
     pageHeight,
+    pageBackground,
     setPageResolution,
+    setPageBackground,
     scaleShapesToResolution,
     outOfBounds,
   } = useEditorStore();
@@ -35,11 +39,22 @@ export function PagePanel() {
   const [editText, setEditText] = useState("");
   const [resW, setResW] = useState(pageWidth);
   const [resH, setResH] = useState(pageHeight);
+  const [bgDraft, setBgDraft] = useState(pageBackground);
 
   useEffect(() => {
     setResW(pageWidth);
     setResH(pageHeight);
   }, [pageWidth, pageHeight]);
+
+  useEffect(() => {
+    setBgDraft(pageBackground);
+  }, [pageBackground]);
+
+  const applyBackground = (value: string) => {
+    const color = sanitizePageBackground(value);
+    setBgDraft(color);
+    setPageBackground(activePageId, color);
+  };
 
   const activePreset = findResolutionPreset(resW, resH)?.label ?? "__custom__";
 
@@ -151,6 +166,41 @@ export function PagePanel() {
             )}
           </div>
         )}
+      </div>
+
+      <div className="panel-section">
+        <div className="panel-section-title">当前画面背景</div>
+        <div className="res-input-row">
+          <input
+            type="color"
+            value={
+              /^#[0-9a-fA-F]{6}$/.test(bgDraft)
+                ? bgDraft
+                : DEFAULT_PAGE_BACKGROUND
+            }
+            onChange={(e) => applyBackground(e.target.value)}
+            style={{
+              width: 40,
+              minWidth: 40,
+              flex: "0 0 auto",
+              padding: 2,
+              background: "var(--bg0)",
+            }}
+            title="选择背景色"
+          />
+          <input
+            type="text"
+            value={bgDraft}
+            onChange={(e) => setBgDraft(e.target.value)}
+            onBlur={() => applyBackground(bgDraft)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") applyBackground(bgDraft);
+              if (e.key === "Escape") setBgDraft(pageBackground);
+            }}
+            spellCheck={false}
+            placeholder={DEFAULT_PAGE_BACKGROUND}
+          />
+        </div>
       </div>
 
       <div className="page-list">

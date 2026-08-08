@@ -54,6 +54,7 @@ describe("autosave snapshot", () => {
   it("round-trips project data, active page and per-page views", () => {
     const pm = makeProject();
     const pages = pm.getPages();
+    pm.setPageBackground(pages[1].id, "#0c1520");
     const views = {
       [pages[0].id]: { zoom: 1.5, panX: -120, panY: 80 },
       [pages[1].id]: { ...DEFAULT_PAGE_VIEW },
@@ -68,6 +69,7 @@ describe("autosave snapshot", () => {
       "主画面",
       "配电画面",
     ]);
+    expect(restored.getPageMeta(pages[1].id)?.background).toBe("#0c1520");
     expect(restored.activePageId).toBe(pages[1].id);
     expect(restored.activePage?.meta.width).toBe(1920);
     expect(restored.activePage?.scene.getAll().map((s) => s.id)).toEqual([

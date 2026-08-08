@@ -15,6 +15,7 @@ import {
   isOverRasterWarningSize,
   isRasterFile,
   rasterDataUrlToImageShape,
+  sanitizePageBackground,
 } from "../core";
 import type {
   ShapeCommand,
@@ -72,6 +73,7 @@ interface EditorState {
   pageTitle: string;
   pageWidth: number;
   pageHeight: number;
+  pageBackground: string;
   varManager: VariableManager;
   bindingEngine: BindingEngine;
   animEngine: AnimationEngine;
@@ -125,6 +127,7 @@ interface EditorState {
   fitPage: () => void;
   setPageResolution: (pageId: string, width: number, height: number) => void;
   scaleShapesToResolution: (width: number, height: number) => void;
+  setPageBackground: (pageId: string, background: string) => void;
   exportProject: () => void;
   importProject: (j: string) => void;
   importSvgText: (svgText: string) => SvgImportResult;
@@ -316,6 +319,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     pageTitle: dp.title,
     pageWidth: dp.width,
     pageHeight: dp.height,
+    pageBackground: dp.background,
     activePageId: dp.id,
     rightPanel: "properties",
     simRunning: false,
@@ -647,6 +651,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
           pageTitle: f.meta.title,
           pageWidth: f.meta.width,
           pageHeight: f.meta.height,
+          pageBackground: f.meta.background,
           selectedId: null,
           pageViews: defaultPageViews(s.projectManager),
         });
@@ -677,6 +682,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
               pageTitle: f.meta.title,
               pageWidth: f.meta.width,
               pageHeight: f.meta.height,
+              pageBackground: f.meta.background,
               selectedId: null,
               pageViews: defaultPageViews(s.projectManager),
             });
@@ -713,6 +719,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
               pageTitle: f.meta.title,
               pageWidth: f.meta.width,
               pageHeight: f.meta.height,
+              pageBackground: f.meta.background,
               selectedId: null,
               pageViews: defaultPageViews(s.projectManager),
             });
@@ -744,6 +751,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
             pageTitle: m.title,
             pageWidth: m.width,
             pageHeight: m.height,
+            pageBackground: m.background,
             selectedId: null,
           });
         let h = historyByPage.get(pageId);
@@ -777,6 +785,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
         pageTitle: meta.title,
         pageWidth: meta.width,
         pageHeight: meta.height,
+        pageBackground: meta.background,
         selectedId: null,
         history: h,
         historyRevision: 0,
@@ -863,6 +872,18 @@ export const useEditorStore = create<EditorState>((set, get) => {
       s.renderer?.setPage(newW, newH, meta.background ?? "#FFFFFF");
       s.renderer?.render();
       s.bumpShapeRevision();
+      flushAutosave();
+    },
+    setPageBackground: (pageId, background) => {
+      const s = get();
+      const color = sanitizePageBackground(background);
+      s.projectManager.setPageBackground(pageId, color);
+      const meta = s.projectManager.getPageMeta(pageId);
+      if (pageId === s.activePageId && meta) {
+        set({ pageBackground: color });
+        s.renderer?.setPage(meta.width, meta.height, color);
+        s.renderer?.render();
+      }
       flushAutosave();
     },
     exportProject: () => {
@@ -1117,13 +1138,13 @@ export const useEditorStore = create<EditorState>((set, get) => {
             pageTitle: f.meta.title,
             pageWidth: f.meta.width,
             pageHeight: f.meta.height,
+            pageBackground: f.meta.background,
             selectedId: null,
             pageViews: views,
           });
           s.bindingEngine.rebuildIndex();
           syncOutOfBounds(s.scene, f.meta.width, f.meta.height);
           activateViewport(false);
-          s.renderer?.render();
           autosaveReady = true;
           return true;
         } catch {
