@@ -8,6 +8,7 @@ hmi-io-alarm.workspace = true
 hmi-io-db.workspace = true
 hmi-io-config.workspace = true
 hmi-io-monitor.workspace = true
+hmi-io-project.workspace = true
 hmi-io-plugin.workspace = true
 hmi-io-point.workspace = true
 axum.workspace = true
@@ -19,4 +20,7 @@ calamine.workspace = true
 rust_xlsxwriter.workspace = true
 anyhow.workspace = true
 log.workspace = true
+
+[dev-dependencies]
+zip = { version = "2", default-features = false, features = ["deflate"] }
 

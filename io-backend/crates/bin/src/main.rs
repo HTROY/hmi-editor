@@ -238,13 +238,16 @@ fn main() -> anyhow::Result<()> {
                 }
             }
         });
-let ws_cfg = hmi_io_config::ServerConfig {
+        let ws_cfg = hmi_io_config::ServerConfig {
             host: repo_arc
                 .get_config("ws_host")
                 .unwrap_or_else(|| "0.0.0.0".into()),
             port: ws_port,
             web_port,
             path: "/iscs/data".into(),
+            project_dir: repo_arc
+                .get_config("project_dir")
+                .unwrap_or_else(|| "./projects".into()),
             batch_interval_ms,
         };
 
@@ -363,6 +366,7 @@ fn migrate_yaml_to_db(repo: &Repo, config: &AppConfig) {
     let _ = repo.set_config("ws_host", &config.server.host);
     let _ = repo.set_config("ws_port", &config.server.port.to_string());
     let _ = repo.set_config("web_port", &config.server.web_port.to_string());
+    let _ = repo.set_config("project_dir", &config.server.project_dir);
     let _ = repo.set_config(
         "redundancy_config",
         &serde_json::to_string(&config.redundancy).unwrap_or_else(|_| "{}".into()),

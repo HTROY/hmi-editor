@@ -7,6 +7,7 @@ members = [
     "crates/config",
     "crates/db",
     "crates/monitor",
+    "crates/project",
     "crates/plugin",
     "crates/point",
     "crates/server",
@@ -26,6 +27,7 @@ default-members = [
     "crates/config",
     "crates/db",
     "crates/monitor",
+    "crates/project",
     "crates/plugin",
     "crates/point",
     "crates/server",
@@ -60,6 +62,7 @@ hmi-io-config = { path = "crates/config" }
 hmi-io-db = { path = "crates/db" }
 hmi-io-monitor = { path = "crates/monitor" }
 hmi-io-plugin = { path = "crates/plugin" }
+hmi-io-project = { path = "crates/project" }
 hmi-io-point = { path = "crates/point" }
 hmi-io-server = { path = "crates/server" }
 hmi-io-web = { path = "crates/web" }

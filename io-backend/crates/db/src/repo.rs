@@ -1,6 +1,6 @@
 //! Repository layer - thread-safe CRUD for plugins and points
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
@@ -146,6 +146,35 @@ pub struct SoeRow {
     pub source: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectRow {
+    pub id: String,
+    pub name: String,
+    pub schema_version: u32,
+    pub version: u64,
+    pub size_bytes: u64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditLogRow {
+    pub id: i64,
+    pub action: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub version: u64,
+    pub actor: String,
+    pub detail: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectPushResult {
+    pub created: bool,
+    pub version: u64,
+}
+
 pub struct Repo {
     conn: Mutex<Connection>,
 }
@@ -208,6 +237,31 @@ fn map_soe(row: &rusqlite::Row) -> rusqlite::Result<SoeRow> {
         device_time: row.get(5)?,
         receive_time: row.get(6)?,
         source: row.get(7)?,
+    })
+}
+
+fn map_project(row: &rusqlite::Row) -> rusqlite::Result<ProjectRow> {
+    Ok(ProjectRow {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        schema_version: row.get(2)?,
+        version: row.get(3)?,
+        size_bytes: row.get(4)?,
+        created_at: row.get(5)?,
+        updated_at: row.get(6)?,
+    })
+}
+
+fn map_audit_log(row: &rusqlite::Row) -> rusqlite::Result<AuditLogRow> {
+    Ok(AuditLogRow {
+        id: row.get(0)?,
+        action: row.get(1)?,
+        project_id: row.get(2)?,
+        project_name: row.get(3)?,
+        version: row.get(4)?,
+        actor: row.get(5)?,
+        detail: row.get(6)?,
+        created_at: row.get(7)?,
     })
 }
 
@@ -427,6 +481,154 @@ impl Repo {
                 })
             })
             .collect()
+    }
+
+    // ---- Project storage metadata & audit ----
+
+    pub fn list_projects(&self) -> anyhow::Result<Vec<ProjectRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut sql = conn.prepare(
+            "SELECT id,name,schema_version,version,size_bytes,created_at,updated_at
+             FROM projects ORDER BY updated_at DESC, id",
+        )?;
+        let rows: Vec<ProjectRow> = sql
+            .query_map([], |r| map_project(r))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    pub fn get_project(&self, id: &str) -> anyhow::Result<Option<ProjectRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut sql = conn.prepare(
+            "SELECT id,name,schema_version,version,size_bytes,created_at,updated_at
+             FROM projects WHERE id=?1",
+        )?;
+        let mut rows = sql.query_map(params![id], |r| map_project(r))?;
+        match rows.next() {
+            Some(Ok(r)) => Ok(Some(r)),
+            Some(Err(e)) => Err(e.into()),
+            None => Ok(None),
+        }
+    }
+
+    /// Insert or bump a project inside one transaction together with its
+    /// audit entry. `expected_version` is the optimistic-lock check:
+    /// - missing project: only `None`/`0` creates it (version starts at 1);
+    /// - existing project: must equal the stored version, otherwise `Ok(None)`.
+    pub fn push_project(
+        &self,
+        id: &str,
+        expected_version: Option<u64>,
+        name: &str,
+        schema_version: u32,
+        size_bytes: u64,
+        actor: &str,
+        detail: &str,
+    ) -> anyhow::Result<Option<ProjectPushResult>> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let existing: Option<ProjectRow> = tx
+            .query_row(
+                "SELECT id,name,schema_version,version,size_bytes,created_at,updated_at
+                 FROM projects WHERE id=?1",
+                params![id],
+                map_project,
+            )
+            .optional()?;
+        let result = match existing {
+            None => {
+                if expected_version.unwrap_or(0) != 0 {
+                    return Ok(None);
+                }
+                tx.execute(
+                    "INSERT INTO projects(id,name,schema_version,version,size_bytes)
+                     VALUES(?1,?2,?3,1,?4)",
+                    params![id, name, schema_version, size_bytes],
+                )?;
+                tx.execute(
+                    "INSERT INTO project_audit_log(action,project_id,project_name,version,actor,detail)
+                     VALUES('project_push',?1,?2,1,?3,?4)",
+                    params![id, name, actor, detail],
+                )?;
+                ProjectPushResult {
+                    created: true,
+                    version: 1,
+                }
+            }
+            Some(current) => {
+                let expected = match expected_version {
+                    Some(v) => v,
+                    None => return Ok(None),
+                };
+                if expected != current.version {
+                    return Ok(None);
+                }
+                let new_version = current.version + 1;
+                let updated = tx.execute(
+                    "UPDATE projects SET name=?2,schema_version=?3,version=?4,size_bytes=?5,updated_at=datetime('now')
+                     WHERE id=?1 AND version=?6",
+                    params![id, name, schema_version, new_version, size_bytes, expected],
+                )?;
+                if updated != 1 {
+                    return Ok(None);
+                }
+                tx.execute(
+                    "INSERT INTO project_audit_log(action,project_id,project_name,version,actor,detail)
+                     VALUES('project_push',?1,?2,?3,?4,?5)",
+                    params![id, name, new_version, actor, detail],
+                )?;
+                ProjectPushResult {
+                    created: false,
+                    version: new_version,
+                }
+            }
+        };
+        tx.commit()?;
+        Ok(Some(result))
+    }
+
+    /// Delete a project row and write its audit entry atomically. Returns the
+    /// deleted row (if any) so the caller can remove the disk package.
+    pub fn delete_project(
+        &self,
+        id: &str,
+        actor: &str,
+        detail: &str,
+    ) -> anyhow::Result<Option<ProjectRow>> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let existing: Option<ProjectRow> = tx
+            .query_row(
+                "SELECT id,name,schema_version,version,size_bytes,created_at,updated_at
+                 FROM projects WHERE id=?1",
+                params![id],
+                map_project,
+            )
+            .optional()?;
+        if let Some(row) = &existing {
+            tx.execute("DELETE FROM projects WHERE id=?1", params![id])?;
+            tx.execute(
+                "INSERT INTO project_audit_log(action,project_id,project_name,version,actor,detail)
+                 VALUES('project_delete',?1,?2,?3,?4,?5)",
+                params![id, row.name, row.version, actor, detail],
+            )?;
+        }
+        tx.commit()?;
+        Ok(existing)
+    }
+
+    pub fn list_audit_logs(&self, project_id: Option<&str>) -> anyhow::Result<Vec<AuditLogRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut sql = conn.prepare(
+            "SELECT id,action,project_id,project_name,version,actor,detail,created_at
+             FROM project_audit_log
+             WHERE (?1 IS NULL OR project_id=?1)
+             ORDER BY id",
+        )?;
+        let rows: Vec<AuditLogRow> = sql
+            .query_map(params![project_id], |r| map_audit_log(r))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
     }
 
     /// 用 Active 节点推送的配置快照整体替换本机插件/点位与关键 server_config。
@@ -994,5 +1196,71 @@ mod tests {
             .query_alarm_occurrences(None, None, None, None, None, Some("recovered"), 1, 10)
             .unwrap();
         assert_eq!(total_recovered, 2);
+    }
+
+    #[test]
+    fn project_push_creates_then_bumps_with_optimistic_lock() {
+        let repo = Repo::new(":memory:").unwrap();
+        let res = repo
+            .push_project("proj-1", None, "Line 1", 1, 123, "", "create")
+            .unwrap()
+            .unwrap();
+        assert!(res.created);
+        assert_eq!(res.version, 1);
+
+        let row = repo.get_project("proj-1").unwrap().unwrap();
+        assert_eq!(row.name, "Line 1");
+        assert_eq!(row.schema_version, 1);
+        assert_eq!(row.version, 1);
+        assert_eq!(row.size_bytes, 123);
+
+        let res = repo
+            .push_project("proj-1", Some(1), "Line 1 v2", 1, 200, "alice", "update")
+            .unwrap()
+            .unwrap();
+        assert!(!res.created);
+        assert_eq!(res.version, 2);
+
+        // Stale version, missing version, and create-with-nonzero-version all lose the lock.
+        assert!(repo
+            .push_project("proj-1", Some(1), "stale", 1, 1, "", "")
+            .unwrap()
+            .is_none());
+        assert!(repo
+            .push_project("proj-1", None, "no-version", 1, 1, "", "")
+            .unwrap()
+            .is_none());
+        assert!(repo
+            .push_project("missing", Some(3), "x", 1, 1, "", "")
+            .unwrap()
+            .is_none());
+
+        let audit = repo.list_audit_logs(Some("proj-1")).unwrap();
+        assert_eq!(audit.len(), 2);
+        assert!(audit.iter().all(|e| e.action == "project_push"));
+        assert_eq!(audit[0].version, 1);
+        assert_eq!(audit[1].version, 2);
+    }
+
+    #[test]
+    fn project_delete_writes_audit_and_returns_row() {
+        let repo = Repo::new(":memory:").unwrap();
+        repo.push_project("proj-2", None, "P2", 1, 10, "", "create")
+            .unwrap();
+
+        let deleted = repo
+            .delete_project("proj-2", "op", "user removed")
+            .unwrap()
+            .unwrap();
+        assert_eq!(deleted.id, "proj-2");
+        assert_eq!(deleted.version, 1);
+        assert!(repo.get_project("proj-2").unwrap().is_none());
+        assert!(repo.delete_project("proj-2", "", "").unwrap().is_none());
+
+        let audit = repo.list_audit_logs(Some("proj-2")).unwrap();
+        assert_eq!(audit.len(), 2);
+        assert_eq!(audit[0].action, "project_push");
+        assert_eq!(audit[1].action, "project_delete");
+        assert_eq!(audit[1].actor, "op");
     }
 }

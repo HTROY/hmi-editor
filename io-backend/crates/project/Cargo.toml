@@ -1,0 +1,12 @@
+[package]
+name = "hmi-io-project"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+hmi-io-db.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+zip = { version = "2", default-features = false, features = ["deflate"] }
+anyhow.workspace = true
+log.workspace = true

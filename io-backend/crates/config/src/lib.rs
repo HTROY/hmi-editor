@@ -78,6 +78,8 @@ pub struct ServerConfig {
     pub web_port: u16,
     #[serde(default = "default_path")]
     pub path: String,
+    #[serde(default = "default_project_dir")]
+    pub project_dir: String,
     /// Batch interval in milliseconds for WebSocket data push (default 100ms)
     #[serde(default = "default_batch_interval")]
     pub batch_interval_ms: u64,
@@ -94,6 +96,9 @@ fn default_web_port() -> u16 {
 }
 fn default_path() -> String {
     "/iscs/data".into()
+}
+fn default_project_dir() -> String {
+    "./projects".into()
 }
 fn default_batch_interval() -> u64 {
     100
@@ -281,6 +286,7 @@ impl AppConfig {
                 port: default_port(),
                 web_port: default_web_port(),
                 path: default_path(),
+                project_dir: default_project_dir(),
                 batch_interval_ms: default_batch_interval(),
             },
             plugins: PluginsConfig {
@@ -498,6 +504,9 @@ impl AppConfig {
                     .parse()
                     .unwrap_or(8081),
                 path: "/iscs/data".into(),
+                project_dir: repo
+                    .get_config("project_dir")
+                    .unwrap_or_else(|| "./projects".into()),
                 batch_interval_ms,
             },
             plugins: PluginsConfig {

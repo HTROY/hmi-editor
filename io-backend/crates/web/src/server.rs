@@ -4,7 +4,9 @@ use hmi_io_monitor::collector::MonitorCollector;
 use hmi_io_plugin::registry::PluginRegistry;
 use hmi_io_point::manager::PointManager;
 use hmi_io_point::redundancy::RedundancyEngine;
+use hmi_io_project::ProjectStore;
 use axum::{
+    extract::DefaultBodyLimit,
     routing::{get, post, put},
     Extension, Router,
 };
@@ -24,6 +26,11 @@ pub async fn run_web_server(
     alarm_engine: Arc<AlarmEngine>,
     port: u16,
 ) -> anyhow::Result<()> {
+    let project_dir = repo
+        .get_config("project_dir")
+        .unwrap_or_else(|| "./projects".into());
+    let project_store = ProjectStore::new(repo.clone(), project_dir)?;
+
     // Sampler task: keep the trend history continuous regardless of UI clients
     {
         let monitor = monitor.clone();
@@ -35,6 +42,16 @@ pub async fn run_web_server(
             }
         });
     }
+
+    let project_routes = Router::new()
+        .route("/api/projects", get(super::projects::list_projects))
+        .route(
+            "/api/projects/{id}",
+            get(super::projects::get_project)
+                .put(super::projects::put_project)
+                .delete(super::projects::delete_project),
+        )
+        .route_layer(DefaultBodyLimit::max(hmi_io_project::MAX_PROJECT_ZIP_SIZE));
 
     let app = Router::new()
         // Plugin CRUD
@@ -129,6 +146,7 @@ pub async fn run_web_server(
             get(super::api::get_alarm_config).put(super::api::put_alarm_config),
         )
         .route("/api/soe", get(super::api::soe_query))
+        .merge(project_routes)
         // Static files (SPA fallback to index.html)
         .fallback_service(
             ServeDir::new("web-ui/dist").fallback(ServeFile::new("web-ui/dist/index.html")),
@@ -140,6 +158,7 @@ pub async fn run_web_server(
         .layer(Extension(point_manager))
         .layer(Extension(redundancy))
         .layer(Extension(alarm_engine))
+        .layer(Extension(project_store))
         .with_state(repo);
 
     let addr = format!("0.0.0.0:{}", port);

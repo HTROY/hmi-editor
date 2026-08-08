@@ -1090,6 +1090,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "hmi-io-project"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "hmi-io-db",
+ "log",
+ "serde",
+ "serde_json",
+ "zip",
+]
+
+[[package]]
 name = "hmi-io-server"
 version = "0.3.0"
 dependencies = [
@@ -1119,12 +1131,14 @@ dependencies = [
  "hmi-io-monitor",
  "hmi-io-plugin",
  "hmi-io-point",
+ "hmi-io-project",
  "log",
  "rust_xlsxwriter",
  "serde",
  "serde_json",
  "tokio",
  "tower-http",
+ "zip",
 ]
 
 [[package]]

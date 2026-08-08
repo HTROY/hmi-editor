@@ -91,11 +91,33 @@ pub fn init_db(conn: &Connection) -> anyhow::Result<()> {
             source       TEXT NOT NULL DEFAULT 'backend'
         );
 
+        CREATE TABLE IF NOT EXISTS projects (
+            id             TEXT PRIMARY KEY,
+            name           TEXT NOT NULL,
+            schema_version INTEGER NOT NULL DEFAULT 1,
+            version        INTEGER NOT NULL DEFAULT 1,
+            size_bytes     INTEGER NOT NULL DEFAULT 0,
+            created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS project_audit_log (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            action       TEXT NOT NULL,
+            project_id   TEXT NOT NULL,
+            project_name TEXT NOT NULL DEFAULT '',
+            version      INTEGER NOT NULL DEFAULT 0,
+            actor        TEXT NOT NULL DEFAULT '',
+            detail       TEXT NOT NULL DEFAULT '',
+            created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
         CREATE INDEX IF NOT EXISTS idx_soe_seq ON soe_events(seq);
         CREATE INDEX IF NOT EXISTS idx_soe_time ON soe_events(receive_time);
         CREATE INDEX IF NOT EXISTS idx_occ_status_time ON alarm_occurrences(status, triggered_at);
         CREATE INDEX IF NOT EXISTS idx_occ_rule ON alarm_occurrences(rule_id);
         CREATE INDEX IF NOT EXISTS idx_stream_occ ON alarm_stream_events(occurrence_id);
+        CREATE INDEX IF NOT EXISTS idx_project_audit_project ON project_audit_log(project_id);
 
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('scan_interval_ms', '500');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('batch_interval_ms', '100');
@@ -103,6 +125,7 @@ pub fn init_db(conn: &Connection) -> anyhow::Result<()> {
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('ws_port', '8080');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('web_port', '8081');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('plugin_dir', './plugins');
+        INSERT OR IGNORE INTO server_config (key, value) VALUES ('project_dir', './projects');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('alarm_retention_days', '90');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('soe_retention_days', '30');
     ",

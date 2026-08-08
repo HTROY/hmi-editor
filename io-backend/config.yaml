@@ -5,6 +5,7 @@ server:
   host: "0.0.0.0"
   port: 8080
   path: "/iscs/data"
+  project_dir: "./projects"
 
 plugins:
   directory: "./plugins"
