@@ -331,6 +331,14 @@ function applyBoxResize(
       shape.width / oldWidth,
       shape.height / oldHeight
     );
+  } else if (shape.type === "polyline" || shape.type === "polygon") {
+    const pts = (shape as unknown as { points: Point[] }).points;
+    const kx = shape.width / oldWidth;
+    const ky = shape.height / oldHeight;
+    (shape as unknown as { points: Point[] }).points = pts.map((p) => ({
+      x: p.x * kx,
+      y: p.y * ky,
+    }));
   }
 }
 

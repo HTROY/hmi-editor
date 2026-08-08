@@ -1,5 +1,6 @@
 ﻿import { ShapeBase } from "./ShapeBase";
 import type { ShapeProps, Point } from "../types";
+import { getPaint } from "./paint";
 
 // ============================================================
 // TextShape — 文本
@@ -17,10 +18,10 @@ export class TextShape extends ShapeBase {
     this.text = props?.text ?? "文本";
     this.fontSize = props?.fontSize ?? 20;
     this.fontFamily = props?.fontFamily ?? "Microsoft YaHei, sans-serif";
-    this.textAlign = "center";
-    this.textBaseline = "middle";
-    this.fill = "#000000";
-    this.stroke = "transparent";
+    this.textAlign = props?.textAlign ?? "center";
+    this.textBaseline = props?.textBaseline ?? "middle";
+    this.fill = props?.fill ?? "#000000";
+    this.stroke = props?.stroke ?? "transparent";
   }
 
   hitTest(point: Point): boolean {
@@ -37,9 +38,9 @@ export class TextShape extends ShapeBase {
     ctx.font = this.fontSize + "px " + this.fontFamily;
     ctx.textAlign = this.textAlign;
     ctx.textBaseline = this.textBaseline;
-    ctx.fillStyle = this.fill;
+    ctx.fillStyle = getPaint(ctx, this, "fill");
     ctx.fillText(this.text, 0, 0);
-    ctx.strokeStyle = this.stroke;
+    ctx.strokeStyle = getPaint(ctx, this, "stroke");
     ctx.lineWidth = this.strokeWidth;
     if (this.stroke !== "transparent") {
       ctx.strokeText(this.text, 0, 0);
@@ -63,6 +64,8 @@ export class TextShape extends ShapeBase {
       text: this.text,
       fontSize: this.fontSize,
       fontFamily: this.fontFamily,
+      textAlign: this.textAlign,
+      textBaseline: this.textBaseline,
     };
   }
 }

@@ -1,5 +1,6 @@
 ﻿import { ShapeBase } from "./ShapeBase";
 import type { ShapeProps, Point, BoundingBox } from "../types";
+import { getPaint } from "./paint";
 
 // ============================================================
 // LineShape — 直线/折线
@@ -13,7 +14,7 @@ export class LineShape extends ShapeBase {
     super("line", props);
     this.startPoint = props?.startPoint ?? { x: 0, y: 0 };
     this.endPoint = props?.endPoint ?? { x: 100, y: 100 };
-    this.fill = "transparent";
+    this.fill = props?.fill ?? "transparent";
   }
 
   get boundingBox(): BoundingBox {
@@ -69,7 +70,7 @@ export class LineShape extends ShapeBase {
     ctx.moveTo(this.startPoint.x, this.startPoint.y);
     ctx.lineTo(this.endPoint.x, this.endPoint.y);
 
-    ctx.strokeStyle = this.stroke;
+    ctx.strokeStyle = getPaint(ctx, this, "stroke");
     ctx.lineWidth = this.strokeWidth;
     if (this.dashArray.length > 0) ctx.setLineDash(this.dashArray);
     ctx.stroke();

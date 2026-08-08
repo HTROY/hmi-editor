@@ -14,3 +14,4 @@ export * from "./auth";
 export * from "./script";
 export * from "./report";
 export * from "./autosave";
+export * from "./svg";

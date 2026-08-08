@@ -21,6 +21,8 @@ import type {
   ResizeOptions,
 } from "../core";
 import { generateId } from "../core/shapes";
+import { importSvg } from "../core/svg";
+import type { SvgImportResult } from "../core/svg";
 import { VariableManager } from "../core/variables";
 import { BindingEngine, AnimationEngine } from "../core/bindings";
 import { DataBridge, WebSocketClient } from "../core/io";
@@ -96,6 +98,7 @@ interface EditorState {
   setMode: (m: ToolMode) => void;
   setRightPanel: (p: RightPanel) => void;
   selectShape: (id: string | null) => void;
+  selectShapes: (ids: string[]) => void;
   addShape: (t: ShapeType, x?: number, y?: number) => void;
   deleteSelected: () => void;
   copySelected: () => void;
@@ -121,6 +124,8 @@ interface EditorState {
   scaleShapesToResolution: (width: number, height: number) => void;
   exportProject: () => void;
   importProject: (j: string) => void;
+  importSvgText: (svgText: string) => SvgImportResult;
+  importSvgFile: (file: File) => void;
   toggleSimulation: () => void;
   setWsConfig: (c: { url: string; backupUrl?: string }) => void;
   setPageView: (pageId: string, view: PageViewState) => void;
@@ -341,6 +346,14 @@ export const useEditorStore = create<EditorState>((set, get) => {
       if (s.renderer) {
         s.renderer.selectedIds.clear();
         if (id) s.renderer.selectedIds.add(id);
+        s.renderer.render();
+      }
+    },
+    selectShapes: (ids) => {
+      const s = get();
+      set({ selectedId: ids[0] ?? null });
+      if (s.renderer) {
+        s.renderer.selectedIds = new Set(ids);
         s.renderer.render();
       }
     },
@@ -856,6 +869,55 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     importProject: (json) => {
       get().importScene(json);
+    },
+    importSvgText: (svgText) => {
+      const s = get();
+      const result = importSvg(svgText, {
+        pageWidth: s.pageWidth,
+        pageHeight: s.pageHeight,
+      });
+      if (result.shapes.length === 0) return result;
+
+      const commands: ShapeCommand[] = [];
+      for (const shape of result.shapes) {
+        s.scene.add(shape);
+        commands.push({
+          id: shape.id,
+          before: null,
+          after: shape.toJSON(),
+          index: s.scene.getAll().indexOf(shape),
+        });
+      }
+      pushBatchCommand(commands);
+      s.selectShapes(result.shapes.map((sh) => sh.id));
+      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
+      s.renderer?.render();
+      s.projectManager.dirty = true;
+      flushAutosave();
+      return result;
+    },
+    importSvgFile: (file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const result = useEditorStore
+            .getState()
+            .importSvgText(reader.result as string);
+          const lines: string[] = [];
+          if (result.shapes.length === 0) lines.push("未找到可导入的图元");
+          lines.push(...result.warnings);
+          if (result.outOfBounds.length > 0) {
+            lines.push(result.outOfBounds.length + " 个图元超出页面边界");
+          }
+          if (lines.length > 0) alert(lines.join("\n"));
+        } catch (e) {
+          alert(
+            "SVG 导入失败：" + (e instanceof Error ? e.message : String(e))
+          );
+        }
+      };
+      reader.onerror = () => alert("SVG 文件读取失败");
+      reader.readAsText(file);
     },
     toggleSimulation: () => {
       const s = get();

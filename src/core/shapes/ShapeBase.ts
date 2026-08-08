@@ -7,6 +7,7 @@
   Binding,
   AnimationDef,
   EventHandler,
+  ShapeGradient,
 } from "../types";
 
 // ============================================================
@@ -36,6 +37,9 @@ export abstract class ShapeBase {
   dashArray: number[];
   name: string;
 
+  fillGradient: ShapeGradient | null;
+  strokeGradient: ShapeGradient | null;
+
   bindings: Binding[];
   animations: AnimationDef[];
   events: EventHandler[];
@@ -57,6 +61,9 @@ export abstract class ShapeBase {
     this.strokeWidth = props?.strokeWidth ?? 1;
     this.dashArray = props?.dashArray ?? [];
     this.name = props?.name ?? type;
+
+    this.fillGradient = props?.fillGradient ?? null;
+    this.strokeGradient = props?.strokeGradient ?? null;
 
     this.bindings = props?.bindings ?? [];
     this.animations = props?.animations ?? [];
@@ -118,6 +125,8 @@ export abstract class ShapeBase {
       strokeWidth: this.strokeWidth,
       dashArray: [...this.dashArray],
       name: this.name,
+      ...(this.fillGradient ? { fillGradient: this.fillGradient } : {}),
+      ...(this.strokeGradient ? { strokeGradient: this.strokeGradient } : {}),
       bindings: [...this.bindings],
       animations: [...this.animations],
       events: [...this.events],

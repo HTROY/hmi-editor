@@ -1,4 +1,5 @@
 import { ShapeBase } from "./ShapeBase";
+import { getPaint } from "./paint";
 import type { ShapeProps, Point } from "../types";
 import { transformPathData } from "./pathTransform";
 
@@ -30,9 +31,9 @@ export class PathShape extends ShapeBase {
     ctx.globalAlpha = this.opacity;
 
     const path = new Path2D(this.d);
-    ctx.fillStyle = this.fill;
+    ctx.fillStyle = getPaint(ctx, this, "fill");
     ctx.fill(path);
-    ctx.strokeStyle = this.stroke;
+    ctx.strokeStyle = getPaint(ctx, this, "stroke");
     ctx.lineWidth = this.strokeWidth;
     if (this.dashArray.length > 0) ctx.setLineDash(this.dashArray);
     ctx.stroke(path);

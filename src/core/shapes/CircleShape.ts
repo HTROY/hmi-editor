@@ -1,5 +1,6 @@
 ﻿import { ShapeBase } from "./ShapeBase";
 import type { ShapeProps, Point } from "../types";
+import { getPaint } from "./paint";
 
 // ============================================================
 // CircleShape — 圆形/椭圆
@@ -38,9 +39,9 @@ export class CircleShape extends ShapeBase {
     ctx.beginPath();
     ctx.ellipse(0, 0, this.width / 2, this.height / 2, 0, 0, Math.PI * 2);
 
-    ctx.fillStyle = this.fill;
+    ctx.fillStyle = getPaint(ctx, this, "fill");
     ctx.fill();
-    ctx.strokeStyle = this.stroke;
+    ctx.strokeStyle = getPaint(ctx, this, "stroke");
     ctx.lineWidth = this.strokeWidth;
     if (this.dashArray.length > 0) ctx.setLineDash(this.dashArray);
     ctx.stroke();

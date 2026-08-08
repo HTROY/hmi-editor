@@ -41,6 +41,7 @@ export function EditorCanvas() {
   const [spaceDown, setSpaceDown] = useState(false);
   const [panning, setPanning] = useState(false);
   const [hoverHandle, setHoverHandle] = useState<ResizeHandle | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   const {
     scene,
@@ -272,6 +273,27 @@ export function EditorCanvas() {
     endShapeEdit();
   }, [endShapeEdit]);
 
+  // SVG 文件拖放导入
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    setDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = Array.from(e.dataTransfer?.files ?? []).find(
+      (f) => f.type === "image/svg+xml" || f.name.toLowerCase().endsWith(".svg")
+    );
+    if (file) useEditorStore.getState().importSvgFile(file);
+  }, []);
+
   // 键盘事件
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -321,7 +343,13 @@ export function EditorCanvas() {
   }, []);
 
   return (
-    <div ref={containerRef} style={{ width: "100%", height: "100%" }}>
+    <div
+      ref={containerRef}
+      style={{ width: "100%", height: "100%" }}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <canvas
         ref={canvasRef}
         style={{
@@ -341,6 +369,12 @@ export function EditorCanvas() {
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       />
+      {dragOver && (
+        <div className="svg-drop-overlay">
+          <span className="svg-drop-icon">SVG</span>
+          <span>释放以导入 SVG 矢量图</span>
+        </div>
+      )}
     </div>
   );
 }

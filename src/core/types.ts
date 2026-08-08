@@ -28,6 +28,45 @@ export interface BoundingBox {
   height: number;
 }
 
+/** 2D 仿射变换矩阵（SVG transform / path 变换共用） */
+export interface TransformMatrix {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  e: number;
+  f: number;
+}
+
+/** 渐变停止点（颜色为 CSS 颜色字符串，含透明度） */
+export interface GradientStop {
+  offset: number;
+  color: string;
+}
+
+/**
+ * 渐变填充定义（坐标统一为 objectBoundingBox 单位 0..1，
+ * SVG 的 userSpaceOnUse 与 gradientTransform 在导入时已折算）
+ */
+export type ShapeGradient =
+  | {
+      type: "linear";
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      stops: GradientStop[];
+    }
+  | {
+      type: "radial";
+      cx: number;
+      cy: number;
+      r: number;
+      fx?: number;
+      fy?: number;
+      stops: GradientStop[];
+    };
+
 export type ValueMapping =
   | { type: "direct" }
   | { type: "enum"; map: Record<string, string> }
@@ -83,10 +122,14 @@ export interface ShapeProps {
   fontSize?: number;
   fontFamily?: string;
   text?: string;
+  textAlign?: CanvasTextAlign;
+  textBaseline?: CanvasTextBaseline;
   points?: Point[];
   d?: string;
   children?: ShapeProps[];
   src?: string;
+  fillGradient?: ShapeGradient | null;
+  strokeGradient?: ShapeGradient | null;
 
   // 轨道交通图元扩展
   breakerStatus?: string;

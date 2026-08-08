@@ -4,6 +4,8 @@ import { RectShape } from "./RectShape";
 import { CircleShape } from "./CircleShape";
 import { LineShape } from "./LineShape";
 import { TextShape } from "./TextShape";
+import { PolylineShape } from "./PolylineShape";
+import { PolygonShape } from "./PolygonShape";
 import { PathShape } from "./PathShape";
 import { GroupShape } from "./GroupShape";
 import { ImageShape } from "./ImageShape";
@@ -27,6 +29,10 @@ export function createShape(type: ShapeType, props?: any): ShapeBase {
       return new LineShape(props);
     case "text":
       return new TextShape(props);
+    case "polyline":
+      return new PolylineShape(props);
+    case "polygon":
+      return new PolygonShape(props);
     case "path":
       return new PathShape(props);
     case "group":

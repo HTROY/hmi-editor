@@ -1,5 +1,6 @@
 ﻿import { ShapeBase } from "./ShapeBase";
 import type { ShapeProps, Point } from "../types";
+import { getPaint } from "./paint";
 
 // ============================================================
 // RectShape — 矩形
@@ -33,9 +34,9 @@ export class RectShape extends ShapeBase {
       ctx.rect(0, 0, this.width, this.height);
     }
 
-    ctx.fillStyle = this.fill;
+    ctx.fillStyle = getPaint(ctx, this, "fill");
     ctx.fill();
-    ctx.strokeStyle = this.stroke;
+    ctx.strokeStyle = getPaint(ctx, this, "stroke");
     ctx.lineWidth = this.strokeWidth;
     if (this.dashArray.length > 0) {
       ctx.setLineDash(this.dashArray);

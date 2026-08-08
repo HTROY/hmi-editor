@@ -8,6 +8,7 @@ import { Icon } from "../icons";
 
 export function ProjectToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const svgInputRef = useRef<HTMLInputElement>(null);
   const {
     projectManager,
     newProject,
@@ -15,6 +16,7 @@ export function ProjectToolbar() {
     openProject,
     exportScene,
     importScene,
+    importSvgFile,
     pageTitle,
   } = useEditorStore();
 
@@ -29,6 +31,13 @@ export function ProjectToolbar() {
     e.target.value = "";
   };
 
+  const handleSvgFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    importSvgFile(file);
+    e.target.value = "";
+  };
+
   const dirty = projectManager?.dirty ?? false;
 
   return (
@@ -39,6 +48,13 @@ export function ProjectToolbar() {
         accept=".hmi.json,.json"
         style={{ display: "none" }}
         onChange={handleFileSelected}
+      />
+      <input
+        ref={svgInputRef}
+        type="file"
+        accept=".svg,image/svg+xml"
+        style={{ display: "none" }}
+        onChange={handleSvgFileSelected}
       />
 
       <button className="tool-btn" title="新建工程" onClick={newProject}>
@@ -90,6 +106,15 @@ export function ProjectToolbar() {
       >
         <Icon name="import" className="tool-icon" />
         <span className="tool-label">导入</span>
+      </button>
+
+      <button
+        className="tool-btn"
+        title="导入 SVG 矢量图（也可拖放 .svg 文件到画布）"
+        onClick={() => svgInputRef.current?.click()}
+      >
+        <Icon name="import" className="tool-icon" />
+        <span className="tool-label">导入SVG</span>
       </button>
     </>
   );

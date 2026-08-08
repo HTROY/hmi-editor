@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { createShape, PathShape, GroupShape, ImageShape, RectShape } from ".";
+import {
+  createShape,
+  PathShape,
+  GroupShape,
+  ImageShape,
+  RectShape,
+  PolylineShape,
+  PolygonShape,
+} from ".";
 import type { ShapeProps } from "../types";
 
 describe("createShape 新图元工厂", () => {
@@ -194,5 +202,58 @@ describe("新图元命中测试", () => {
     }) as GroupShape;
     expect(empty.hitTest({ x: 250, y: 250 })).toBe(true);
     expect(empty.hitTest({ x: 10, y: 10 })).toBe(false);
+  });
+});
+
+describe("polyline/polygon 图元", () => {
+  it("可创建、克隆与序列化往返", () => {
+    const pts = [
+      { x: 0, y: 0 },
+      { x: 40, y: 10 },
+      { x: 80, y: 0 },
+    ];
+    const polyline = createShape("polyline", {
+      id: "pl1",
+      points: pts,
+      stroke: "#123456",
+    }) as PolylineShape;
+    expect(polyline).toBeInstanceOf(PolylineShape);
+    expect(polyline.boundingBox).toEqual({ x: 0, y: 0, width: 80, height: 10 });
+
+    const restored = createShape(
+      "polyline",
+      polyline.toJSON()
+    ) as PolylineShape;
+    expect(restored.toJSON()).toEqual(polyline.toJSON());
+    const clone = polyline.clone() as PolylineShape;
+    clone.points[0].x = 99;
+    expect(polyline.points[0].x).toBe(0);
+
+    const polygon = createShape("polygon", {
+      id: "pg1",
+      points: [
+        { x: 0, y: 0 },
+        { x: 50, y: 0 },
+        { x: 25, y: 40 },
+      ],
+    }) as PolygonShape;
+    expect(polygon).toBeInstanceOf(PolygonShape);
+    expect(createShape("polygon", polygon.toJSON()).toJSON()).toEqual(
+      polygon.toJSON()
+    );
+  });
+
+  it("缩放改写点位", () => {
+    const polyline = createShape("polyline", {
+      points: [
+        { x: 0, y: 0 },
+        { x: 10, y: 20 },
+      ],
+    }) as PolylineShape;
+    polyline.scale(2, 3);
+    expect(polyline.points).toEqual([
+      { x: 0, y: 0 },
+      { x: 20, y: 60 },
+    ]);
   });
 });
