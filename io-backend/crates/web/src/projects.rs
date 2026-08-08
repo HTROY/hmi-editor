@@ -6,6 +6,7 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
+use hmi_io_auth::AuthUser;
 use hmi_io_db::repo::ProjectRow;
 use hmi_io_project::{ProjectStore, ProjectStoreError};
 use serde::{Deserialize, Serialize};
@@ -50,11 +51,14 @@ pub struct ProjectPushResponse {
 
 pub async fn put_project(
     Extension(store): Extension<ProjectStore>,
+    Extension(user): Extension<AuthUser>,
     Path(id): Path<String>,
     Query(q): Query<ProjectPushQuery>,
     body: Bytes,
 ) -> Result<Json<ProjectPushResponse>, StatusCode> {
-    let out = store.put(&id, &body, q.version).map_err(map_store_error)?;
+    let out = store
+        .put(&id, &body, q.version, &user.username)
+        .map_err(map_store_error)?;
     Ok(Json(ProjectPushResponse {
         id,
         version: out.version,
@@ -64,10 +68,11 @@ pub async fn put_project(
 
 pub async fn delete_project(
     Extension(store): Extension<ProjectStore>,
+    Extension(user): Extension<AuthUser>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
     store
-        .delete(&id)
+        .delete(&id, &user.username)
         .map(|_| StatusCode::OK)
         .map_err(map_store_error)
 }
@@ -90,60 +95,15 @@ fn map_store_error(e: ProjectStoreError) -> StatusCode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hmi_io_db::repo::Repo;
-    use std::fs;
-    use std::io::Write;
-    use std::path::{Path as FsPath, PathBuf};
-    use std::sync::Arc;
+    use crate::test_utils::{make_zip, store};
+    use hmi_io_auth::{AuthUser, Role};
 
-    struct TempDir(PathBuf);
-
-    impl TempDir {
-        fn new(tag: &str) -> Self {
-            let path = std::env::temp_dir().join(format!(
-                "hmi-project-api-test-{}-{}-{}",
-                tag,
-                std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
-            ));
-            fs::create_dir_all(&path).unwrap();
-            TempDir(path)
+    fn alice() -> AuthUser {
+        AuthUser {
+            username: "alice".into(),
+            role: Role::Engineer,
+            must_change_password: false,
         }
-
-        fn path(&self) -> &FsPath {
-            &self.0
-        }
-    }
-
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
-    struct StoreFixture {
-        store: ProjectStore,
-        _dir: TempDir,
-    }
-
-    fn store() -> StoreFixture {
-        let dir = TempDir::new("api");
-        let store =
-            ProjectStore::new(Arc::new(Repo::new(":memory:").unwrap()), dir.path()).unwrap();
-        StoreFixture { store, _dir: dir }
-    }
-
-    fn make_zip(asset: &str) -> Vec<u8> {
-        let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-        let options = zip::write::SimpleFileOptions::default();
-        writer.start_file("manifest.json", options).unwrap();
-        writer.write_all(br#"{"schemaVersion":1}"#).unwrap();
-        writer.start_file("assets/note.txt", options).unwrap();
-        writer.write_all(asset.as_bytes()).unwrap();
-        writer.finish().unwrap().into_inner()
     }
 
     #[tokio::test]
@@ -155,6 +115,7 @@ mod tests {
 
         let res = put_project(
             Extension(store.clone()),
+            Extension(alice()),
             Path("demo".to_string()),
             Query(ProjectPushQuery { version: None }),
             Bytes::from(zip1.clone()),
@@ -179,6 +140,7 @@ mod tests {
 
         let res = put_project(
             Extension(store.clone()),
+            Extension(alice()),
             Path("demo".to_string()),
             Query(ProjectPushQuery { version: Some(1) }),
             Bytes::from(zip2.clone()),
@@ -190,6 +152,7 @@ mod tests {
 
         let err = put_project(
             Extension(store.clone()),
+            Extension(alice()),
             Path("demo".to_string()),
             Query(ProjectPushQuery { version: Some(1) }),
             Bytes::from(zip1),
@@ -200,6 +163,7 @@ mod tests {
 
         let err = put_project(
             Extension(store.clone()),
+            Extension(alice()),
             Path("demo".to_string()),
             Query(ProjectPushQuery { version: None }),
             Bytes::from_static(b"not a zip"),
@@ -210,6 +174,7 @@ mod tests {
 
         let err = put_project(
             Extension(store.clone()),
+            Extension(alice()),
             Path("../evil".to_string()),
             Query(ProjectPushQuery { version: None }),
             Bytes::from(zip2),
@@ -218,12 +183,20 @@ mod tests {
         .unwrap_err();
         assert_eq!(err, StatusCode::BAD_REQUEST);
 
-        delete_project(Extension(store.clone()), Path("demo".to_string()))
-            .await
-            .unwrap();
+        delete_project(
+            Extension(store.clone()),
+            Extension(alice()),
+            Path("demo".to_string()),
+        )
+        .await
+        .unwrap();
         let err = get_project(Extension(store), Path("demo".to_string()))
             .await
             .unwrap_err();
         assert_eq!(err, StatusCode::NOT_FOUND);
+
+        let audit = fixture.repo.list_audit_logs(None).unwrap();
+        assert_eq!(audit.len(), 3);
+        assert!(audit.iter().all(|e| e.actor == "alice"));
     }
 }

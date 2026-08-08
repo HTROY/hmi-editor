@@ -21,6 +21,14 @@ fn main() -> anyhow::Result<()> {
     log::info!("Database: {}", db_path);
     let repo_arc = Arc::new(repo);
 
+    if let Some(initial_password) = hmi_io_auth::ensure_admin_seeded(repo_arc.as_ref())? {
+        log::warn!(
+            "Seeded initial admin user: username=admin password={} (must change on first login)",
+            initial_password
+        );
+    }
+    let auth = Arc::new(hmi_io_auth::AuthService::for_repo(repo_arc.as_ref())?);
+
     let monitor = MonitorCollector::new();
 
     let config_path = std::env::args()
@@ -291,6 +299,7 @@ fn main() -> anyhow::Result<()> {
                 pm_web,
                 redundancy_web,
                 alarm_web,
+                auth,
                 web_port_clone,
             )
             .await

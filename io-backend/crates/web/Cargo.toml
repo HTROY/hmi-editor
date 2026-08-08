@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 hmi-io-alarm.workspace = true
+hmi-io-auth.workspace = true
 hmi-io-db.workspace = true
 hmi-io-config.workspace = true
 hmi-io-monitor.workspace = true
@@ -23,4 +24,6 @@ log.workspace = true
 
 [dev-dependencies]
 zip = { version = "2", default-features = false, features = ["deflate"] }
+tower = "0.5"
+http-body-util = "0.1"
 

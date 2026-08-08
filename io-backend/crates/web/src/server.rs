@@ -1,5 +1,7 @@
-use hmi_io_db::repo::Repo;
 use hmi_io_alarm::engine::AlarmEngine;
+use hmi_io_auth::model::{require_auth, require_project_permission};
+use hmi_io_auth::AuthService;
+use hmi_io_db::repo::Repo;
 use hmi_io_monitor::collector::MonitorCollector;
 use hmi_io_plugin::registry::PluginRegistry;
 use hmi_io_point::manager::PointManager;
@@ -24,6 +26,7 @@ pub async fn run_web_server(
     point_manager: Arc<Mutex<PointManager>>,
     redundancy: Arc<RedundancyEngine>,
     alarm_engine: Arc<AlarmEngine>,
+    auth: Arc<AuthService>,
     port: u16,
 ) -> anyhow::Result<()> {
     let project_dir = repo
@@ -42,16 +45,6 @@ pub async fn run_web_server(
             }
         });
     }
-
-    let project_routes = Router::new()
-        .route("/api/projects", get(super::projects::list_projects))
-        .route(
-            "/api/projects/{id}",
-            get(super::projects::get_project)
-                .put(super::projects::put_project)
-                .delete(super::projects::delete_project),
-        )
-        .route_layer(DefaultBodyLimit::max(hmi_io_project::MAX_PROJECT_ZIP_SIZE));
 
     let app = Router::new()
         // Plugin CRUD
@@ -146,7 +139,8 @@ pub async fn run_web_server(
             get(super::api::get_alarm_config).put(super::api::put_alarm_config),
         )
         .route("/api/soe", get(super::api::soe_query))
-        .merge(project_routes)
+        .merge(auth_routes(auth.clone()))
+        .merge(project_routes(project_store, auth))
         // Static files (SPA fallback to index.html)
         .fallback_service(
             ServeDir::new("web-ui/dist").fallback(ServeFile::new("web-ui/dist/index.html")),
@@ -158,7 +152,6 @@ pub async fn run_web_server(
         .layer(Extension(point_manager))
         .layer(Extension(redundancy))
         .layer(Extension(alarm_engine))
-        .layer(Extension(project_store))
         .with_state(repo);
 
     let addr = format!("0.0.0.0:{}", port);
@@ -169,4 +162,33 @@ pub async fn run_web_server(
     let listener = socket.listen(1024)?;
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+pub(crate) fn auth_routes(auth: Arc<AuthService>) -> Router<Arc<Repo>> {
+    Router::<Arc<Repo>>::new()
+        .route("/api/auth/login", post(super::auth::login))
+        .route("/api/auth/refresh", post(super::auth::refresh))
+        .route(
+            "/api/auth/change-password",
+            post(super::auth::change_password).layer(axum::middleware::from_fn_with_state(
+                auth.clone(),
+                require_auth,
+            )),
+        )
+        .layer(Extension(auth))
+}
+
+pub(crate) fn project_routes(store: ProjectStore, auth: Arc<AuthService>) -> Router<Arc<Repo>> {
+    Router::<Arc<Repo>>::new()
+        .route("/api/projects", get(super::projects::list_projects))
+        .route(
+            "/api/projects/{id}",
+            get(super::projects::get_project)
+                .put(super::projects::put_project)
+                .delete(super::projects::delete_project),
+        )
+        .route_layer(DefaultBodyLimit::max(hmi_io_project::MAX_PROJECT_ZIP_SIZE))
+        .layer(axum::middleware::from_fn(require_project_permission))
+        .layer(axum::middleware::from_fn_with_state(auth, require_auth))
+        .layer(Extension(store))
 }

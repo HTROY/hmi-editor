@@ -1,4 +1,4 @@
-//! Repository layer - thread-safe CRUD for plugins and points
+//! Repository layer - thread-safe CRUD for plugins, points and users
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -169,6 +169,18 @@ pub struct AuditLogRow {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserRow {
+    pub id: i64,
+    pub username: String,
+    pub password_hash: String,
+    pub role: String,
+    pub must_change_password: bool,
+    pub token_version: u64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectPushResult {
     pub created: bool,
@@ -262,6 +274,19 @@ fn map_audit_log(row: &rusqlite::Row) -> rusqlite::Result<AuditLogRow> {
         actor: row.get(5)?,
         detail: row.get(6)?,
         created_at: row.get(7)?,
+    })
+}
+
+fn map_user(row: &rusqlite::Row) -> rusqlite::Result<UserRow> {
+    Ok(UserRow {
+        id: row.get(0)?,
+        username: row.get(1)?,
+        password_hash: row.get(2)?,
+        role: row.get(3)?,
+        must_change_password: row.get(4)?,
+        token_version: row.get(5)?,
+        created_at: row.get(6)?,
+        updated_at: row.get(7)?,
     })
 }
 
@@ -629,6 +654,65 @@ impl Repo {
             .query_map(params![project_id], |r| map_audit_log(r))?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
+    }
+
+    // ---- Users ----
+
+    pub fn create_user(
+        &self,
+        username: &str,
+        password_hash: &str,
+        role: &str,
+        must_change_password: bool,
+    ) -> anyhow::Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO users(username,password_hash,role,must_change_password)
+             VALUES(?1,?2,?3,?4)",
+            params![username, password_hash, role, must_change_password],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn get_user(&self, username: &str) -> anyhow::Result<Option<UserRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut sql = conn.prepare(
+            "SELECT id,username,password_hash,role,must_change_password,token_version,created_at,updated_at
+             FROM users WHERE username=?1",
+        )?;
+        let mut rows = sql.query_map(params![username], |r| map_user(r))?;
+        match rows.next() {
+            Some(Ok(row)) => Ok(Some(row)),
+            Some(Err(e)) => Err(e.into()),
+            None => Ok(None),
+        }
+    }
+
+    pub fn update_user_password(
+        &self,
+        username: &str,
+        password_hash: &str,
+        must_change_password: bool,
+    ) -> anyhow::Result<u64> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE users SET password_hash=?2, must_change_password=?3,
+             token_version=token_version+1, updated_at=datetime('now')
+             WHERE username=?1",
+            params![username, password_hash, must_change_password],
+        )?;
+        let version: u64 = conn.query_row(
+            "SELECT token_version FROM users WHERE username=?1",
+            params![username],
+            |r| r.get(0),
+        )?;
+        Ok(version)
+    }
+
+    pub fn user_count(&self) -> anyhow::Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0))?;
+        Ok(count)
     }
 
     /// 用 Active 节点推送的配置快照整体替换本机插件/点位与关键 server_config。
@@ -1262,5 +1346,54 @@ mod tests {
         assert_eq!(audit[0].action, "project_push");
         assert_eq!(audit[1].action, "project_delete");
         assert_eq!(audit[1].actor, "op");
+    }
+
+    #[test]
+    fn user_create_and_get_round_trips_role_and_must_change() {
+        let repo = Repo::new(":memory:").unwrap();
+        let id = repo
+            .create_user(
+                "admin",
+                "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$hash",
+                "admin",
+                true,
+            )
+            .unwrap();
+        assert!(id > 0);
+
+        let user = repo.get_user("admin").unwrap().unwrap();
+        assert_eq!(user.username, "admin");
+        assert_eq!(
+            user.password_hash,
+            "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$hash"
+        );
+        assert_eq!(user.role, "admin");
+        assert!(user.must_change_password);
+
+        assert!(repo.get_user("missing").unwrap().is_none());
+    }
+
+    #[test]
+    fn update_user_password_replaces_hash_and_clears_must_change() {
+        let repo = Repo::new(":memory:").unwrap();
+        repo.create_user("engineer", "old-hash", "engineer", true)
+            .unwrap();
+
+        repo.update_user_password("engineer", "new-hash", false)
+            .unwrap();
+
+        let user = repo.get_user("engineer").unwrap().unwrap();
+        assert_eq!(user.password_hash, "new-hash");
+        assert!(!user.must_change_password);
+        assert_eq!(user.token_version, 2);
+    }
+
+    #[test]
+    fn user_count_starts_zero_and_tracks_rows() {
+        let repo = Repo::new(":memory:").unwrap();
+        assert_eq!(repo.user_count().unwrap(), 0);
+        repo.create_user("op", "h", "operator", false).unwrap();
+        repo.create_user("viewer", "h", "viewer", false).unwrap();
+        assert_eq!(repo.user_count().unwrap(), 2);
     }
 }

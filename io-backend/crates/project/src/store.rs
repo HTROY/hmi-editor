@@ -122,6 +122,7 @@ impl ProjectStore {
         id: &str,
         bytes: &[u8],
         expected_version: Option<u64>,
+        actor: &str,
     ) -> Result<PutOutcome, ProjectStoreError> {
         if bytes.len() > MAX_PROJECT_ZIP_SIZE {
             return Err(ProjectStoreError::TooLarge(bytes.len()));
@@ -142,7 +143,7 @@ impl ProjectStore {
             &name,
             manifest.schema_version,
             bytes.len() as u64,
-            "",
+            actor,
             "push",
         ) {
             Ok(Some(result)) => result,
@@ -165,12 +166,12 @@ impl ProjectStore {
         })
     }
 
-    pub fn delete(&self, id: &str) -> Result<(), ProjectStoreError> {
+    pub fn delete(&self, id: &str, actor: &str) -> Result<(), ProjectStoreError> {
         let path = self.package_path(id)?;
         if !path.exists() {
             // No package on disk (maybe already removed by an earlier failure):
             // still remove the metadata so the record cannot dangle.
-            return match self.repo.delete_project(id, "", "delete") {
+            return match self.repo.delete_project(id, actor, "delete") {
                 Ok(Some(_)) => Ok(()),
                 Ok(None) => Err(ProjectStoreError::NotFound),
                 Err(e) => Err(ProjectStoreError::Storage(e)),
@@ -179,7 +180,7 @@ impl ProjectStore {
         // Move aside first so a failed DB transaction can restore the package.
         let tomb = self.temp_path(id)?;
         fs::rename(&path, &tomb).map_err(|e| ProjectStoreError::Storage(e.into()))?;
-        match self.repo.delete_project(id, "", "delete") {
+        match self.repo.delete_project(id, actor, "delete") {
             Ok(Some(_)) => {
                 if let Err(e) = fs::remove_file(&tomb) {
                     log::warn!("removing tombstone for '{}' failed: {}", id, e);
@@ -435,7 +436,7 @@ mod tests {
         let store = ProjectStore::new(repo(), dir.path()).unwrap();
         let zip = make_zip(1, Some("Line 1"), "hello");
 
-        let out = store.put("demo", &zip, None).unwrap();
+        let out = store.put("demo", &zip, None, "tester").unwrap();
         assert!(out.created);
         assert_eq!(out.version, 1);
 
@@ -456,12 +457,12 @@ mod tests {
         let v1 = make_zip(1, None, "v1");
         let v2 = make_zip(1, Some("v2"), "v2");
 
-        store.put("demo", &v1, None).unwrap();
-        let out = store.put("demo", &v2, Some(1)).unwrap();
+        store.put("demo", &v1, None, "tester").unwrap();
+        let out = store.put("demo", &v2, Some(1), "tester").unwrap();
         assert!(!out.created);
         assert_eq!(out.version, 2);
 
-        let err = store.put("demo", &v1, Some(1)).unwrap_err();
+        let err = store.put("demo", &v1, Some(1), "tester").unwrap_err();
         assert!(matches!(err, ProjectStoreError::Conflict(_)));
         let pkg = store.get("demo").unwrap();
         assert_eq!(pkg.bytes, v2);
@@ -474,7 +475,7 @@ mod tests {
         let store = ProjectStore::new(repo(), dir.path()).unwrap();
 
         assert!(matches!(
-            store.put("demo", b"not a zip", None).unwrap_err(),
+            store.put("demo", b"not a zip", None, "tester").unwrap_err(),
             ProjectStoreError::InvalidPackage(_)
         ));
         assert!(matches!(
@@ -503,14 +504,14 @@ mod tests {
         writer.write_all(b"x").unwrap();
         let no_manifest = writer.finish().unwrap().into_inner();
         assert!(matches!(
-            store.put("demo", &no_manifest, None).unwrap_err(),
+            store.put("demo", &no_manifest, None, "tester").unwrap_err(),
             ProjectStoreError::InvalidPackage(_)
         ));
 
         // Oversized package.
         let big = vec![0u8; MAX_PROJECT_ZIP_SIZE + 1];
         assert!(matches!(
-            store.put("demo", &big, None).unwrap_err(),
+            store.put("demo", &big, None, "tester").unwrap_err(),
             ProjectStoreError::TooLarge(_)
         ));
 
@@ -522,7 +523,9 @@ mod tests {
         writer.write_all(b"{}").unwrap();
         let bad_manifest = writer.finish().unwrap().into_inner();
         assert!(matches!(
-            store.put("demo", &bad_manifest, None).unwrap_err(),
+            store
+                .put("demo", &bad_manifest, None, "tester")
+                .unwrap_err(),
             ProjectStoreError::InvalidPackage(_)
         ));
 
@@ -538,7 +541,7 @@ mod tests {
         writer.write_all(b"x").unwrap();
         let unsafe_zip = writer.finish().unwrap().into_inner();
         assert!(matches!(
-            store.put("demo", &unsafe_zip, None).unwrap_err(),
+            store.put("demo", &unsafe_zip, None, "tester").unwrap_err(),
             ProjectStoreError::InvalidPackage(_)
         ));
 
@@ -552,7 +555,9 @@ mod tests {
             .unwrap();
         let big_manifest = writer.finish().unwrap().into_inner();
         assert!(matches!(
-            store.put("demo", &big_manifest, None).unwrap_err(),
+            store
+                .put("demo", &big_manifest, None, "tester")
+                .unwrap_err(),
             ProjectStoreError::InvalidPackage(_)
         ));
     }
@@ -562,32 +567,35 @@ mod tests {
         let dir = TempDir::new("delete");
         let store = ProjectStore::new(repo(), dir.path()).unwrap();
         let zip = make_zip(1, Some("del"), "x");
-        store.put("demo", &zip, None).unwrap();
+        store.put("demo", &zip, None, "tester").unwrap();
 
-        store.delete("demo").unwrap();
+        store.delete("demo", "tester").unwrap();
         assert!(!dir.path().join("demo.hmi.zip").exists());
         assert!(matches!(
             store.get("demo").unwrap_err(),
             ProjectStoreError::NotFound
         ));
         assert!(matches!(
-            store.delete("demo").unwrap_err(),
+            store.delete("demo", "tester").unwrap_err(),
             ProjectStoreError::NotFound
         ));
         let audit = store.repo.list_audit_logs(Some("demo")).unwrap();
         assert_eq!(audit.len(), 2);
         assert_eq!(audit[0].action, "project_push");
         assert_eq!(audit[1].action, "project_delete");
+        assert!(audit.iter().all(|e| e.actor == "tester"));
     }
 
     #[test]
     fn delete_cleans_up_metadata_when_package_missing() {
         let dir = TempDir::new("delete-missing");
         let store = ProjectStore::new(repo(), dir.path()).unwrap();
-        store.put("demo", &make_zip(1, None, "x"), None).unwrap();
+        store
+            .put("demo", &make_zip(1, None, "x"), None, "tester")
+            .unwrap();
         fs::remove_file(dir.path().join("demo.hmi.zip")).unwrap();
 
-        store.delete("demo").unwrap();
+        store.delete("demo", "tester").unwrap();
         assert!(matches!(
             store.get("demo").unwrap_err(),
             ProjectStoreError::NotFound

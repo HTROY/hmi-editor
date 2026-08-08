@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 hmi-io-alarm.workspace = true
+hmi-io-auth.workspace = true
 hmi-io-bridge.workspace = true
 hmi-io-config.workspace = true
 hmi-io-db.workspace = true

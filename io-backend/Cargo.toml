@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/alarm",
+    "crates/auth",
     "crates/bin",
     "crates/bridge",
     "crates/config",
@@ -22,6 +23,7 @@ members = [
 ]
 default-members = [
     "crates/alarm",
+    "crates/auth",
     "crates/bin",
     "crates/bridge",
     "crates/config",
@@ -58,6 +60,7 @@ wasmtime-wasi = "47.0.2"
 wit-bindgen = "0.58"
 hmi-io-bridge = { path = "crates/bridge" }
 hmi-io-alarm = { path = "crates/alarm" }
+hmi-io-auth = { path = "crates/auth" }
 hmi-io-config = { path = "crates/config" }
 hmi-io-db = { path = "crates/db" }
 hmi-io-monitor = { path = "crates/monitor" }

@@ -112,6 +112,17 @@ pub fn init_db(conn: &Connection) -> anyhow::Result<()> {
             created_at   TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE IF NOT EXISTS users (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            username             TEXT NOT NULL UNIQUE,
+            password_hash        TEXT NOT NULL,
+            role                 TEXT NOT NULL,
+            must_change_password INTEGER NOT NULL DEFAULT 1,
+            token_version        INTEGER NOT NULL DEFAULT 1,
+            created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
         CREATE INDEX IF NOT EXISTS idx_soe_seq ON soe_events(seq);
         CREATE INDEX IF NOT EXISTS idx_soe_time ON soe_events(receive_time);
         CREATE INDEX IF NOT EXISTS idx_occ_status_time ON alarm_occurrences(status, triggered_at);
@@ -128,6 +139,7 @@ pub fn init_db(conn: &Connection) -> anyhow::Result<()> {
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('project_dir', './projects');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('alarm_retention_days', '90');
         INSERT OR IGNORE INTO server_config (key, value) VALUES ('soe_retention_days', '30');
+        INSERT OR IGNORE INTO server_config (key, value) VALUES ('jwt_secret', '');
     ",
     )?;
 
