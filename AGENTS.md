@@ -126,6 +126,16 @@ Backend (from repo root unless noted):
 - Redundancy uses `redundancy:` block: `enabled / node_id / role / peer_url / peer_ws_port / heartbeat_interval_ms / failover_threshold / failback_delay_ms / full_snapshot_interval_ms / plugin_unhealthy_threshold / plugin_promotion_cooldown_ms / instance_failover_threshold / instance_failback_enabled / instance_failback_delay_ms / instance_switch_cooldown_ms`；`server.web_port` 控制管理端口。
 - Never commit `hmi_io.db` (local SQLite). Load `.wasm` plugins only from `plugins/`; treat plugin binaries as untrusted code.
 
+## Codex 多代理操作
+
+启动子代理的标准操作：
+
+1. 调用 `spawn_agent`：`task_name` 使用唯一的小写标识，`message` 写入完整任务文本，`fork_turns` 使用 `"all"`（或省略该参数）以继承完整上下文。
+2. 检查子代理首次回复：应复述任务或直接开始执行，而不是回复占位消息。
+3. 核对最终回复：必须包含任务要求的交付物（审查结论、文件变更、测试结果等）。
+
+若子代理回复 "I don't see a request yet" 等占位消息，说明初始任务未送达：重新 `spawn_agent` 并携带全量历史；`followup_task` 只能补充消息，不能找回已丢失的初始任务。
+
 ## Agent skills
 
 ### Issue tracker
