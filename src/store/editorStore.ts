@@ -12,6 +12,9 @@ import {
   scaleShape,
   computeScaleFactor,
   applyResize,
+  isOverRasterWarningSize,
+  isRasterFile,
+  rasterDataUrlToImageShape,
 } from "../core";
 import type {
   ShapeCommand,
@@ -126,6 +129,7 @@ interface EditorState {
   importProject: (j: string) => void;
   importSvgText: (svgText: string) => SvgImportResult;
   importSvgFile: (file: File) => void;
+  importRasterFile: (file: File) => void;
   toggleSimulation: () => void;
   setWsConfig: (c: { url: string; backupUrl?: string }) => void;
   setPageView: (pageId: string, view: PageViewState) => void;
@@ -918,6 +922,46 @@ export const useEditorStore = create<EditorState>((set, get) => {
       };
       reader.onerror = () => alert("SVG 文件读取失败");
       reader.readAsText(file);
+    },
+    importRasterFile: async (file) => {
+      if (!isRasterFile(file)) {
+        alert("仅支持 PNG/JPG 图片");
+        return;
+      }
+      if (isOverRasterWarningSize(file.size)) {
+        const ok = window.confirm(
+          "图片超过 10MB，导入后工程文件会明显变大，是否继续？"
+        );
+        if (!ok) return;
+      }
+      try {
+        const s = get();
+        const src = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () =>
+            reject(reader.error ?? new Error("文件读取失败"));
+          reader.readAsDataURL(file);
+        });
+        const shape = await rasterDataUrlToImageShape(src, {
+          pageWidth: s.pageWidth,
+          pageHeight: s.pageHeight,
+        });
+        s.scene.add(shape);
+        pushCommand({
+          id: shape.id,
+          before: null,
+          after: shape.toJSON(),
+          index: s.scene.getAll().indexOf(shape),
+        });
+        s.selectShape(shape.id);
+        syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
+        s.renderer?.render();
+        s.projectManager.dirty = true;
+        flushAutosave();
+      } catch (e) {
+        alert("图片导入失败：" + (e instanceof Error ? e.message : String(e)));
+      }
     },
     toggleSimulation: () => {
       const s = get();

@@ -570,7 +570,7 @@ body,
   display: block;
 }
 
-/* SVG 拖放导入提示层 */
+/* SVG / 图片拖放导入提示层 */
 .svg-drop-overlay {
   position: absolute;
   inset: 0;

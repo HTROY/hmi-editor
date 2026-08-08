@@ -1,5 +1,10 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import { Renderer, SceneGraph, hitTestResizeHandle } from "../../core";
+import {
+  Renderer,
+  SceneGraph,
+  hitTestResizeHandle,
+  isRasterFile,
+} from "../../core";
 import type { ResizeHandle } from "../../core";
 import { useEditorStore } from "../../store/editorStore";
 import type { ToolMode } from "../../store/editorStore";
@@ -216,8 +221,12 @@ export function EditorCanvas() {
       // 手柄拖拽调整大小
       if (isResizing.current && resizeHandleRef.current && selectedId) {
         const world = store.viewport.screenToWorld(pos.x, pos.y);
+        const selected = scene.get(selectedId);
+        // 栅格图元默认等比锁，按住 Shift 临时解锁；其余图元 Shift 等比
+        const proportional =
+          selected?.type === "image" ? !e.shiftKey : e.shiftKey;
         applyShapeResize(selectedId, resizeHandleRef.current, world, {
-          proportional: e.shiftKey,
+          proportional,
           snap: !e.altKey,
         });
         return;
@@ -273,7 +282,7 @@ export function EditorCanvas() {
     endShapeEdit();
   }, [endShapeEdit]);
 
-  // SVG 文件拖放导入
+  // SVG / PNG / JPG 文件拖放导入
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
@@ -288,10 +297,16 @@ export function EditorCanvas() {
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragOver(false);
-    const file = Array.from(e.dataTransfer?.files ?? []).find(
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    const svgFile = files.find(
       (f) => f.type === "image/svg+xml" || f.name.toLowerCase().endsWith(".svg")
     );
-    if (file) useEditorStore.getState().importSvgFile(file);
+    if (svgFile) {
+      useEditorStore.getState().importSvgFile(svgFile);
+      return;
+    }
+    const rasterFile = files.find((f) => isRasterFile(f));
+    if (rasterFile) useEditorStore.getState().importRasterFile(rasterFile);
   }, []);
 
   // 键盘事件
@@ -371,8 +386,8 @@ export function EditorCanvas() {
       />
       {dragOver && (
         <div className="svg-drop-overlay">
-          <span className="svg-drop-icon">SVG</span>
-          <span>释放以导入 SVG 矢量图</span>
+          <span className="svg-drop-icon">图片/SVG</span>
+          <span>释放以导入 PNG/JPG 或 SVG 文件</span>
         </div>
       )}
     </div>

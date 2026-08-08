@@ -9,6 +9,7 @@ import { Icon } from "../icons";
 export function ProjectToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const svgInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const {
     projectManager,
     newProject,
@@ -17,6 +18,7 @@ export function ProjectToolbar() {
     exportScene,
     importScene,
     importSvgFile,
+    importRasterFile,
     pageTitle,
   } = useEditorStore();
 
@@ -38,6 +40,13 @@ export function ProjectToolbar() {
     e.target.value = "";
   };
 
+  const handleImageFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    importRasterFile(file);
+    e.target.value = "";
+  };
+
   const dirty = projectManager?.dirty ?? false;
 
   return (
@@ -55,6 +64,13 @@ export function ProjectToolbar() {
         accept=".svg,image/svg+xml"
         style={{ display: "none" }}
         onChange={handleSvgFileSelected}
+      />
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+        style={{ display: "none" }}
+        onChange={handleImageFileSelected}
       />
 
       <button className="tool-btn" title="新建工程" onClick={newProject}>
@@ -115,6 +131,15 @@ export function ProjectToolbar() {
       >
         <Icon name="import" className="tool-icon" />
         <span className="tool-label">导入SVG</span>
+      </button>
+
+      <button
+        className="tool-btn"
+        title="导入 PNG/JPG 图片（1:1 插入，也可拖放图片文件到画布）"
+        onClick={() => imageInputRef.current?.click()}
+      >
+        <Icon name="import" className="tool-icon" />
+        <span className="tool-label">导入图片</span>
       </button>
     </>
   );
