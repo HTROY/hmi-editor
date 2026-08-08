@@ -13,10 +13,7 @@ use serde::{Deserialize, Serialize};
 pub async fn list_projects(
     Extension(store): Extension<ProjectStore>,
 ) -> Result<Json<Vec<ProjectRow>>, StatusCode> {
-    store.list().map(Json).map_err(|e| {
-        log::error!("{}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })
+    store.list().map(Json).map_err(map_store_error)
 }
 
 pub async fn get_project(

@@ -78,18 +78,23 @@ pub struct ProjectManifest {
 }
 
 impl ProjectStore {
+    /// Create a store rooted at `root`, creating the directory if needed.
     pub fn new(repo: Arc<Repo>, root: impl Into<PathBuf>) -> anyhow::Result<Self> {
         let root = root.into();
         fs::create_dir_all(&root)?;
         Ok(Self { repo, root })
     }
 
+    /// Directory holding one `.hmi.zip` per project.
     pub fn root(&self) -> &Path {
         &self.root
     }
 
-    pub fn list(&self) -> anyhow::Result<Vec<ProjectRow>> {
-        self.repo.list_projects()
+    /// List project metadata, most recently updated first.
+    pub fn list(&self) -> Result<Vec<ProjectRow>, ProjectStoreError> {
+        self.repo
+            .list_projects()
+            .map_err(ProjectStoreError::Storage)
     }
 
     pub fn get(&self, id: &str) -> Result<ProjectPackage, ProjectStoreError> {
@@ -333,6 +338,11 @@ pub fn validate_project_zip(bytes: &[u8]) -> Result<ProjectManifest, ProjectStor
     let mut manifest_file = archive
         .by_index(idx)
         .map_err(|e| ProjectStoreError::InvalidPackage(format!("cannot read manifest: {}", e)))?;
+    if manifest_file.size() > MAX_MANIFEST_SIZE as u64 {
+        return Err(ProjectStoreError::InvalidPackage(
+            "manifest.json too large".into(),
+        ));
+    }
     let mut buf = Vec::new();
     manifest_file
         .read_to_end(&mut buf)
@@ -529,6 +539,20 @@ mod tests {
         let unsafe_zip = writer.finish().unwrap().into_inner();
         assert!(matches!(
             store.put("demo", &unsafe_zip, None).unwrap_err(),
+            ProjectStoreError::InvalidPackage(_)
+        ));
+
+        // Manifest larger than the in-memory cap.
+        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        writer
+            .start_file("manifest.json", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer
+            .write_all(&vec![b'x'; MAX_MANIFEST_SIZE + 1])
+            .unwrap();
+        let big_manifest = writer.finish().unwrap().into_inner();
+        assert!(matches!(
+            store.put("demo", &big_manifest, None).unwrap_err(),
             ProjectStoreError::InvalidPackage(_)
         ));
     }
