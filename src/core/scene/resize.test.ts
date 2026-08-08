@@ -171,7 +171,7 @@ describe("applyResize — 圆/文本/路径", () => {
     applyResize(t, "se", { x: 150, y: 100 }, { snap: false });
     expect(t.width).toBe(150);
     expect(t.height).toBe(100);
-    expect(t.fontSize).toBe(40);
+    expect(t.fontSize).toBe(30);
   });
 
   it("shrinks text font size when a corner handle is dragged inward", () => {
@@ -186,6 +186,34 @@ describe("applyResize — 圆/文本/路径", () => {
     expect(t.width).toBe(50);
     expect(t.height).toBe(25);
     expect(t.fontSize).toBe(10);
+  });
+
+  it("shrinks text font size when a corner handle is dragged inward on one axis", () => {
+    const t = createShape("text", {
+      x: 0,
+      y: 0,
+      width: 120,
+      height: 80,
+      fontSize: 24,
+    }) as TextShape;
+    applyResize(t, "se", { x: 100, y: 80 }, { snap: false });
+    expect(t.width).toBe(100);
+    expect(t.height).toBe(80);
+    expect(t.fontSize).toBeLessThan(24);
+  });
+
+  it("shrinks text font size when a corner drag shrinks one axis and grows the other", () => {
+    const t = createShape("text", {
+      x: 0,
+      y: 0,
+      width: 120,
+      height: 80,
+      fontSize: 24,
+    }) as TextShape;
+    applyResize(t, "se", { x: 100, y: 100 }, { snap: false });
+    expect(t.width).toBe(100);
+    expect(t.height).toBe(100);
+    expect(t.fontSize).toBeLessThan(24);
   });
 
   it("keeps text font size when resizing from an edge handle", () => {
