@@ -23,6 +23,8 @@ export function EditorCanvas() {
     selectShape,
     addShape,
     updateShape,
+    beginShapeEdit,
+    endShapeEdit,
     renderScene,
   } = useEditorStore();
 
@@ -64,6 +66,7 @@ export function EditorCanvas() {
         const hit = scene.hitTest(pos.x, pos.y);
         if (hit) {
           selectShape(hit.id);
+          beginShapeEdit(hit.id);
           isDragging.current = true;
           dragStart.current = pos;
           shapeStartPos.current = { x: hit.x, y: hit.y };
@@ -86,7 +89,7 @@ export function EditorCanvas() {
         }
       }
     },
-    [mode, scene, selectShape, addShape, getCanvasPos],
+    [mode, scene, selectShape, addShape, beginShapeEdit, getCanvasPos]
   );
 
   const handleMouseMove = useCallback(
@@ -95,22 +98,42 @@ export function EditorCanvas() {
       const pos = getCanvasPos(e);
       const dx = pos.x - dragStart.current.x;
       const dy = pos.y - dragStart.current.y;
-      updateShape(selectedId, {
-        x: shapeStartPos.current.x + dx,
-        y: shapeStartPos.current.y + dy,
-      });
+      updateShape(
+        selectedId,
+        {
+          x: shapeStartPos.current.x + dx,
+          y: shapeStartPos.current.y + dy,
+        },
+        false
+      );
     },
-    [selectedId, updateShape, getCanvasPos],
+    [selectedId, updateShape, getCanvasPos]
   );
 
   const handleMouseUp = useCallback(() => {
     isDragging.current = false;
-  }, []);
+    endShapeEdit();
+  }, [endShapeEdit]);
 
   // 键盘事件
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       const store = useEditorStore.getState();
+      const target = e.target as HTMLElement | null;
+      const inTextInput =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable === true;
+      const key = e.key.toLowerCase();
+      if (e.ctrlKey && !e.altKey && key === "z" && !inTextInput) {
+        e.preventDefault();
+        if (e.shiftKey) store.redo();
+        else store.undo();
+      }
+      if (e.ctrlKey && !e.altKey && key === "y" && !inTextInput) {
+        e.preventDefault();
+        store.redo();
+      }
       if (e.key === "Delete" || e.key === "Backspace") {
         if (store.selectedId && document.activeElement?.tagName !== "INPUT") {
           store.deleteSelected();

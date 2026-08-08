@@ -28,11 +28,20 @@ export class SceneGraph {
     return this.shapes.get(id);
   }
 
+  /** 在指定 z 序位置插入图元（用于撤销/重做恢复叠放顺序） */
+  insertAt(shape: ShapeBase, index: number): void {
+    const sorted = [...this.getAll()];
+    const at = Math.max(0, Math.min(index, sorted.length));
+    sorted.splice(at, 0, shape);
+    this.shapes = new Map(sorted.map((s) => [s.id, s]));
+    this.dirty = true;
+  }
+
   /** 获取所有图元（按 zIndex 排序） */
   getAll(): ShapeBase[] {
     if (this.dirty) {
       this.sortedCache = Array.from(this.shapes.values()).sort(
-        (a, b) => a.zIndex - b.zIndex,
+        (a, b) => a.zIndex - b.zIndex
       );
       this.dirty = false;
     }

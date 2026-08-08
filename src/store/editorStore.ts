@@ -5,7 +5,9 @@ import {
   createShape,
   ShapeBase,
   Serializer,
+  CommandHistory,
 } from "../core";
+import type { ShapeCommand, ShapeProps } from "../core";
 import { generateId } from "../core/shapes";
 import { VariableManager } from "../core/variables";
 import { BindingEngine, AnimationEngine } from "../core/bindings";
@@ -35,6 +37,7 @@ export type RightPanel =
 interface EditorState {
   scene: SceneGraph;
   renderer: Renderer | null;
+  history: CommandHistory;
   mode: ToolMode;
   selectedId: string | null;
   clipboard: ShapeBase | null;
@@ -57,6 +60,7 @@ interface EditorState {
   wsConfig: { url: string; backupUrl?: string };
   varRevision: number;
   shapeRevision: number;
+  historyRevision: number;
   setRenderer: (r: Renderer) => void;
   setMode: (m: ToolMode) => void;
   setRightPanel: (p: RightPanel) => void;
@@ -65,7 +69,11 @@ interface EditorState {
   deleteSelected: () => void;
   copySelected: () => void;
   pasteClipboard: () => void;
-  updateShape: (id: string, props: any) => void;
+  updateShape: (id: string, props: any, record?: boolean) => void;
+  beginShapeEdit: (id: string) => void;
+  endShapeEdit: () => void;
+  undo: () => void;
+  redo: () => void;
   renderScene: () => void;
   exportProject: () => void;
   importProject: (j: string) => void;
@@ -87,10 +95,18 @@ interface EditorState {
   deleteAlarmRule: (id: string) => Promise<void>;
   bumpVarRevision: () => void;
   bumpShapeRevision: () => void;
+  bumpHistoryRevision: () => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => {
   const scene = new SceneGraph();
+  const historyByPage = new Map<string, CommandHistory>();
+  let activeHistory = new CommandHistory();
+  let pendingEdit: {
+    id: string;
+    before: ShapeProps;
+    index: number;
+  } | null = null;
   const varManager = new VariableManager();
   const bindingEngine = new BindingEngine(scene, varManager);
   // 绑定引擎常驻监听变量变化：无论数据来自模拟、io_backend 还是手动测试，
@@ -114,8 +130,25 @@ export const useEditorStore = create<EditorState>((set, get) => {
   scriptEngine.setScene(scene);
   const { meta: dp } = projectManager.createPage("主画面");
   projectManager.activePageId = dp.id;
+  historyByPage.set(dp.id, activeHistory);
+
+  const pushCommand = (command: ShapeCommand) => {
+    activeHistory.push(command);
+    set((s) => ({ historyRevision: s.historyRevision + 1 }));
+  };
+
+  const resetHistory = (pageId: string) => {
+    historyByPage.clear();
+    pendingEdit = null;
+    const h = new CommandHistory();
+    historyByPage.set(pageId, h);
+    activeHistory = h;
+    set({ history: h, historyRevision: 0 });
+  };
+
   return {
     scene,
+    history: activeHistory,
     varManager,
     bindingEngine,
     animEngine,
@@ -139,6 +172,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     wsConfig: { url: "ws://localhost:8080/iscs/data" },
     varRevision: 0,
     shapeRevision: 0,
+    historyRevision: 0,
     setRenderer: (r) => {
       set({ renderer: r });
       get().bindingEngine.setRenderer(r);
@@ -148,6 +182,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     setRightPanel: (p) => set({ rightPanel: p }),
     selectShape: (id) => {
       const s = get();
+      if (id === null) pendingEdit = null;
       set({ selectedId: id });
       if (s.renderer) {
         s.renderer.selectedIds.clear();
@@ -212,12 +247,29 @@ export const useEditorStore = create<EditorState>((set, get) => {
         labelPosition: "bottom",
       });
       s.scene.add(sh);
+      pushCommand({
+        id: sh.id,
+        before: null,
+        after: sh.toJSON(),
+        index: s.scene.getAll().indexOf(sh),
+      });
       s.renderer?.render();
     },
     deleteSelected: () => {
       const s = get();
       if (s.selectedId) {
-        s.scene.remove(s.selectedId);
+        const sh = s.scene.get(s.selectedId);
+        if (sh) {
+          if (pendingEdit?.id === sh.id) pendingEdit = null;
+          const command: ShapeCommand = {
+            id: sh.id,
+            before: sh.toJSON(),
+            after: null,
+            index: s.scene.getAll().indexOf(sh),
+          };
+          s.scene.remove(sh.id);
+          pushCommand(command);
+        }
         set({ selectedId: null });
         if (s.renderer) {
           s.renderer.selectedIds.clear();
@@ -240,23 +292,94 @@ export const useEditorStore = create<EditorState>((set, get) => {
         c.x += 20;
         c.y += 20;
         s.scene.add(c);
+        pushCommand({
+          id: c.id,
+          before: null,
+          after: c.toJSON(),
+          index: s.scene.getAll().indexOf(c),
+        });
         set({ selectedId: c.id });
         s.renderer?.render();
       }
     },
-    updateShape: (id, props) => {
+    updateShape: (id, props, record = true) => {
       const s = get();
       const sh = s.scene.get(id);
       if (sh) {
+        const before = sh.toJSON();
         if (sh.type === "metro-breaker" && props.breakerStatus !== undefined) {
           (sh as any).setStatus(props.breakerStatus);
           delete props.breakerStatus;
         }
         Object.assign(sh, props);
+        const after = sh.toJSON();
+        if (before.zIndex !== after.zIndex) s.scene.markDirty();
         s.renderer?.render();
         // 通知 React：shape 是原地修改的，必须触发订阅面板（绑定/属性）重新渲染
         s.bumpShapeRevision();
+        if (record && JSON.stringify(before) !== JSON.stringify(after)) {
+          pushCommand({
+            id,
+            before,
+            after,
+            index: s.scene.getAll().indexOf(sh),
+          });
+        }
       }
+    },
+    beginShapeEdit: (id) => {
+      const s = get();
+      const sh = s.scene.get(id);
+      if (!sh) return;
+      pendingEdit = {
+        id,
+        before: sh.toJSON(),
+        index: s.scene.getAll().indexOf(sh),
+      };
+    },
+    endShapeEdit: () => {
+      if (!pendingEdit) return;
+      const { id, before, index } = pendingEdit;
+      pendingEdit = null;
+      const sh = get().scene.get(id);
+      if (!sh) return;
+      const after = sh.toJSON();
+      if (JSON.stringify(before) === JSON.stringify(after)) return;
+      pushCommand({ id, before, after, index });
+    },
+    undo: () => {
+      const s = get();
+      pendingEdit = null;
+      const command = activeHistory.undo(s.scene);
+      if (!command) return;
+      s.bindingEngine.reindexShape(command.id);
+      set({
+        selectedId: s.scene.get(command.id) ? command.id : null,
+      });
+      if (s.renderer) {
+        s.renderer.selectedIds.clear();
+        if (s.scene.get(command.id)) s.renderer.selectedIds.add(command.id);
+        s.renderer.render();
+      }
+      s.bumpShapeRevision();
+      s.bumpHistoryRevision();
+    },
+    redo: () => {
+      const s = get();
+      pendingEdit = null;
+      const command = activeHistory.redo(s.scene);
+      if (!command) return;
+      s.bindingEngine.reindexShape(command.id);
+      set({
+        selectedId: s.scene.get(command.id) ? command.id : null,
+      });
+      if (s.renderer) {
+        s.renderer.selectedIds.clear();
+        if (s.scene.get(command.id)) s.renderer.selectedIds.add(command.id);
+        s.renderer.render();
+      }
+      s.bumpShapeRevision();
+      s.bumpHistoryRevision();
     },
     renderScene: () => {
       get().renderer?.render();
@@ -270,6 +393,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const f = s.projectManager.activePage;
       if (f) {
         s.scene.clear();
+        resetHistory(f.meta.id);
         set({
           activePageId: f.meta.id,
           pageTitle: f.meta.title,
@@ -295,6 +419,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
           if (f) {
             s.scene.clear();
             for (const sh of f.scene.getAll()) s.scene.add(sh);
+            resetHistory(f.meta.id);
             set({
               activePageId: f.meta.id,
               pageTitle: f.meta.title,
@@ -326,6 +451,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
           if (f) {
             s.scene.clear();
             for (const sh of f.scene.getAll()) s.scene.add(sh);
+            resetHistory(f.meta.id);
             set({
               activePageId: f.meta.id,
               pageTitle: f.meta.title,
@@ -338,6 +464,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
         } else if (d.shapes) {
           s.scene.clear();
           for (const sp of d.shapes) s.scene.add(createShape(sp.type, sp));
+          resetHistory(s.activePageId);
           s.renderer?.render();
         }
       } catch {}
@@ -358,6 +485,14 @@ export const useEditorStore = create<EditorState>((set, get) => {
             pageHeight: m.height,
             selectedId: null,
           });
+        let h = historyByPage.get(pageId);
+        if (!h) {
+          h = new CommandHistory();
+          historyByPage.set(pageId, h);
+        }
+        activeHistory = h;
+        pendingEdit = null;
+        set({ history: h, historyRevision: 0 });
         s.bindingEngine.rebuildIndex();
         s.renderer?.render();
       }
@@ -369,18 +504,26 @@ export const useEditorStore = create<EditorState>((set, get) => {
       s.projectManager.activePageId = meta.id;
       s.scene.clear();
       for (const sh of ns.getAll()) s.scene.add(sh);
+      const h = new CommandHistory();
+      historyByPage.set(meta.id, h);
+      activeHistory = h;
+      pendingEdit = null;
       set({
         activePageId: meta.id,
         pageTitle: meta.title,
         pageWidth: meta.width,
         pageHeight: meta.height,
         selectedId: null,
+        history: h,
+        historyRevision: 0,
       });
       s.renderer?.render();
     },
     deletePage: (pageId) => {
       const s = get();
       if (s.projectManager.getPages().length <= 1) return;
+      historyByPage.delete(pageId);
+      pendingEdit = null;
       s.projectManager.deletePage(pageId);
       const pgs = s.projectManager.getPages();
       if (pgs.length > 0) s.switchPage(pgs[0].id);
@@ -410,12 +553,12 @@ export const useEditorStore = create<EditorState>((set, get) => {
         set({ simRunning: false });
       } else {
         s.alarmManager.setMode(
-          s.dataBridge.active === "simulation" ? "local" : "remote",
+          s.dataBridge.active === "simulation" ? "local" : "remote"
         );
         if (s.dataBridge.active !== "simulation") {
           s.alarmManager.setRemote(
             s.dataBridge.wsClient,
-            s.dataBridge.getApiBaseUrl(),
+            s.dataBridge.getApiBaseUrl()
           );
         }
         if (s.varManager.count === 0) {
@@ -521,12 +664,12 @@ export const useEditorStore = create<EditorState>((set, get) => {
     acknowledgeAlarm: (id) => {
       get().alarmManager.acknowledge(
         id,
-        get().authManager.user?.username ?? "operator",
+        get().authManager.user?.username ?? "operator"
       );
     },
     acknowledgeAllAlarms: () => {
       get().alarmManager.acknowledgeAll(
-        get().authManager.user?.username ?? "operator",
+        get().authManager.user?.username ?? "operator"
       );
     },
     saveAlarmRule: async (rule) => {
@@ -538,5 +681,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     bumpVarRevision: () => set((s) => ({ varRevision: s.varRevision + 1 })),
     bumpShapeRevision: () =>
       set((s) => ({ shapeRevision: s.shapeRevision + 1 })),
+    bumpHistoryRevision: () =>
+      set((s) => ({ historyRevision: s.historyRevision + 1 })),
   };
 });

@@ -21,6 +21,9 @@ export function Toolbar() {
     deleteSelected,
     copySelected,
     pasteClipboard,
+    undo,
+    redo,
+    history,
     simRunning,
     toggleSimulation,
     projectManager,
@@ -51,6 +54,24 @@ export function Toolbar() {
       <div className="toolbar-divider" />
 
       <div className="toolbar-group">
+        <button
+          className="tool-btn"
+          title="撤销 (Ctrl+Z)"
+          onClick={undo}
+          disabled={!history?.canUndo}
+        >
+          <Icon name="undo" className="tool-icon" />
+          <span className="tool-label">撤销</span>
+        </button>
+        <button
+          className="tool-btn"
+          title="重做 (Ctrl+Shift+Z / Ctrl+Y)"
+          onClick={redo}
+          disabled={!history?.canRedo}
+        >
+          <Icon name="redo" className="tool-icon" />
+          <span className="tool-label">重做</span>
+        </button>
         <button
           className="tool-btn"
           title="复制 (Ctrl+C)"

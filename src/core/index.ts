@@ -1,6 +1,7 @@
 ﻿export * from "./types";
 export * from "./shapes";
 export * from "./scene";
+export * from "./history";
 export * from "./serialization";
 export * from "./variables";
 export * from "./bindings";

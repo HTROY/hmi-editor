@@ -13,6 +13,8 @@ export type IconName =
   | "import"
   | "copy"
   | "paste"
+  | "undo"
+  | "redo"
   | "trash"
   | "project"
   | "play"
@@ -80,6 +82,18 @@ const STROKE: Record<string, React.ReactNode> = {
     <>
       <rect x="5" y="4" width="14" height="17" rx="2" />
       <path d="M9 4a3 3 0 0 1 6 0M8.5 10h7M8.5 14h7M8.5 18h4" />
+    </>
+  ),
+  undo: (
+    <>
+      <path d="M9 14L4 9l5-5" />
+      <path d="M4 9h10a6 6 0 0 1 0 12h-3" />
+    </>
+  ),
+  redo: (
+    <>
+      <path d="M15 14l5-5-5-5" />
+      <path d="M20 9H10a6 6 0 0 0 0 12h3" />
     </>
   ),
   trash: (
