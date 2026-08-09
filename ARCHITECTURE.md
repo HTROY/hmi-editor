@@ -1,516 +1,403 @@
-﻿# HMI Editor — 轨道交通人机界面组态编辑器
+# HMI Editor 系统架构
 
-## 项目概述
+本文档描述 HMI Editor 的整体架构：前端组态编辑器、Rust/WASM I/O 采集后端、管理 Web UI 三部分的模块划分、核心机制、数据流与关键设计决策。领域术语以 [CONTEXT.md](CONTEXT.md) 为准，已接受的架构决策见 [docs/adr](docs/adr/)。
 
-基于 **React 19 + TypeScript + Vite** 构建的轨道交通 ISCS（综合监控系统）人机界面组态编辑器。支持拖拽式图元组态、实时数据绑定、IEC 104 协议仿真、报警管理、历史趋势、权限审计、脚本引擎和报表生成等完整功能。
+## 1. 系统总览
 
-**技术栈：** React 19 · TypeScript 5.7 · Zustand 5 · Vite 6 · HTML5 Canvas
+系统由三个可独立部署/启动的组件组成：
 
----
-
-## 一、项目架构
-
-```
-src/
-├── main.tsx                     # 应用入口
-├── App.tsx                      # 主布局（左侧图元库 + 中间画布 + 右侧面板）
-├── App.css                      # 全局样式
-├── store/
-│   └── editorStore.ts           # Zustand 全局状态（核心调度中心）
-├── core/                        # 核心引擎层（纯逻辑，不依赖 React）
-│   ├── types.ts                 # 全局类型定义
-│   ├── shapes/                  # 图元系统
-│   │   ├── ShapeBase.ts         # 图元抽象基类
-│   │   ├── RectShape.ts         # 矩形图元
-│   │   ├── CircleShape.ts       # 圆形/椭圆图元
-│   │   ├── LineShape.ts         # 直线图元
-│   │   ├── TextShape.ts         # 文本图元
-│   │   ├── index.ts             # 图元工厂（createShape）
-│   │   └── metro/               # 轨道交通专用图元
-│   │       ├── MetroBreaker.ts  # 断路器
-│   │       ├── MetroBusBar.ts   # 母线
-│   │       ├── MetroTransformer.ts # 变压器
-│   │       ├── MetroFan.ts      # 风机（动画图元）
-│   │       ├── MetroSignal.ts   # 信号灯
-│   │       └── MetroGauge.ts    # 指针式仪表
-│   ├── scene/                   # 场景管理
-│   │   ├── SceneGraph.ts        # 场景图（图元增删查 / zIndex 排序）
-│   │   └── Renderer.ts          # Canvas 渲染器
-│   ├── variables/               # 变量/点表管理
-│   │   ├── VariableManager.ts   # 变量管理器（定义 + 运行时值 + 模拟）
-│   │   └── types.ts             # 变量类型（AI/DI/AO/DO）
-│   ├── bindings/                # 数据绑定引擎
-│   │   ├── BindingEngine.ts     # 变量→图元属性绑定 + 值映射
-│   │   └── AnimationEngine.ts   # requestAnimationFrame 动画驱动
-│   ├── io/                      # 数据 I/O 层
-│   │   ├── DataSource.ts        # 数据源抽象基类
-│   │   ├── DataBridge.ts        # 数据源→变量管理器桥接
-│   │   ├── IEC104Simulator.ts   # IEC 60870-5-104 协议模拟器
-│   │   ├── WebSocketClient.ts   # WebSocket 实时数据客户端
-│   │   └── types.ts             # I/O 类型定义
-│   ├── serialization/           # 序列化
-│   │   └── Serializer.ts        # 场景→JSON 序列化/反序列化
-│   ├── project/                 # 工程管理
-│   │   ├── ProjectManager.ts    # 多页面 / 导入导出 / 最近文件
-│   │   └── types.ts             # 工程类型定义
-│   ├── alarm/                   # 报警系统
-│   │   ├── AlarmManager.ts      # 报警定义 + 评估 + SOE
-│   │   └── types.ts             # 报警类型定义
-│   ├── historian/               # 历史数据记录
-│   │   ├── Historian.ts         # 周期采样 / 查询 / 降采样
-│   │   └── types.ts             # 历史数据类型
-│   ├── auth/                    # 权限与审计
-│   │   ├── AuthManager.ts       # 用户管理 + RBAC + 审计日志
-│   │   └── types.ts             # 权限类型定义
-│   ├── script/                  # 脚本引擎
-│   │   ├── ScriptEngine.ts      # 沙箱化脚本执行
-│   │   └── types.ts             # 脚本类型定义
-│   └── report/                  # 报表引擎
-│       ├── ReportEngine.ts      # 报表生成 / CSV/HTML 导出
-│       └── types.ts             # 报表类型定义
-└── editor/                      # 编辑器 UI 层（React 组件）
-    ├── canvas/
-    │   └── EditorCanvas.tsx     # 主画布（鼠标交互 / 键盘事件）
-    ├── toolbar/
-    │   ├── Toolbar.tsx          # 顶部工具栏
-    │   └── ProjectToolbar.tsx   # 工程操作工具栏
-    └── panels/
-        ├── ShapeLibrary.tsx     # 图元库面板
-        ├── PropertyPanel.tsx    # 属性编辑面板
-        ├── BindingPanel.tsx     # 变量绑定面板
-        ├── VariablePanel.tsx    # 点表管理面板
-        ├── ConnectionPanel.tsx  # 数据源连接面板
-        ├── PagePanel.tsx        # 页面管理面板
-        └── alarm/               # 报警相关面板
-        │   ├── AlarmPanel.tsx   # 报警列表面板
-        │   ├── TrendPanel.tsx   # 趋势图面板
-        │   ├── TrendChart.tsx   # 趋势图表组件
-        │   └── AuthPanel.tsx    # 权限管理面板
-        └── script/              # 脚本相关面板
-            ├── ScriptPanel.tsx  # 脚本编辑面板
-            └── ReportPanel.tsx  # 报表生成面板
+```mermaid
+flowchart LR
+    Editor["组态编辑器<br/>React 19 + Canvas<br/>:5173 (dev)"]
+    WebUI["管理 Web UI<br/>React 18 + AntD + ECharts<br/>:8081"]
+    Backend["I/O 采集后端<br/>Rust + wasmtime + axum + SQLite<br/>WS :8080 / Web :8081"]
+    Plugins["WASM 协议插件<br/>modbus_tcp / opc_ua / iec104"]
+    Devices["现场设备 / 协议仿真器<br/>Modbus :502 · OPC UA :4840 · IEC104 :2404"]
+    Editor -->|"WebSocket JSON"| Backend
+    Editor -->|"REST /api（登录/工程/报警）"| Backend
+    WebUI -->|"REST /api"| Backend
+    Backend -->|"wasm32-wasip2 组件"| Plugins
+    Plugins -->|"TCP"| Devices
 ```
 
----
+**组态编辑器（`src/`）**：离线优先的 HMI 画面配置工具。核心逻辑全部放在 `src/core/`（不依赖 React），React 组件只负责交互与展示；Zustand store 是唯一状态中枢。
 
-## 二、核心功能原理详解
+**I/O 采集后端（`io-backend/`）**：负责协议接入、点位缩放、实时推送、报警/SOE、主备冗余、工程与用户管理。协议接入采用 WASM 插件（WASIp2 组件），由 wasmtime 47 宿主加载，插件与宿主之间以 `hmi-plugin.wit` 契约为界。
 
-### 2.1 全局状态管理 (`editorStore.ts`)
+**管理 Web UI（`io-backend/web-ui/`）**：后端自带的管理控制台，构建产物由后端 :8081 直接托管（SPA fallback），用于插件/点位/监控/报警/冗余的集中配置与监视。
 
-**原理：** 使用 Zustand 创建全局 store，在初始化时实例化所有核心引擎单例，并将它们注入到 store 中作为闭包变量。所有 React 组件通过 `useEditorStore(selector)` 订阅状态切片。
-
-**关键设计：**
-
-- Store 创建时一次性初始化 `SceneGraph`、`VariableManager`、`BindingEngine` 等全部子系统
-- 各子系统之间通过构造函数注入或 setter 方法建立引用关系
-- 模拟启动/停止操作是原子性的：`toggleSimulation()` 同时控制变量模拟、绑定引擎、动画引擎、报警、历史记录、脚本引擎的启停
-
-```typescript
-// 核心引擎初始化链路
-const scene = new SceneGraph();
-const varManager = new VariableManager();
-const bindingEngine = new BindingEngine(scene, varManager); // 引用注入
-const animEngine = new AnimationEngine(scene);
-const dataBridge = new DataBridge(varManager);
-// ...更多引擎
-```
-
----
-
-### 2.2 图元系统 (`core/shapes/`)
-
-**架构模式：** 抽象基类 + 多态 + 工厂模式
-
-#### ShapeBase 基类
-
-所有图元继承自抽象基类 `ShapeBase`，定义了通用属性（位置、尺寸、样式、绑定、动画、事件）和三个抽象方法：
-
-| 抽象方法         | 说明                                 |
-| ---------------- | ------------------------------------ |
-| `hitTest(point)` | 碰撞检测——判断鼠标点击是否命中该图元 |
-| `render(ctx)`    | Canvas 2D 渲染——绘制图元             |
-| `clone()`        | 深拷贝——用于复制粘贴                 |
-
-**包围盒 (BoundingBox) 原理：** 基类默认返回图元矩形范围，子类（如 LineShape）可按需重写为线段的实际包围盒。
-
-**碰撞检测原理：** 各图元通过逆旋转矩阵将鼠标坐标变换到图元本地坐标系后进行几何判断。例如：
-
-- `RectShape`：判断本地坐标是否在 [0,w] × [0,h] 内
-- `CircleShape`：椭圆方程 `(x/rx)² + (y/ry)² ≤ 1`
-- `LineShape`：点到线段的最短距离 < 线宽/2 + 4px 容差
-
-#### 图元工厂 (`createShape`)
-
-根据 `ShapeType` 字符串创建对应图元实例，支持 4 种基本图元 + 6 种地铁专用图元。
-
-#### 轨道交通专用图元
-
-| 图元       | 类                 | 功能特点                                                            |
-| ---------- | ------------------ | ------------------------------------------------------------------- |
-| **断路器** | `MetroBreaker`     | 分/合/跳三种状态，颜色状态映射，可视化 × 符号                       |
-| **母线**   | `MetroBusBar`      | 电压等级颜色编码（35kV橙/10kV红/400V绿/DC1500V紫等），带电/失电状态 |
-| **变压器** | `MetroTransformer` | 三圈同心圆符号，一次侧/二次侧/容量标注                              |
-| **风机**   | `MetroFan`         | 4叶片旋转动画，转速百分比驱动，由 AnimationEngine 通过 RAF 驱动     |
-| **信号灯** | `MetroSignal`      | 5色状态（红/绿/黄/蓝/灰），径向渐变 LED 效果，闪烁支持，发光阴影    |
-| **仪表**   | `MetroGauge`       | 指针式仪表，绿→黄→红三段彩色弧，刻度标尺，动态指针角度计算          |
-
----
-
-### 2.3 场景管理 (`core/scene/`)
-
-#### SceneGraph（场景图）
-
-**数据结构：** `Map<string, ShapeBase>` 存储所有图元，同时维护 zIndex 排序的缓存数组。
-
-**设计要点：**
-
-- 采用脏标记（dirty flag）模式：增删图元时标记 `dirty = true`，获取列表时按需排序
-- `hitTest()` 从 zIndex 高到低反向遍历，确保上层图元优先命中
-- 支持区域查询 `getInRect()`（框选功能预留）
-
-#### Renderer（渲染器）
-
-**原理：**
-
-1. 绑定 HTML5 Canvas 元素和 SceneGraph 实例
-2. `render()` 执行全量重绘：清空 → 绘制网格背景 → 遍历所有图元调用 `shape.render(ctx)` → 绘制选中状态的包围框和 8 个控制手柄
-3. 选中边框使用蓝色虚线 + 白色实体手柄（8 个：4 角 + 4 边中点）
-4. `resize()` 响应容器尺寸变化重新设置 Canvas 物理尺寸
-
----
-
-### 2.4 变量/点表系统 (`core/variables/`)
-
-**概念：** "变量"即轨道交通 ISCS 中的"点"（Tag），分为四类：
-
-| 类型 | 含义       | 值域                     |
-| ---- | ---------- | ------------------------ |
-| AI   | 模拟量输入 | 浮点数（如电流 1200.5A） |
-| DI   | 数字量输入 | 0 或 1                   |
-| AO   | 模拟量输出 | 浮点数                   |
-| DO   | 数字量输出 | 0 或 1                   |
-
-#### VariableManager 原理
-
-1. **定义层 (`defs: Map`)**：存储变量的元数据（ID、名称、类型、协议地址、量程、报警限等）
-2. **运行时层 (`values: Map`)**：存储变量当前值、数据质量、时间戳
-3. **发布/订阅机制**：
-   - `subscribe(id, callback)` — 订阅单个变量变化
-   - `subscribeAll(callback)` — 订阅所有变量变化
-   - `setValue()` 触发通知 → 所有订阅者收到 `(variableId, VariableValue)` 回调
-4. **模拟数据生成**：
-   - DI/DO：随机跳变（概率切换）
-   - AI：正弦波基值 + 随机波动，限制在量程 [min, max] 内
-   - 周期可配置（默认 800ms）
-
----
-
-### 2.5 数据绑定引擎 (`core/bindings/`)
-
-#### BindingEngine 原理
-
-**核心流程：** 变量变化 → 反向索引查询 → 值映射 → 更新图元属性 → 触发重绘
+## 2. 仓库结构
 
 ```
-┌─────────────────┐     subscribeAll     ┌──────────────────┐
-│ VariableManager │ ──────────────────→  │  BindingEngine   │
-│  (变量值变化)    │                      │  (收到通知)       │
-└─────────────────┘                      └────────┬─────────┘
-                                                   │
-                                          ┌────────▼─────────┐
-                                          │  反向索引查询      │
-                                          │  index: Map<      │
-                                          │   varId → [{      │
-                                          │    shapeId,       │
-                                          │    binding        │
-                                          │  }]              │
-                                          └────────┬─────────┘
-                                                   │
-                                          ┌────────▼─────────┐
-                                          │  applyMapping()   │
-                                          │  值映射转换        │
-                                          └────────┬─────────┘
-                                                   │
-                                          ┌────────▼─────────┐
-                                          │ shape.targetProp  │
-                                          │ = mappedValue     │
-                                          │ renderer.render() │
-                                          └──────────────────┘
+src/                              # 组态编辑器
+├── core/                         # 框架无关核心引擎
+│   ├── shapes/                   # 图元：基础图元 + 组/图片 + 地铁专用图元 + 图元库
+│   ├── scene/                    # SceneGraph / Renderer / 缩放 / 动画几何
+│   ├── view/                     # Viewport（缩放平移）/ 页面分辨率
+│   ├── history/                  # 命令历史（撤销/重做）
+│   ├── inspector/                # 图元树 / 换序 / 成组
+│   ├── serialization/            # 场景序列化
+│   ├── variables/                # 变量（点）定义与运行时值
+│   ├── bindings/                 # 绑定引擎 / 动画引擎 / 值映射
+│   ├── io/                       # DataBridge / WebSocketClient / IEC104 模拟
+│   ├── settings/                 # 连接配置持久化
+│   ├── project/                  # 工程 / 工程包 / 远程同步 / 备份 / 升级
+│   ├── autosave/                 # IndexedDB 自动保存
+│   ├── alarm/                    # 报警与 SOE（remote + local 降级）
+│   ├── historian/                # 历史采样与降采样查询
+│   ├── auth/                     # 本地 RBAC + 远端 JWT 客户端
+│   ├── script/                   # 沙箱脚本引擎
+│   ├── report/                   # 报表引擎
+│   ├── svg/                      # SVG 导入（转换/变换/XML）
+│   └── raster/                   # 栅格图导入
+├── editor/                       # React 组件（画布/工具栏/检查器/面板/对话框）
+└── store/editorStore.ts          # Zustand 状态中枢
+
+io-backend/                       # Rust/WASM I/O 后端（Cargo workspace）
+├── wit/hmi-plugin.wit            # WASM 插件契约（单一来源）
+├── crates/
+│   ├── bin/                      # hmi-io-backend 可执行文件（装配层）
+│   ├── config/                   # hmi-io-config：YAML/DB 配置模型与校验
+│   ├── db/                       # hmi-io-db：SQLite schema、迁移、Repo
+│   ├── point/                    # hmi-io-point：PointManager + 节点级冗余引擎
+│   ├── plugin/                   # hmi-io-plugin：wasmtime 宿主、插件注册表
+│   ├── bridge/                   # hmi-io-bridge：点流 → 批量广播
+│   ├── monitor/                  # hmi-io-monitor：状态/点位/报文采集
+│   ├── server/                   # hmi-io-server：WebSocket 服务
+│   ├── web/                      # hmi-io-web：REST API + SPA 托管
+│   ├── alarm/                    # hmi-io-alarm：报警/SOE 引擎与持久化
+│   ├── auth/                     # hmi-io-auth：JWT + Argon2id + 权限
+│   ├── project/                  # hmi-io-project：工程包磁盘存储
+│   ├── plugins/                  # WASM 插件 guest：modbus-tcp / opc-ua / iec104
+│   ├── shared/                   # 共享协议 codec：iec104-core / ua-core
+│   └── test-servers/             # iec104-slave(:2404) / opcua-server(:4840)
+├── plugins/                      # 编译产物 *.wasm
+├── web-ui/                       # 管理 Web UI（React/Vite/AntD）
+└── config.yaml                   # 默认配置（首启迁移进 hmi_io.db）
 ```
 
-**值映射策略（5种）：**
+## 3. 组态编辑器架构
 
-| 映射类型     | 原理                | 示例                        |
-| ------------ | ------------------- | --------------------------- |
-| `direct`     | 原值直接传递        | AI 值 400 → `fill` = 400    |
-| `enum`       | DI 0/1 → 字符串查表 | 0→"#808080", 1→"#00FF00"    |
-| `range`      | 线性插值映射        | [0,2000]A → [0,360]°旋转角  |
-| `stateColor` | 数值→十六进制颜色   | 65280 → "#00FF00"           |
-| `bitmask`    | 按位解析多状态      | bit0+bit2 → ["运行","报警"] |
+### 3.1 分层与状态中枢
 
-**反向索引机制：** `rebuildIndex()` 遍历场景中所有图元的 bindings 数组，构建 `variableId → [{shapeId, binding}]` 的映射，实现 O(1) 查找受影响的图元。
+编辑器采用"引擎层（core）— 状态层（store）— 展示层（editor）"三层结构：
 
-#### AnimationEngine 原理
+- `src/core/` 是纯 TypeScript 引擎集合，不 import React，便于单元测试与复用。
+- `src/store/editorStore.ts` 是 Zustand 全局 store，启动时一次性实例化全部引擎（`SceneGraph`、`VariableManager`、`BindingEngine`、`AnimationEngine`、`DataBridge`、`ProjectManager`、`AlarmManager`、`Historian`、`AuthManager`、`ScriptEngine`、`ReportEngine` 等），并暴露订阅切片与操作函数。
+- `src/editor/` 只消费 store：左侧多 Tab 面板（图元库/点表/连接/页面/报警/趋势/权限/脚本/报表）、中间画布、右侧统一检查器、顶部工具栏与状态栏。
 
-- 基于 `requestAnimationFrame` 的连续动画循环
-- 逐帧遍历场景图元，检查 `MetroFan.running === true`
-- 调用 `MetroFan.updateAnimation(deltaMs)`，根据时间增量更新旋转角度
-- 转速百分比 (`speedPercent`) 影响旋转速度因子
-
----
-
-### 2.6 数据 I/O 层 (`core/io/`)
-
-**分层架构：**
+主要 UI 布局：
 
 ```
-┌─────────────────────────────────────────────┐
-│              DataBridge (桥接层)              │
-│  统一管理数据源生命周期，路由数据到 VariableManager │
-├─────────────────────────────────────────────┤
-│   DataSource (抽象基类)                        │
-│   - connect() / disconnect() / send()       │
-│   - 发布/订阅回调管理                          │
-├──────────────┬──────────────────────────────┤
-│ IEC104Sim    │  WebSocketClient             │
-│ (协议模拟器)   │  (实时数据客户端)               │
-└──────────────┴──────────────────────────────┘
+┌──────────┬─────────────────────┬──────────────────────┐
+│ 图元库    │                     │ 图元树（z 序、组层级）  │
+│ 点表      │     画布            ├──────────────────────┤
+│ 连接      │  （Canvas 渲染）    │ 属性 / 绑定 / 动画     │
+│ 页面/报警  │                     │                      │
+│ 趋势/权限  │                     │                      │
+│ 脚本/报表  │                     │                      │
+└──────────┴─────────────────────┴──────────────────────┘
 ```
 
-#### IEC104Simulator 原理
+### 3.2 图元系统
 
-- 模拟 IEC 60870-5-104 协议的周期性数据扫描
-- 内置地铁典型数据点模板（20+ 个点覆盖供电/BAS/信号/FAS 子系统）
-- 正弦波发生器：`center + amp × sin(t/period × 2π)` 模拟模拟量波动
-- 随机跳变：DI 状态约 2-7 秒随机翻转
-- 可配置扫描周期、网络延迟、丢包率
-- 通过 `emitData()` 将数据点推送到 DataBridge → VariableManager
+所有图元继承 `ShapeBase`，实现 `render(ctx)`、`hitTest(point)`、`clone()`/`fromJSON()`/`toJSON()`。工厂 `createShape(type, props)` 按类型创建实例，当前支持 15 种：
 
-#### WebSocketClient 原理
+| 类别 | 类型 |
+| --- | --- |
+| 基础图元 | rect、circle、line、text、polyline、polygon、path |
+| 容器/资源 | group、image |
+| 轨道交通专用 | metro-breaker、metro-busbar、metro-fan、metro-signal、metro-gauge、metro-transformer |
 
-- 标准 WebSocket 客户端，连接后端实时数据服务
-- 支持自动重连（指数退避预留）+ 心跳保活机制
-- 消息解析支持多种格式（`{data:[...]}` 批量格式 + 单点格式 + 按行 JSON）
-- 支持订阅/控制命令发送
+关键机制：
 
----
+- **组（GroupShape）**：子图元坐标相对组原点，整体移动/缩放/旋转保持相对布局；画布命中与变换以组为原子单位。
+- **图元库**：工程级 `ProjectData.library` 数据，条目是任意单个图元（含组）的序列化定义；放置时深拷贝并重新生成 ID，之后与库项无关；支持覆盖更新与显式重新同步。内置图元只读，自定义图元可放入用户自定义分组。
+- **导入**：SVG 导入器解析 shape/transform/gradient/path 等并转换为原生图元（含组）；栅格导入器把 PNG/JPG 转成 `ImageShape`（data URL 随工程持久化，打包时抽到 assets/）。
+- **检查器/图元树**：右栏顶部按 z 序（最上层优先）递归展示顶层与组内子图元；组内子图元只能在树中选中编辑，画布只画只读高亮；支持同父拖拽换序、可见/锁定、重命名、删除（仅顶层）。
+- **命令历史**：`CommandHistory` 以序列化快照记录新增/删除/属性修改/换序，支持批量命令与子图元路径寻址；撤销/重做作用于 `SceneGraph` 后刷新树与渲染。
 
-### 2.7 工程管理 (`core/project/`)
+### 3.3 场景、画布与视图
 
-#### ProjectManager 原理
+- `SceneGraph` 用 `Map<id, Shape>` 存图元，脏标记延迟排序；命中测试按 zIndex 从高到低反查；支持区域查询（框选）。
+- `Renderer` 绑定 Canvas，绘制网格背景 → 图元 → 选中包围框与 8 个手柄；`resize`/`scaling` 模块处理物理像素与图元缩放（文字等特殊图元按角点规则缩放）。
+- `Viewport` 管理编辑视图变换（zoom 10%–800%、pan、锚点缩放、适配页面），只影响显示，不改图元坐标；每个页面的视图状态随自动保存持久化。
+- 页面拥有独立分辨率（逻辑宽高）与背景色；`EditorCanvas` 支持选择/框选/拖拽、工具创建、缩放平移、吸附（snap）、键盘快捷键（Delete、Ctrl+C/V、Ctrl+G 成组、Ctrl+Shift+G 取消成组、Ctrl+Z/Y 等）。
 
-- **多页面管理**：`Map<pageId, PageMeta>` + `Map<pageId, SceneGraph>`
-- **页面切换**：`switchPage()` 将当前场景序列化存入旧页面 → 加载新页面场景 → 重建绑定索引
-- **工程序列化**：`exportProject()` 将 ProjectMeta + 所有页面的图元 JSON 组装为 `ProjectData`，通过 `JSON.stringify` 导出为 `.hmi.json` 文件
-- **工程导入**：`fromJSON()` 逆向还原所有页面和图元
-- **脏标记**：通过 `dirty` 属性 + 观察者模式跟踪未保存修改
-- **最近文件**：存储在 `localStorage`，最多 10 条
+### 3.4 变量、绑定与动画
 
----
+**变量（点表）**：四类 `AI/DI/AO/DO`；`VariableManager` 保存定义（量程、单位、报警限等）与运行时值（数值、质量、时间戳），提供单点与全量订阅。模拟模式下生成正弦波 + 随机跳变。
 
-### 2.8 报警系统 (`core/alarm/`)
+**绑定引擎**：订阅所有变量变化 → 反向索引（`variableId → [{shapeId, binding}]`）→ 值映射 → 写图元属性 → 触发重绘。映射策略：
 
-#### AlarmManager 原理
+| 映射 | 行为 |
+| --- | --- |
+| `direct` | 原值直传 |
+| `enum` | 值 → 字符串查表 |
+| `range` | 线性插值（如 0–2000A → 0–360°） |
+| `stateColor` | 数值 → 颜色 |
+| `bitmask` | 按位解析多状态 |
 
-**报警评估流程：**
+数值型绑定属性支持平滑过渡（默认 300ms ease-out）。
 
-```
-VariableManager.setValue()
-       │
-       ▼
-subscribeAll 回调
-       │
-       ▼
-┌──────────────────────┐
-│ 遍历所有 AlarmDef     │
-│ 检查 variableId 匹配   │
-│ 评估 condition 条件    │
-└──────┬───────────────┘
-       │
-   ┌───▼────┐
-   │触发?    │
-   └───┬────┘
-   Yes │        No
-  ┌────▼────┐  ┌────▼────┐
-  │生成告警  │  │检查是否  │
-  │事件      │  │需恢复    │
-  └─────────┘  └─────────┘
-```
+**动画引擎**：基于 `requestAnimationFrame` 驱动五种动画（blink/rotate/move/scale/colorShift），可绑定变量控制 `speed`/`strength`/`enabled`；地铁风机等图元还保留自身的旋转动画机制。
 
-**告警条件评估：**
+### 3.5 数据 I/O 与连接
 
-| 条件       | 逻辑                  |
-| ---------- | --------------------- |
-| `high`     | `value > threshold`   |
-| `low`      | `value < threshold`   |
-| `equal`    | `value === threshold` |
-| `notEqual` | `value !== threshold` |
-| `change`   | 任何变化都触发        |
+`DataBridge` 统一管理数据源生命周期并把数据路由到 `VariableManager`，活跃源类型为 `simulation | iec104 | websocket | io_backend`：
 
-**告警状态机：** `active → acknowledged → recovered`
+- **模拟**：VariableManager 内置周期模拟。
+- **IEC 104 模拟器**：内置地铁典型点位模板与正弦/随机波形，可配置扫描周期、延迟、丢包。
+- **IO 后端（WebSocket）**：`WebSocketClient` 支持 `urls: string[]`（主在前），断线按序快速轮询重连、30s 心跳；连接面板可同时配置主备 WS 地址与主备 REST API 地址。
 
-**SOE（事件顺序记录）：** 每次变量变化都写入 SOE 缓冲（最多 10000 条），支持时间范围查询，用于事后事故追溯分析。
+WebSocket 消息协议（与后端对齐）：
 
-**预置告警：** 5 条典型告警规则（过流、欠压、过压、风机停机、高温）
+| 方向 | type | 说明 |
+| --- | --- | --- |
+| 服务端 → 客户端 | `snapshot` | 连接后全量点值 |
+| 服务端 → 客户端 | `data` | 批量点值变化（默认 100ms 一批） |
+| 服务端 → 客户端 | `config_change` | 点表在管理端变更，前端刷新变量列表 |
+| 服务端 → 客户端 | `alarm_rules` / `alarm_snapshot` | 报警规则与活跃报警初始态 |
+| 服务端 → 客户端 | `alarm_update` / `soe` | 报警事件与 SOE 增量 |
+| 服务端 → 客户端 | `alarm_rules_changed` | 规则变化通知 |
+| 服务端 → 客户端 | `role` | 冗余降级广播（standby）后服务端断开全部 WS |
+| 客户端 → 服务端 | `subscribe` | 按变量 ID 订阅过滤 |
+| 客户端 → 服务端 | `control` | 控制写点 `{variableId, value}` |
 
----
+`DataBridge` 维护内部变量 ID ↔ 后端点 ID 的映射，并把最近收到的点值缓存用于导入点表后重放，避免快照早于变量定义到达导致丢值。
 
-### 2.9 历史数据记录 (`core/historian/`)
+### 3.6 工程管理
 
-#### Historian 原理
+工程采用"本地优先 + 后端同步"：
 
-- **周期采样**：`setInterval` 每 2 秒从 VariableManager 获取指定变量的当前值
-- **环形缓冲**：最多存储 50000 个数据点，超出时丢弃最旧数据
-- **降采样查询**：`query()` 返回数据点超过 `maxPoints` 时均匀跳过，保证趋势图渲染性能
-- **趋势配置**：根据变量的量程和单位自动生成 Y 轴范围建议
+- **自动保存**：停止编辑约 1s 后防抖写入 IndexedDB 快照（含页面、图元、图元库、页面视图状态），启动时自动恢复；页面切换/关闭前 flush。
+- **草稿备份**：定期把快照写入 IndexedDB 草稿存储，损坏或误操作时可回滚。
+- **工程包**：`.hmi.zip` = `manifest.json`（schemaVersion=1 + 资源清单）+ `assets/`；图片 data URL 抽为 `asset://<id>` 引用，导入时还原。旧 `.hmi.json` 导入时按版本升级并归一化旧字段。
+- **远程同步**：经 `RemoteAuthClient`（JWT）调用后端 `/api/projects`；推送使用 `?version=` 乐观锁，冲突返回 409；同步为显式操作（登录/远程工程列表/推送/拉取对话框），并处理会话过期、断线超时与大型压缩包阻塞问题。
 
----
+### 3.7 报警与 SOE
 
-### 2.10 权限与审计 (`core/auth/`)
+前端 `AlarmManager` 有两种模式：
 
-#### AuthManager 原理
+- **remote（默认连接后端）**：消费 WS 推送（规则、快照、更新、SOE），查询/确认走 REST；后端 Active 节点是唯一事实来源。
+- **local（仿真降级）**：未连接后端时用同一语义的本地引擎计算（条件、滞回、确认延时、质量保持、SOE），UI 必须标注"模拟"。
 
-**RBAC 角色权限模型：**
+### 3.8 历史 / 脚本 / 报表 / 权限
 
-| 角色     | 权限                                               |
-| -------- | -------------------------------------------------- |
-| admin    | `*`（全部权限）                                    |
-| engineer | view, edit, export, import, configure, acknowledge |
-| operator | view, control, acknowledge                         |
-| viewer   | view（只读）                                       |
+- `Historian`：周期采样（默认 2s）进环形缓冲，查询时降采样保证趋势渲染性能。
+- `ScriptEngine`：`new Function("sandbox", code)` 受限沙箱，提供 `getVar/setVar/log/now/sleep/Math/JSON` API，支持 startup/cycle/manual 触发（自动控制风机等闭环示例）。
+- `ReportEngine`：从历史数据生成 CSV/HTML 报表并触发下载。
+- `AuthManager`：本地 RBAC（admin/engineer/operator/viewer）+ 审计日志；连接后端后由 `RemoteAuthClient` 完成登录、令牌刷新与远程工程授权。
 
-- 预置 4 个用户账户
-- 权限检查：`requirePermission()` 在拒绝访问时自动记录审计日志
-- 审计日志：记录所有登录/登出/操作/拒绝事件，最多 5000 条
+## 4. I/O 采集后端架构
 
----
+### 4.1 Crate 职责
 
-### 2.11 脚本引擎 (`core/script/`)
+| Crate | 职责 |
+| --- | --- |
+| `bin` | 装配层：读配置/迁移 DB、构造全部组件、启动 WS/Web 服务与后台任务 |
+| `config` | 配置模型（server/plugins/alarm/redundancy）与校验 |
+| `db` | SQLite schema、幂等迁移、Repo 数据访问 |
+| `point` | PointManager（点位缓存/缩放/组门控）+ 节点级冗余引擎 |
+| `plugin` | wasmtime 组件宿主（host.rs）、契约生成（interface.rs）、插件注册表与实例监督器（registry.rs） |
+| `bridge` | 插件点流 → PointManager → 批量 WS 广播 + 报警引擎喂入 |
+| `monitor` | 插件状态、点值、报文追踪与 1s 趋势采样 |
+| `server` | WebSocket 服务（快照/订阅/过滤/控制/降级断开） |
+| `web` | REST API、认证路由、工程路由、SPA 托管 |
+| `alarm` | 报警/SOE 状态机、规则管理、持久化广播任务 |
+| `auth` | JWT、Argon2id、角色权限矩阵 |
+| `project` | `.hmi.zip` 磁盘存储、版本乐观锁、审计 |
+| `plugins/*` | Modbus TCP / OPC UA / IEC 104 插件 guest |
+| `shared/*` | 共享协议编解码（iec104-core、ua-core） |
+| `test-servers/*` | IEC 104 从站与 OPC UA 服务器（E2E 用） |
 
-#### ScriptEngine 原理
+### 4.2 启动流程
 
-**设计：** 使用 `new Function("sandbox", code)` 构造器在受限沙箱中执行用户 JavaScript 代码。
+`cargo run -- config.yaml` 的装配顺序：
 
-**沙箱 API (`ScriptSandbox`)：**
+1. 打开 SQLite `hmi_io.db`，幂等迁移；首次把 `config.yaml` 写入 DB（此后配置以 DB 为准）。
+2. 种子 `admin` 用户（随机 16 位密码打印在日志，强制改密）；初始化 `AuthService`（`HMI_JWT_SECRET` 或持久化 secret）。
+3. 加载报警规则与未恢复报警，构造 `AlarmEngine` + 持久化任务。
+4. 构造 `PluginRegistry`、`PointManager`、`Bridge`（batch 广播）、`MonitorCollector`。
+5. 构造 `RedundancyEngine`，探测对端并决定初始角色：Active 立即启动插件实例；Standby 只 prepare（记录插件目录与配置缓存、重建实例组），插件延迟到升主后启动。
+6. 启动实例级监督器、报警 tick（100ms）、保留数据清理（1h）、趋势采样（1s）、WS 服务（:8080）与 Web 服务（:8081）。
 
-```typescript
-{
-  getVar(id); // 读取变量值
-  setVar(id, v); // 写入变量值
-  log(...args); // 输出日志
-  warn(...args); // 告警日志
-  now(); // 当前时间戳
-  sleep(ms); // 异步等待
-  Math; // 标准数学库
-  JSON; // JSON 序列化
-}
-```
+### 4.3 WASM 插件系统
 
-**触发方式：**
+契约 `io-backend/wit/hmi-plugin.wit`（package `hmi:plugin`）是宿主与 guest 共享的单一来源：
 
-| 触发类型         | 说明                     |
-| ---------------- | ------------------------ |
-| `startup`        | 引擎启动时执行一次       |
-| `cycle`          | 按 `intervalMs` 周期执行 |
-| `manual`         | 手动触发                 |
-| `variableChange` | 变量变化时执行（预留）   |
+- 插件导出（async）：`init(config-json)`、`connect()`、`disconnect()`、`scan-points()`、`write-point(name, value)`、`get-name()`、`get-status()`。
+- 插件导入（async）：`log(level, message)`、`on-point(name, value, quality, timestamp)`、`on-packet(direction, protocol, hex, summary)`。
 
-**预置脚本示例：**
+宿主实现要点：
 
-- 周期打印变量：每 5 秒输出变量值
-- 自动控制风机：温度 > 28℃ 时自动开启风机（闭环控制）
+- wasmtime 组件 API：`bindgen!` + `Component::instantiate_async`，导出通过 `run_concurrent` 调用。
+- `WasiCtx` 必须 `.inherit_network()` 并 `concurrency_support(true)`，否则插件 TCP 连接被拒绝。
+- 插件事件（log/on-point/on-packet）以 `events::HostWithStore` 实现：`on_point` 拼上实例名前缀后经 mpsc 送 Bridge，`on_packet` 送 MonitorCollector。
+- `registry` 为每个实例维护 actor：周期 `scan-points`、写点命令、状态查询、`scan-points` 返回非零时自动重连（限速 5s 一次）；插件 `connect()` 必须可重入（清 socket/计数、保留点位、失败路径置 connected=false）。
+- 实例级冗余监督器按扫描周期检查活跃成员健康（connected 且扫描新鲜），连续失败达到阈值并过冷却后按 priority 切换活跃成员，回切时先探测 primary。
 
----
+三个协议插件：
 
-### 2.12 报表引擎 (`core/report/`)
+| 插件 | 实现 |
+| --- | --- |
+| modbus-tcp | 基于 `modbus` crate v1.1，bool 走线圈、16 位单寄存器、32 位连续双寄存器按 `byte_order` 组字；解码后应用 `scale`/`offset` |
+| opc-ua | 自建 UA TCP 栈（复用 `ua-core`）：HEL/ACK → OPN → CreateSession → ActivateSession（匿名或用户/密码）；每扫描批量 ReadRequest 直到 ReadResponse；控制走 WriteRequest；断开时 CloseSession + CloseSecureChannel |
+| iec104 | 自建 104 栈（复用 `iec104-core`）：connect 发 STARTDT 等 STARTDT_CON（其间回 TESTFR），然后总召唤；`scan-points` 排空缓冲帧并按批回 S 帧，每 120 次重对时 + 总召唤，35s 空闲发 TESTFR，70s 超时断开；命令跟踪 ACT_CON 且 30s 未确认作废 |
 
-#### ReportEngine 原理
+### 4.4 点位数据路径
 
-- 从 Historian 查询历史数据生成报表
-- 默认查询近 24 小时数据，每 5 分钟一个采样点
-- 支持 CSV 和 HTML 表格两种导出格式
-- 通过 `Blob` + `URL.createObjectURL` 触发浏览器下载
-
----
-
-### 2.13 编辑器画布 (`EditorCanvas.tsx`)
-
-**交互流程：**
-
-1. **选择模式 (select)**：点击 hit-test → 命中则选中并可拖拽移动 → 未命中则取消选中
-2. **工具模式 (rect/circle/line/text)**：点击画布 → 在点击位置创建对应图元 → 自动切回选择模式
-3. **拖拽移动**：记录拖拽起点和形状初始位置 → 实时更新 `shape.x/y` → 每帧触发渲染
-4. **键盘快捷键**：
-   - `Delete/Backspace` — 删除选中图元
-   - `Ctrl+C/V` — 复制/粘贴
-   - `Escape` — 取消选中
-
----
-
-## 三、数据流全景图
-
-```
-┌────────────────────────────────────────────────────────────────────┐
-│                         Zustand Store                              │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐  │
-│  │ SceneGraph│  │ VarMgr   │  │ BindEng  │  │ AnimEng          │  │
-│  │ (图元集合) │  │ (变量值)  │  │ (绑定)   │  │ (RAF动画)         │  │
-│  └─────┬─────┘  └────┬─────┘  └────┬─────┘  └────────┬─────────┘  │
-│        │              │             │                  │            │
-│  ┌─────▼─────┐  ┌─────▼─────┐  ┌────▼──────────┐  ┌──▼──────────┐ │
-│  │ Renderer  │  │DataBridge │  │ AlarmManager  │  │ Historian   │ │
-│  │ (Canvas)  │  │ (I/O桥接) │  │ (报警评估)     │  │ (历史采样)   │ │
-│  └───────────┘  └─────┬─────┘  └───────────────┘  └──────┬──────┘ │
-│                        │                                   │        │
-│                  ┌─────▼─────┐                       ┌─────▼──────┐ │
-│                  │IEC104/WS  │                       │ReportEngine│ │
-│                  │(数据源)    │                       │(报表生成)   │ │
-│                  └───────────┘                       └────────────┘ │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐                         │
-│  │ProjectMgr│  │ AuthMgr  │  │ScriptEng │                         │
-│  │(多页面)   │  │(RBAC)    │  │(沙箱脚本) │                         │
-│  └──────────┘  └──────────┘  └──────────┘                         │
-└────────────────────────────────────────────────────────────────────┘
-        ▲                                              │
-        │ 用户交互                                       ▼ Canvas 渲染
-┌───────┴──────────┐                        ┌──────────────────────┐
-│  React 组件层     │                        │    浏览器画面          │
-│ Toolbar/Canvas/  │                        │  (轨道交通监控画面)     │
-│ Panels           │                        └──────────────────────┘
-└──────────────────┘
+```mermaid
+sequenceDiagram
+    participant Plugin as WASM 协议插件
+    participant Host as PluginHost
+    participant Bridge as Bridge
+    participant PM as PointManager
+    participant Alarm as AlarmEngine
+    participant WS as WebSocket 客户端
+    Plugin->>Host: on_point(name, value, quality, ts)
+    Host->>Bridge: PointValue(实例名:变量名)
+    Bridge->>PM: update(raw)
+    alt 实例级组且非活跃成员
+        PM-->>Bridge: 丢弃
+    else 有变化
+        PM-->>Bridge: 缩放后的逻辑点（组名:变量名）
+        Bridge->>Alarm: on_point
+        Bridge->>WS: data 批量消息
+    end
 ```
 
----
+要点：
 
-## 四、关键设计模式
+- 点 ID 规则：普通实例为 `{实例名}:{variable_id}`；实例级冗余组为 `{组名}:{variable_id}`。
+- `PointManager` 只广播当前活跃成员的值；写命令经 `registry.write_point` 路由到活跃实例，前端绑定不受切换影响。
+- Bridge 以 `batch_interval_ms`（默认 100ms）批量广播；无变化不推送。
+- WS 服务端连接即发 `snapshot`（含当前全部值），随后按每连接订阅过滤广播；Standby 节点拒绝新连接，降级时广播 `{"type":"role","state":"standby"}` 并断开全部客户端。
 
-| 模式           | 应用位置                                   | 说明                                                |
-| -------------- | ------------------------------------------ | --------------------------------------------------- |
-| **观察者模式** | VariableManager, AlarmManager, AuthManager | `subscribe`/`subscribeAll` + 回调通知               |
-| **工厂模式**   | `createShape()`                            | 根据类型字符串创建不同图元实例                      |
-| **策略模式**   | BindingEngine 值映射                       | 5 种映射策略 (direct/enum/range/stateColor/bitmask) |
-| **模板方法**   | ShapeBase 抽象基类                         | 定义 `hitTest/render/clone` 抽象方法，子类实现      |
-| **桥接模式**   | DataBridge                                 | 将不同数据源接入统一的 VariableManager              |
-| **脏标记模式** | SceneGraph, ProjectManager                 | 延迟排序，按需计算                                  |
-| **单例模式**   | 所有引擎                                   | 在 Zustand store 初始化时创建唯一实例               |
+### 4.5 节点级冗余（双机热备）
 
----
+`redundancy.enabled: true` 时启用，位于 `crates/point/src/redundancy/`：
 
-## 五、运行方式
+- **静态角色**：`role: primary|backup` + `node_id`；启动时探测对端心跳决定初始状态（主见对端活跃则先 Standby）。
+- **心跳**：复用 Web 端口 `GET /api/redundancy/heartbeat`，携带本机 `state`、`config_version`、`data_healthy`、插件连接数等。
+- **升主**：备机连续 `failover_threshold` 次心跳失败 **且** 对端 WS 端口（`peer_ws_port`）TCP 探测失败时升主；对端心跳正常但上报 `data_healthy=false`（无插件 connected 且最近 3 个扫描周期无成功扫描）连续 `plugin_unhealthy_threshold` 次时也可 claim 接管，受 `plugin_promotion_cooldown_ms` 冷却限制。
+- **同步**：Active 经 Bridge 广播点值，并 `POST /api/redundancy/sync` 推给备机；备机 `PointManager::apply_sync` 直接写缓存（不二次缩放）；按 `full_snapshot_interval_ms` 补全量快照。
+- **回切**：恢复的主机以 Standby 进入，心跳稳定 `failback_delay_ms` 后先探测本机数据就绪（bin 启动插件并轮询连接，最长 8s），成功才 `POST /api/redundancy/claim`；避免双机都不健康时反复横跳。
+- **配置快照**：Active 在插件/点位/冗余配置变更后递增 `config_version` 并 `POST /api/redundancy/config/push`，备机事务性替换本地 DB。
+
+```mermaid
+stateDiagram-v2
+    [*] --> Standby: 启动（backup；或 primary 见对端活跃）
+    Standby --> Active: 心跳丢失+对端WS探测失败 / 对端数据不健康达阈值
+    Active --> Standby: 对端 claim 成功 / 本机回切流程完成
+```
+
+### 4.6 实例级冗余（单机内）
+
+独立于节点级开关：插件实例通过 `redundancy_group` + `redundancy_role(primary|backup)` + `priority` 成组。配置校验要求组内恰好 1 个 primary、backup 的 priority 组内唯一、主备 `variable_id` 集合完全一致。
+
+- 组监督器每扫描周期检查活跃成员（connected 且扫描新鲜），连续 `instance_failover_threshold` 次失败且过 `instance_switch_cooldown_ms` 后按 priority 升序接管（全失败后环形回 primary）。
+- `instance_failback_enabled` 时按 `instance_failback_delay_ms` 探测 primary 并回切。
+- `GET /api/redundancy/instance-groups` 返回组状态；`/api/points` 默认只返回 primary/独立实例点位，`?include_backup=true` 返回全部。
+
+### 4.7 报警与 SOE 引擎
+
+报警权威计算只发生在 Active 节点（`crates/alarm/`）：
+
+- **规则**：`id/variable_id/name/severity/group/condition/threshold/enabled/hysteresis/confirm_ms`，存 `alarm_rules` 表；YAML 首启种子，后续以管理 UI/REST 为唯一写入口。
+- **评估**：Bridge 每次点位变化喂给 `AlarmEngine.on_point`；先记 SOE（变位即记，毫秒精度、含质量、设备时间优先），质量非 `good` 时暂停阈值判定（质量保持）；条件支持 high/low/equal/notEqual/change（change 为瞬时报警）；`confirm_ms > 0` 时先入候选，由 100ms tick 在持续超限后确认触发。
+- **状态**：occurrence 生命周期 active → acknowledged → recovered，未确认的恢复报警单独保留到确认；恢复带滞回。
+- **持久化/广播**：persister 任务写 SQLite（occurrences/stream events/soe）并广播 `alarm_update`/`soe`/`alarm_rules_changed`；每小时按保留天数清理（默认报警 90 天、SOE 30 天）。
+- **启动恢复**：重启/升主时从 DB 恢复活跃与未确认恢复报警，并用当前点值重建判定。
+
+### 4.8 数据库
+
+SQLite（`hmi_io.db`），主要表：
+
+| 表 | 内容 |
+| --- | --- |
+| `server_config` | 键值配置（端口、目录、保留天数、jwt_secret、config_version 等） |
+| `plugins` / `points` | 插件实例与点位映射（含实例级冗余列） |
+| `alarm_rules` / `alarm_occurrences` / `alarm_stream_events` / `soe_events` | 报警与 SOE |
+| `projects` / `project_audit_log` | 工程元数据与审计 |
+| `users` | 用户（Argon2id 哈希、角色、token_version） |
+
+迁移全部幂等（`CREATE TABLE IF NOT EXISTS` + 按 `pragma_table_info` 补列）。
+
+### 4.9 Web API 与管理 UI
+
+后端在 :8081 提供 REST API，并按 SPA fallback 托管 `web-ui/dist`：
+
+| 分组 | 路由 |
+| --- | --- |
+| 插件 | `GET/POST /api/plugins`、`GET/PUT/DELETE /api/plugins/{id}` |
+| 点位 | `GET/POST /api/points`、`PUT/DELETE /api/points/{id}`、Excel 导入导出 `/api/plugins/{id}/import|export`、`GET /api/config/export` |
+| 监控 | `GET /api/monitor/overview`、`/api/monitor/plugins/{name}/status|points|packets`、`/api/monitor/history` |
+| 报警/SOE | `/api/alarm/rules` CRUD、`/api/alarm/active`、`/api/alarm/history`、`/api/alarm/occurrences/{id}/events`、`/api/alarm/ack`、`/api/alarm/ack-all`、`/api/alarm/config`、`/api/soe` |
+| 冗余 | `/api/redundancy/config` GET/PUT、`/config/push`、`/heartbeat`、`/sync`、`/snapshot`、`/claim`、`/status`、`/instance-groups` |
+| 认证 | `POST /api/auth/login`、`POST /api/auth/refresh`、`POST /api/auth/change-password` |
+| 工程 | `GET /api/projects`、`GET/PUT/DELETE /api/projects/{id}`（JWT + 角色权限） |
+
+管理 UI 页面：运行总览、协议插件、点位配置、实时监控、报警监控、报警规则、冗余配置、冗余监控；开发模式在 :5174 启动并把 `/api` 代理到 :8081。报警规则编辑只存在于管理端（HMI 编辑器仅在仿真模式提供简化本地版本）。
+
+### 4.10 认证与工程存储
+
+- **认证**：JWT（access 30min + refresh 7d，`token_version` 支持吊销），密码 Argon2id；角色 `admin/engineer/operator/viewer`，admin/engineer 可读写删工程，operator 只读，viewer 无工程权限。
+- **工程存储**：SQLite `projects` 存元数据，磁盘 `projects/` 下每个工程一份 `.hmi.zip`（上限 100MB）；上传为整包校验 + 临时文件 + 事务性替换；`PUT ?version=` 乐观锁，冲突 409；所有写操作记审计日志。
+
+## 5. 关键设计决策
+
+| 决策 | 内容 | 依据 |
+| --- | --- | --- |
+| 报警/SOE 后端权威 | 只有 Active 节点计算与持久化，前端只展示/确认；仿真模式本地降级并标注"模拟" | ADR-0001 |
+| 规则唯一写入口 | 报警规则编辑收敛到管理 UI；编辑器连接后端时不展示规则界面 | ADR-0002 |
+| 工程本地优先 + 后端同步 | IndexedDB 自动保存保证离线编辑；`.hmi.zip` 整包 + 版本乐观锁用于跨设备同步 | ADR-0003 |
+| 工程 API 用 JWT | 独立 SPA 跨源访问，Bearer 干净；用户与角色由后端统一管理 | ADR-0004 |
+| 图元库工程级 + 副本语义 | 放置即深拷贝，之后与库项无关；覆盖更新/重新同步为显式操作 | ADR-0005 |
+| 统一检查器 | 右栏 = 图元树 + 属性/绑定/动画；组内子图元仅树选编辑，画布保持组级原子变换 | ADR-0006 |
+| WASM 插件契约 | `hmi-plugin.wit` 单一来源，宿主/guest 共享生成代码 | — |
+| 双机热备 | 静态角色 + 心跳 + 数据健康 + 回切前数据就绪探测，避免脑裂与抖动 | — |
+
+## 6. 构建、运行与测试
+
+### 构建
+
+```powershell
+# 全量：WASM 插件 + Rust 后端 + 管理 UI
+.\scripts\build.ps1 -Release
+
+# 分步
+.\scripts\build.ps1 -Release -PluginsOnly
+.\scripts\build.ps1 -Release -BackendOnly
+```
+
+手动构建插件（workspace 根 `io-backend/`）：
 
 ```bash
-npm install        # 安装依赖
-npm run dev        # 启动开发服务器（Vite 热更新）
-npm run build      # TypeScript 编译 + Vite 生产构建
-npm run preview    # 预览生产构建
+cargo build --target wasm32-wasip2 -p modbus-tcp-plugin -p opc-ua-plugin -p iec104-plugin --release
 ```
 
-启动后点击工具栏的 **▶ 模拟** 按钮，系统将自动：
+### 运行
 
-1. 注入 6 个预置变量定义
-2. 加载 5 条预设告警规则
-3. 加载 2 个预设脚本
-4. 启动数据模拟（DI 随机跳变、AI 正弦波）
-5. 启动绑定引擎（变量 → 图元属性实时更新）
-6. 启动动画引擎（风机旋转）
-7. 启动报警评估和历史记录采样
+```powershell
+.\scripts\dev.ps1
+# 或
+npm run dev
+cd io-backend && cargo run -- config.yaml
+```
+
+默认端口：编辑器 dev :5173、管理 UI dev :5174、WS :8080（`/iscs/data`）、Web UI/API :8081、IEC 104 仿真从站 :2404、OPC UA 仿真服务器 :4840。
+
+### 测试
+
+```powershell
+npm test                              # 前端 vitest（core 全部为纯 TS）
+cd io-backend && cargo test           # 后端单元测试
+cargo build -p iec104-slave -p opcua-server   # E2E 仿真器
+```
+
+## 7. 部署拓扑
+
+**单机**：`redundancy.enabled: false`，一个后端进程同时承担 Active 采集、报警/SOE、管理 API；编辑器与管理 UI 可同时访问。
+
+**双机热备**：两机使用同一配置（`role`/`node_id`/`peer_url`/`peer_ws_port` 按机设置），`redundancy.enabled: true`；Active 节点采集并推送，Standby 只收同步；心跳/数据健康触发切换，恢复后自动回切。前端 WS 配置 `urls: [主, 备]`，主节点故障时按序快速切换；连接面板另可配置备用 REST API 地址用于登录/工程同步。
