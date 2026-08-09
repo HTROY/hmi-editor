@@ -1,6 +1,11 @@
 import { SceneGraph } from "../scene/SceneGraph";
-import { ShapeBase } from "../shapes/ShapeBase";
-import { GroupShape } from "../shapes/GroupShape";
+import {
+  GroupShape,
+  LineShape,
+  PolygonShape,
+  PolylineShape,
+  ShapeBase,
+} from "../shapes";
 import { generateId } from "../shapes/ShapeBase";
 import {
   cloneShapeWithNewIds,
@@ -72,10 +77,34 @@ export function unwrapGroup(group: GroupShape): ShapeBase[] {
     child.zIndex = group.zIndex + i;
     child.opacity = (child.opacity ?? 1) * group.opacity;
     child.visible = (child.visible ?? true) && group.visible;
+    if (child instanceof LineShape) {
+      child.startPoint = transformPoint(child.startPoint, group, cos, sin);
+      child.endPoint = transformPoint(child.endPoint, group, cos, sin);
+    } else if (
+      child instanceof PolylineShape ||
+      child instanceof PolygonShape
+    ) {
+      child.points = child.points.map((p) =>
+        transformPoint(p, group, cos, sin)
+      );
+    }
     return child;
   });
   group.children = [];
   return children;
+}
+
+/** 组内相对点变换为世界坐标：先旋转后平移 */
+function transformPoint(
+  p: Point,
+  group: GroupShape,
+  cos: number,
+  sin: number
+): Point {
+  return {
+    x: group.x + (p.x * cos - p.y * sin),
+    y: group.y + (p.x * sin + p.y * cos),
+  };
 }
 
 export interface UngroupPlan {

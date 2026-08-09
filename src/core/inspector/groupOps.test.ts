@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { SceneGraph } from "../scene";
-import { GroupShape, createShape } from "../shapes";
+import {
+  GroupShape,
+  LineShape,
+  PolygonShape,
+  PolylineShape,
+  createShape,
+} from "../shapes";
 import {
   getShapeWorldAABB,
   planUngroup,
@@ -103,6 +109,94 @@ describe("unwrapGroup", () => {
     });
     const children = unwrapGroup(group);
     expect(children[0].visible).toBe(false);
+  });
+
+  it("直线子图元取消成组后点集随组平移到世界坐标", () => {
+    const group = new GroupShape({
+      id: "g",
+      x: 100,
+      y: 50,
+      children: [
+        createShape("line", {
+          id: "l",
+          startPoint: { x: 10, y: 10 },
+          endPoint: { x: 90, y: 10 },
+        }).toJSON(),
+      ],
+    });
+    const [line] = unwrapGroup(group) as [LineShape];
+    expect(line.startPoint).toEqual({ x: 110, y: 60 });
+    expect(line.endPoint).toEqual({ x: 190, y: 60 });
+  });
+
+  it("折线/多边形子图元取消成组后点集随组平移到世界坐标", () => {
+    const group = new GroupShape({
+      id: "g",
+      x: 100,
+      y: 50,
+      children: [
+        createShape("polyline", {
+          id: "pl",
+          points: [
+            { x: 10, y: 10 },
+            { x: 90, y: 10 },
+            { x: 90, y: 40 },
+          ],
+        }).toJSON(),
+        createShape("polygon", {
+          id: "pg",
+          points: [
+            { x: 0, y: 0 },
+            { x: 50, y: 0 },
+            { x: 25, y: 40 },
+          ],
+        }).toJSON(),
+      ],
+    });
+    const [polyline, polygon] = unwrapGroup(group) as [
+      PolylineShape,
+      PolygonShape
+    ];
+    expect(polyline.points).toEqual([
+      { x: 110, y: 60 },
+      { x: 190, y: 60 },
+      { x: 190, y: 90 },
+    ]);
+    expect(polygon.points).toEqual([
+      { x: 100, y: 50 },
+      { x: 150, y: 50 },
+      { x: 125, y: 90 },
+    ]);
+  });
+
+  it("旋转组的点集子图元按组旋转折算", () => {
+    const group = new GroupShape({
+      id: "g",
+      x: 100,
+      y: 50,
+      rotation: 90,
+      children: [
+        createShape("line", {
+          id: "l",
+          startPoint: { x: 10, y: 10 },
+          endPoint: { x: 90, y: 10 },
+        }).toJSON(),
+        createShape("polyline", {
+          id: "pl",
+          points: [
+            { x: 0, y: 0 },
+            { x: 20, y: 0 },
+          ],
+        }).toJSON(),
+      ],
+    });
+    const [line, polyline] = unwrapGroup(group) as [LineShape, PolylineShape];
+    expect(line.startPoint).toEqual({ x: 90, y: 60 });
+    expect(line.endPoint).toEqual({ x: 90, y: 140 });
+    expect(polyline.points).toEqual([
+      { x: 100, y: 50 },
+      { x: 100, y: 70 },
+    ]);
   });
 
   it("planUngroup 保留展开前的完整组快照（含子图元）", () => {
