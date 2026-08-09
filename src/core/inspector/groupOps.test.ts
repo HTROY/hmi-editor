@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { SceneGraph } from "../scene";
 import { GroupShape, createShape } from "../shapes";
-import { getShapeWorldAABB, unwrapGroup, wrapShapesInGroup } from "./groupOps";
+import {
+  getShapeWorldAABB,
+  planUngroup,
+  unwrapGroup,
+  wrapShapesInGroup,
+} from "./groupOps";
 
 describe("wrapShapesInGroup", () => {
   it("把多个图元包成组并保持世界位置不变", () => {
@@ -98,6 +103,23 @@ describe("unwrapGroup", () => {
     });
     const children = unwrapGroup(group);
     expect(children[0].visible).toBe(false);
+  });
+
+  it("planUngroup 保留展开前的完整组快照（含子图元）", () => {
+    const group = new GroupShape({
+      id: "g",
+      children: [
+        createShape("rect", { id: "c1" }).toJSON(),
+        createShape("rect", { id: "c2" }).toJSON(),
+      ],
+    });
+    const plan = planUngroup(group);
+    expect(plan.children.map((c) => c.id).sort()).toEqual(["c1", "c2"]);
+    expect(plan.groupSnapshot.children?.map((c) => c.id).sort()).toEqual([
+      "c1",
+      "c2",
+    ]);
+    expect(group.children).toHaveLength(0);
   });
 });
 

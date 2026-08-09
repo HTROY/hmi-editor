@@ -22,6 +22,7 @@ import {
   saveConnectionConfig,
   reorderSibling,
   resolveShape,
+  planUngroup,
   unwrapGroup,
   wrapShapesInGroup,
 } from "../core";
@@ -829,12 +830,13 @@ export const useEditorStore = create<EditorState>((set, get) => {
       }
       const group = s.scene.get(s.selectedId);
       if (!(group instanceof GroupShape) || group.locked) return;
-      const children = unwrapGroup(group);
+      const plan = planUngroup(group);
+      const children = plan.children;
       const index = s.scene.getAll().indexOf(group);
       const commands: ShapeCommand[] = [
         {
           id: group.id,
-          before: group.toJSON(),
+          before: plan.groupSnapshot,
           after: null,
           index,
         },

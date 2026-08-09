@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { CommandHistory } from "./CommandHistory";
+import type { ShapeCommand } from "./CommandHistory";
 import { SceneGraph } from "../scene";
 import { GroupShape, createShape } from "../shapes";
 import { applySiblingOrder } from "../inspector/reorder";
 import { buildShapeTree } from "../inspector/tree";
+import { planUngroup, wrapShapesInGroup } from "../inspector/groupOps";
 
 function addRect(scene: SceneGraph, id: string, x: number) {
   scene.add(createShape("rect", { id, x, y: 0, width: 10, height: 10 }));
@@ -103,6 +105,96 @@ describe("CommandHistory 换序命令", () => {
     history.redo(scene);
     expect(group.children.map((s) => s.id)).toEqual(["a", "c", "b"]);
     expect(group.children.map((s) => s.zIndex)).toEqual([0, 1, 2]);
+  });
+});
+
+describe("CommandHistory 成组/取消成组批次命令", () => {
+  it("撤销成组后恢复原始图元及其子图元", () => {
+    const scene = new SceneGraph();
+    const r1 = createShape("rect", { id: "r1", x: 0, zIndex: 0 });
+    const inner = new GroupShape({
+      id: "g1",
+      zIndex: 1,
+      children: [createShape("rect", { id: "c1" }).toJSON()],
+    });
+    scene.add(r1);
+    scene.add(inner);
+    const history = new CommandHistory();
+
+    // 与 store.groupSelected 相同的命令构造
+    const shapes = [r1, inner];
+    const group = wrapShapesInGroup(shapes, "组");
+    const indexes = new Map(
+      shapes.map((sh) => [sh.id, scene.getAll().indexOf(sh)])
+    );
+    const commands: ShapeCommand[] = shapes.map((sh) => ({
+      id: sh.id,
+      before: sh.toJSON(),
+      after: null,
+      index: indexes.get(sh.id) ?? 0,
+    }));
+    for (const sh of shapes) scene.remove(sh.id);
+    scene.insertAt(group, 0);
+    commands.push({
+      id: group.id,
+      before: null,
+      after: group.toJSON(),
+      index: 0,
+    });
+    history.pushBatch(commands);
+
+    history.undo(scene);
+
+    expect(scene.get("r1")).toBeDefined();
+    expect(scene.get("g1")).toBeDefined();
+    expect((scene.get("g1") as GroupShape).children.map((c) => c.id)).toEqual([
+      "c1",
+    ]);
+    expect(scene.get(group.id)).toBeUndefined();
+  });
+
+  it("撤销取消成组后恢复组及其子图元，子图元不再留在顶层", () => {
+    const scene = new SceneGraph();
+    const group = new GroupShape({
+      id: "g",
+      zIndex: 5,
+      children: [
+        createShape("rect", { id: "c1" }).toJSON(),
+        createShape("rect", { id: "c2" }).toJSON(),
+      ],
+    });
+    scene.add(group);
+    const history = new CommandHistory();
+
+    // 与 store.ungroupSelected 相同的命令构造（快照必须在展开前捕获）
+    const plan = planUngroup(group);
+    const children = plan.children;
+    const index = scene.getAll().indexOf(group);
+    const commands: ShapeCommand[] = [
+      { id: group.id, before: plan.groupSnapshot, after: null, index },
+    ];
+    scene.remove(group.id);
+    for (const child of children) {
+      commands.push({
+        id: child.id,
+        before: null,
+        after: child.toJSON(),
+        index: scene.getAll().length,
+      });
+      scene.add(child);
+    }
+    history.pushBatch(commands);
+
+    history.undo(scene);
+
+    const restored = scene.get("g");
+    expect(restored).toBeDefined();
+    expect((restored as GroupShape).children.map((c) => c.id).sort()).toEqual([
+      "c1",
+      "c2",
+    ]);
+    expect(scene.get("c1")).toBeUndefined();
+    expect(scene.get("c2")).toBeUndefined();
   });
 });
 

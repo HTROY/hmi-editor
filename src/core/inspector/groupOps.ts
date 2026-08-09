@@ -9,7 +9,7 @@ import {
 } from "../shapes/library";
 import { getRotatedAABB } from "../scene/resize";
 import { resolveShape, type ShapePath } from "./tree";
-import type { BoundingBox, Point } from "../types";
+import type { BoundingBox, Point, ShapeProps } from "../types";
 
 // ============================================================
 // groupOps.ts — 成组/取消成组几何与子图元世界包围盒
@@ -76,6 +76,23 @@ export function unwrapGroup(group: GroupShape): ShapeBase[] {
   });
   group.children = [];
   return children;
+}
+
+export interface UngroupPlan {
+  /** 展开后的顶层子图元（已应用组变换） */
+  children: ShapeBase[];
+  /** 展开前的组完整快照（必须包含子图元，供撤销恢复） */
+  groupSnapshot: ShapeProps;
+}
+
+/**
+ * 规划取消成组：先捕获完整组快照再展开。
+ * 顺序不能反——unwrapGroup 会清空 group.children，后取快照将丢失子图元。
+ */
+export function planUngroup(group: GroupShape): UngroupPlan {
+  const groupSnapshot = group.toJSON();
+  const children = unwrapGroup(group);
+  return { children, groupSnapshot };
 }
 
 /** 子图元（含嵌套）在世界坐标系下的屏幕轴对齐包围盒 */
