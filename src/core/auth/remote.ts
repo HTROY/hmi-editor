@@ -200,7 +200,11 @@ export class RemoteAuthClient {
       controller.abort(new DOMException("请求超时", "TimeoutError"));
     }, this.timeoutMs);
     const external = init.signal;
-    const onExternalAbort = () => controller.abort(external?.reason);
+    let externallyAborted = false;
+    const onExternalAbort = () => {
+      externallyAborted = true;
+      controller.abort(external?.reason);
+    };
     if (external) {
       if (external.aborted) {
         clearTimeout(timer);
@@ -210,6 +214,9 @@ export class RemoteAuthClient {
     }
     return this.fetchImpl(url, { ...init, signal: controller.signal })
       .catch((e) => {
+        if (externallyAborted) {
+          throw external?.reason ?? e;
+        }
         if (controller.signal.aborted) {
           throw new RemoteAuthError(
             `请求超时（${this.timeoutMs}ms），请确认后端已启动且地址正确`,

@@ -34,10 +34,7 @@ export class RemoteApiError extends Error {
 }
 
 export class RemoteConflictError extends RemoteApiError {
-  constructor(
-    message: string,
-    public remoteVersion?: number
-  ) {
+  constructor(message: string) {
     super(message, 409);
     this.name = "RemoteConflictError";
   }

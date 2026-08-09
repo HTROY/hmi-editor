@@ -280,6 +280,32 @@ describe("RemoteAuthClient", () => {
     });
   });
 
+  it("reports external cancellation instead of a timeout", async () => {
+    const { client } = makeClient(
+      async (url, init) => {
+        if (url.endsWith("/api/auth/login")) return jsonResponse(LOGIN_PAYLOAD);
+        return new Promise<Response>((_resolve, reject) => {
+          const signal = (init as RequestInit)?.signal as
+            AbortSignal | undefined;
+          signal?.addEventListener("abort", () =>
+            reject(signal.reason ?? new Error("aborted"))
+          );
+        });
+      },
+      undefined,
+      5_000
+    );
+    await client.login("eng", "secret");
+
+    const controller = new AbortController();
+    const pending = client.request("/api/slow", { signal: controller.signal });
+    controller.abort(new DOMException("请求已取消", "AbortError"));
+
+    await expect(pending).rejects.toMatchObject({
+      message: expect.stringContaining("请求已取消"),
+    });
+  });
+
   it("exposes RemoteAuthError with status", () => {
     const err = new RemoteAuthError("boom", 500);
     expect(err.status).toBe(500);

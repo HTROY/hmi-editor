@@ -384,7 +384,9 @@ export const useEditorStore = create<EditorState>((set, get) => {
       pageBackground: f.meta.background,
       selectedId: null,
       pageViews: defaultPageViews(s.projectManager),
+      remoteLink: null,
     });
+    s.projectManager.setRemoteLink(null);
     s.bindingEngine.rebuildIndex();
     activateViewport(true);
     s.renderer?.render();
