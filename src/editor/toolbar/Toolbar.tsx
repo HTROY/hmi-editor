@@ -1,9 +1,10 @@
-﻿import React from "react";
+import React, { useEffect } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import { ProjectToolbar } from "./ProjectToolbar";
 import { Icon, type IconName } from "../icons";
 import { useTheme } from "../useTheme";
 import type { ToolMode } from "../../store/editorStore";
+import { GroupShape } from "../../core";
 
 const tools: { mode: ToolMode; label: string; icon: IconName }[] = [
   { mode: "select", label: "选择", icon: "cursor" },
@@ -29,7 +30,13 @@ export function Toolbar() {
     previewRunning,
     togglePreview,
     projectManager,
-    setRightPanel,
+    setLeftPanel,
+    scene,
+    selectedId,
+    selectedPath,
+    renderer,
+    groupSelected,
+    ungroupSelected,
     remoteUser,
     setRemoteDialog,
     zoom,
@@ -37,6 +44,43 @@ export function Toolbar() {
     zoomTo,
     fitPage,
   } = useEditorStore();
+
+  // Ctrl+G / Ctrl+Shift+G 成组 / 取消成组
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA")
+      ) {
+        return;
+      }
+      const k = e.key.toLowerCase();
+      if (k === "g") {
+        e.preventDefault();
+        if (e.shiftKey) ungroupSelected();
+        else groupSelected();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [groupSelected, ungroupSelected]);
+
+  const selectedShape = selectedId ? scene.get(selectedId) : null;
+  const childSelected = !!selectedPath && selectedPath.length > 1;
+  const selectedShapes = renderer?.selectedIds
+    ? Array.from(renderer.selectedIds)
+        .map((id) => scene.get(id))
+        .filter((sh): sh is NonNullable<typeof sh> => !!sh)
+    : [];
+  const canGroup =
+    selectedShapes.length >= 2 && selectedShapes.every((sh) => !sh.locked);
+  const canUngroup =
+    !!selectedShape &&
+    selectedShape instanceof GroupShape &&
+    !selectedShape.locked &&
+    (!selectedPath || selectedPath.length === 1);
 
   return (
     <div className="toolbar">
@@ -52,6 +96,30 @@ export function Toolbar() {
             <span className="tool-label">{t.label}</span>
           </button>
         ))}
+      </div>
+
+      <div className="toolbar-divider" />
+
+      {/* 成组 / 取消成组 */}
+      <div className="toolbar-group">
+        <button
+          className="tool-btn"
+          title="成组 (Ctrl+G)"
+          disabled={!canGroup}
+          onClick={groupSelected}
+        >
+          <Icon name="group" className="tool-icon" />
+          <span className="tool-label">成组</span>
+        </button>
+        <button
+          className="tool-btn"
+          title="取消成组 (Ctrl+Shift+G)"
+          disabled={!canUngroup}
+          onClick={ungroupSelected}
+        >
+          <Icon name="ungroup" className="tool-icon" />
+          <span className="tool-label">拆组</span>
+        </button>
       </div>
 
       <div className="toolbar-divider" />
@@ -109,24 +177,27 @@ export function Toolbar() {
         </button>
         <button
           className="tool-btn"
-          title="复制 (Ctrl+C)"
+          title={childSelected ? "子图元不支持复制" : "复制 (Ctrl+C)"}
           onClick={copySelected}
+          disabled={childSelected}
         >
           <Icon name="copy" className="tool-icon" />
           <span className="tool-label">复制</span>
         </button>
         <button
           className="tool-btn"
-          title="粘贴 (Ctrl+V)"
+          title={childSelected ? "子图元不支持粘贴" : "粘贴 (Ctrl+V)"}
           onClick={pasteClipboard}
+          disabled={childSelected}
         >
           <Icon name="paste" className="tool-icon" />
           <span className="tool-label">粘贴</span>
         </button>
         <button
           className="tool-btn"
-          title="删除 (Delete)"
+          title={childSelected ? "子图元不允许删除" : "删除 (Delete)"}
           onClick={deleteSelected}
+          disabled={childSelected}
         >
           <Icon name="trash" className="tool-icon" />
           <span className="tool-label">删除</span>
@@ -138,7 +209,7 @@ export function Toolbar() {
       {/* 工程名与修改状态 */}
       <div
         className="toolbar-project-name"
-        onClick={() => setRightPanel("pages")}
+        onClick={() => setLeftPanel("pages")}
       >
         <span className="toolbar-project-icon">
           <Icon name="project" size={14} />

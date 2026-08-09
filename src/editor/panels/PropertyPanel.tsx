@@ -18,6 +18,7 @@ import {
 } from "../../core/shapes/metro";
 import { getBindingStatus } from "../../core/bindings";
 import type { Binding } from "../../core/types";
+import { resolveShape, type ShapePath } from "../../core";
 
 // ============================================================
 // PropertyPanel — 图元属性面板（调度台账 + 接线表）
@@ -89,11 +90,13 @@ function NumCell({
 }
 
 /** 可绑定属性行的「端子」：点击展开变量选择，直接创建/替换该属性的绑定 */
-function BindTerminal({ prop, shapeId }: { prop: string; shapeId: string }) {
+function BindTerminal({ prop, path }: { prop: string; path: ShapePath }) {
   const varManager = useEditorStore((s) => s.varManager);
-  const shape = useEditorStore((s) => s.scene.get(shapeId));
+  const scene = useEditorStore((s) => s.scene);
+  useEditorStore((s) => s.shapeRevision);
   const [open, setOpen] = useState(false);
   const allVars = varManager?.getAllDefs() ?? [];
+  const shape = resolveShape(scene, path);
   const binding = shape?.bindings.find((b) => b.targetProp === prop);
 
   const commit = (variableId: string) => {
@@ -116,8 +119,13 @@ function BindTerminal({ prop, shapeId }: { prop: string; shapeId: string }) {
       const bindings = shape.bindings.some((b) => b.targetProp === prop)
         ? shape.bindings.map((b) => (b.targetProp === prop ? newBinding : b))
         : [...shape.bindings, newBinding];
-      s.updateShape(shapeId, { bindings });
-      s.bindingEngine?.reindexShape(shapeId);
+      if (path.length > 1) {
+        s.updateShapeAt(path, { bindings });
+        s.bindingEngine?.reindexPath(path);
+      } else {
+        s.updateShape(path[0], { bindings });
+        s.bindingEngine?.reindexShape(path[0]);
+      }
     }
     setOpen(false);
   };
@@ -160,9 +168,17 @@ function BindTerminal({ prop, shapeId }: { prop: string; shapeId: string }) {
   );
 }
 
-export function PropertyPanel() {
-  const { scene, selectedId, updateShape, varManager, setRightPanel } =
-    useEditorStore();
+export function PropertyPanel({
+  onOpenBindings,
+}: { onOpenBindings?: () => void } = {}) {
+  const {
+    scene,
+    selectedId,
+    selectedPath,
+    updateShape,
+    updateShapeAt,
+    varManager,
+  } = useEditorStore();
   // 选中集合跟随 renderer（多选框选）；selectedId 变化即触发重渲染
   const renderer = useEditorStore((s) => s.renderer);
   const selectedIds = renderer?.selectedIds
@@ -170,10 +186,15 @@ export function PropertyPanel() {
     : selectedId
       ? [selectedId]
       : [];
-  const shape = selectedId ? scene.get(selectedId) : null;
+  const shape = selectedPath
+    ? resolveShape(scene, selectedPath)
+    : selectedId
+      ? scene.get(selectedId)
+      : null;
 
   const setProp = (key: string, value: any) => {
-    if (selectedId) updateShape(selectedId, { [key]: value });
+    if (selectedPath) updateShapeAt(selectedPath, { [key]: value });
+    else if (selectedId) updateShape(selectedId, { [key]: value });
   };
 
   if (!shape) {
@@ -303,7 +324,7 @@ export function PropertyPanel() {
   const isBusBar = shape instanceof MetroBusBar;
   const isTransformer = shape instanceof MetroTransformer;
   const terminal = (prop: string) => (
-    <BindTerminal prop={prop} shapeId={shape.id} />
+    <BindTerminal prop={prop} path={selectedPath ?? [shape.id]} />
   );
 
   return (
@@ -758,7 +779,7 @@ export function PropertyPanel() {
               key={i}
               className="binding-mini-row"
               title="在绑定面板中编辑"
-              onClick={() => setRightPanel("bindings")}
+              onClick={onOpenBindings}
             >
               <span
                 className={"var-type-badge " + b.variableType.toLowerCase()}

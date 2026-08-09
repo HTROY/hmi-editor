@@ -1,11 +1,110 @@
 import { describe, expect, it } from "vitest";
 import { CommandHistory } from "./CommandHistory";
 import { SceneGraph } from "../scene";
-import { createShape } from "../shapes";
+import { GroupShape, createShape } from "../shapes";
+import { applySiblingOrder } from "../inspector/reorder";
+import { buildShapeTree } from "../inspector/tree";
 
 function addRect(scene: SceneGraph, id: string, x: number) {
   scene.add(createShape("rect", { id, x, y: 0, width: 10, height: 10 }));
 }
+
+function addGroup(
+  scene: SceneGraph,
+  id: string,
+  zIndex: number,
+  children: { id: string; zIndex: number }[]
+) {
+  const group = new GroupShape({
+    id,
+    zIndex,
+    children: children.map((c) =>
+      createShape("rect", { id: c.id, zIndex: c.zIndex }).toJSON()
+    ),
+  });
+  scene.add(group);
+  return group;
+}
+
+describe("CommandHistory 子图元路径命令", () => {
+  it("undo/redo 按父路径还原子图元快照且不影响兄弟", () => {
+    const scene = new SceneGraph();
+    const group = addGroup(scene, "g", 0, [
+      { id: "c1", zIndex: 0 },
+      { id: "c2", zIndex: 1 },
+    ]);
+    const history = new CommandHistory();
+    const child = group.children.find((c) => c.id === "c1")!;
+    const before = child.toJSON();
+    child.x = 99;
+    const after = child.toJSON();
+
+    history.push({ id: "c1", path: ["g"], before, after, index: 0 });
+
+    history.undo(scene);
+    expect(group.children.find((c) => c.id === "c1")!.x).toBe(0);
+    expect(group.children.find((c) => c.id === "c2")!.x).toBe(0);
+
+    history.redo(scene);
+    expect(group.children.find((c) => c.id === "c1")!.x).toBe(99);
+  });
+});
+
+describe("CommandHistory 换序命令", () => {
+  it("顶层换序 undo/redo 恢复展示顺序", () => {
+    const scene = new SceneGraph();
+    addRect(scene, "r1", 0);
+    addRect(scene, "r2", 10);
+    addRect(scene, "r3", 5);
+    const history = new CommandHistory();
+    const before = ["r2", "r3", "r1"];
+    const after = ["r3", "r2", "r1"];
+    applySiblingOrder(scene, [], after);
+
+    history.push({
+      id: "r3",
+      before: null,
+      after: null,
+      index: 0,
+      reorder: { parentPath: [], before, after },
+    });
+
+    history.undo(scene);
+    expect(buildShapeTree(scene).map((n) => n.shape.id)).toEqual(before);
+
+    history.redo(scene);
+    expect(buildShapeTree(scene).map((n) => n.shape.id)).toEqual(after);
+  });
+
+  it("组内子图元换序 undo/redo 恢复数组顺序与 z 序", () => {
+    const scene = new SceneGraph();
+    const group = addGroup(scene, "g", 0, [
+      { id: "a", zIndex: 0 },
+      { id: "b", zIndex: 1 },
+      { id: "c", zIndex: 2 },
+    ]);
+    const history = new CommandHistory();
+    const before = ["c", "b", "a"];
+    const after = ["b", "c", "a"];
+    applySiblingOrder(scene, ["g"], after);
+
+    history.push({
+      id: "b",
+      before: null,
+      after: null,
+      index: 0,
+      reorder: { parentPath: ["g"], before, after },
+    });
+
+    history.undo(scene);
+    expect(group.children.map((s) => s.id)).toEqual(["a", "b", "c"]);
+    expect(group.children.map((s) => s.zIndex)).toEqual([0, 1, 2]);
+
+    history.redo(scene);
+    expect(group.children.map((s) => s.id)).toEqual(["a", "c", "b"]);
+    expect(group.children.map((s) => s.zIndex)).toEqual([0, 1, 2]);
+  });
+});
 
 describe("CommandHistory", () => {
   it("undo restores the previous property snapshot and redo re-applies it", () => {

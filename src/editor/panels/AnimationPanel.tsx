@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import type { AnimationDef, AnimationParams } from "../../core/types";
+import { resolveShape } from "../../core";
 import {
   ANIMATION_TYPES,
   defaultAnimationParams,
@@ -186,9 +187,15 @@ function ParamEditor({
 }
 
 export function AnimationPanel() {
-  const { scene, selectedId, varManager, updateShape } = useEditorStore();
+  const { scene, selectedId, selectedPath, varManager, updateShapeAt } =
+    useEditorStore();
   useEditorStore((s) => s.shapeRevision);
-  const shape = selectedId ? scene.get(selectedId) : null;
+  const shape = selectedPath
+    ? resolveShape(scene, selectedPath)
+    : selectedId
+      ? scene.get(selectedId)
+      : null;
+  const path = selectedPath ?? (selectedId ? [selectedId] : null);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
 
   if (!shape) {
@@ -203,7 +210,7 @@ export function AnimationPanel() {
   const allVars = varManager?.getAllDefs() ?? [];
 
   const saveAnimations = (animations: AnimationDef[]) => {
-    if (selectedId) updateShape(selectedId, { animations });
+    if (path) updateShapeAt(path, { animations });
   };
 
   const addAnimation = () => {

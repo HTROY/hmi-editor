@@ -3,6 +3,7 @@ import { useEditorStore } from "../../store/editorStore";
 import { getBindingStatus } from "../../core/bindings";
 import type { Binding, ValueMapping } from "../../core/types";
 import type { VariableDef } from "../../core/variables/types";
+import { resolveShape } from "../../core";
 import { MappingEditor } from "./MappingEditor";
 
 // ============================================================
@@ -31,14 +32,19 @@ export function BindingPanel() {
   const {
     scene,
     selectedId,
+    selectedPath,
     varManager,
     bindingEngine,
-    updateShape,
-    renderScene,
+    updateShapeAt,
   } = useEditorStore();
   // 订阅 shape 修改版本号：updateShape 原地修改 shape 后触发重渲染
   useEditorStore((s) => s.shapeRevision);
-  const shape = selectedId ? scene.get(selectedId) : null;
+  const shape = selectedPath
+    ? resolveShape(scene, selectedPath)
+    : selectedId
+      ? scene.get(selectedId)
+      : null;
+  const path = selectedPath ?? (selectedId ? [selectedId] : null);
 
   // 订阅变量值变化，让「手动测试」区域的值实时刷新
   const [, forceUpdate] = useState(0);
@@ -74,7 +80,7 @@ export function BindingPanel() {
   const aiVars = allVars.filter((v) => v.type === "AI" || v.type === "AO");
 
   const addBinding = () => {
-    if (!selectedId) return;
+    if (!path) return;
     const newBinding: Binding = {
       variableId: allVars[0]?.id ?? "",
       variableType: "DI",
@@ -84,36 +90,36 @@ export function BindingPanel() {
       smoothMs: 300,
     };
     const bindings = [...(shape?.bindings ?? []), newBinding];
-    updateShape(selectedId, { bindings });
-    bindingEngine?.reindexShape(selectedId);
+    updateShapeAt(path, { bindings });
+    bindingEngine?.reindexPath(path);
     setEditingBindingIdx(bindings.length - 1);
   };
 
   const removeBinding = (idx: number) => {
-    if (!selectedId) return;
+    if (!path) return;
     const bindings = shape?.bindings.filter((_, i) => i !== idx) ?? [];
-    updateShape(selectedId, { bindings });
-    bindingEngine?.reindexShape(selectedId);
+    updateShapeAt(path, { bindings });
+    bindingEngine?.reindexPath(path);
     if (editingBindingIdx === idx) setEditingBindingIdx(null);
   };
 
   const updateBinding = (idx: number, upd: Partial<Binding>) => {
-    if (!selectedId || !shape) return;
+    if (!path || !shape) return;
     const bindings = [...shape.bindings];
     bindings[idx] = { ...bindings[idx], ...upd };
-    updateShape(selectedId, { bindings });
-    bindingEngine?.reindexShape(selectedId);
+    updateShapeAt(path, { bindings });
+    bindingEngine?.reindexPath(path);
   };
 
   const updateMapping = (idx: number, upd: Partial<ValueMapping>) => {
-    if (!selectedId || !shape) return;
+    if (!path || !shape) return;
     const bindings = [...shape.bindings];
     bindings[idx] = {
       ...bindings[idx],
       mapping: { ...bindings[idx].mapping, ...upd } as ValueMapping,
     };
-    updateShape(selectedId, { bindings });
-    bindingEngine?.reindexShape(selectedId);
+    updateShapeAt(path, { bindings });
+    bindingEngine?.reindexPath(path);
   };
 
   // 获取当前选中变量的定义

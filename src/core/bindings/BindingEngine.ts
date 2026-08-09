@@ -2,8 +2,10 @@ import { SceneGraph } from "../scene/SceneGraph";
 import { Renderer } from "../scene/Renderer";
 import { VariableManager } from "../variables/VariableManager";
 import { ShapeBase } from "../shapes/ShapeBase";
+import { GroupShape } from "../shapes/GroupShape";
 import type { Binding } from "../types";
 import { applyValueMapping } from "./mapping";
+import { forEachShape, resolveShape, type ShapePath } from "../inspector/tree";
 
 // ============================================================
 // BindingEngine — 绑定引擎
@@ -12,7 +14,8 @@ import { applyValueMapping } from "./mapping";
 // ============================================================
 
 interface BindingRecord {
-  shapeId: string;
+  /** 图元从场景根开始的完整路径（含自身 id） */
+  path: ShapePath;
   binding: Binding;
 }
 
@@ -57,19 +60,17 @@ export class BindingEngine {
   /** 重建索引 — 遍历场景中所有图元的 bindings */
   rebuildIndex(): void {
     this.index.clear();
-    for (const shape of this.scene.getAll()) {
-      this.indexShape(shape);
-    }
+    forEachShape(this.scene, (shape, path) => this.indexShape(shape, path));
   }
 
   /** 为单个图元建立绑定索引 */
-  private indexShape(shape: ShapeBase): void {
+  private indexShape(shape: ShapeBase, path: ShapePath): void {
     for (const binding of shape.bindings) {
       if (!this.index.has(binding.variableId)) {
         this.index.set(binding.variableId, []);
       }
       this.index.get(binding.variableId)!.push({
-        shapeId: shape.id,
+        path,
         binding,
       });
     }
@@ -77,29 +78,17 @@ export class BindingEngine {
 
   /** 为指定图元刷新索引（用于属性面板编辑绑定后调用） */
   reindexShape(shapeId: string): void {
-    // 从索引中移除该图元的所有记录
-    for (const [, records] of this.index) {
-      const filtered = records.filter((r) => r.shapeId !== shapeId);
-      if (filtered.length === 0) {
-        this.index.delete(records[0]?.binding.variableId ?? "");
-      } else {
-        // 不能直接修改 records，需要重建数组
-        records.length = 0;
-        records.push(...filtered);
-      }
-    }
-    // 重新添加
-    const shape = this.scene.get(shapeId);
-    if (shape) {
-      this.indexShape(shape);
-      // 立即用变量当前值刷新该图元的绑定属性，无需等待变量再次变化
-      for (const binding of shape.bindings) {
-        const vv = this.variables.getValue(binding.variableId);
-        if (!vv) continue;
-        this.applyBinding(shape, binding, vv.value);
-      }
-      this.renderer?.render();
-    }
+    this.reindexPath([shapeId]);
+  }
+
+  /** 按完整路径刷新索引（顶层或组内子图元均可），并立即应用变量当前值 */
+  reindexPath(path: ShapePath): void {
+    this.removeRecords((p) => path.every((id, i) => p[i] === id));
+    const shape = resolveShape(this.scene, path);
+    if (!shape) return;
+    this.indexSubtree(shape, path);
+    this.applyCurrentValues(shape, path);
+    this.renderer?.render();
   }
 
   /** 启动监听 — 订阅变量变化并自动更新图元 */
@@ -112,7 +101,7 @@ export class BindingEngine {
       if (!records) return;
 
       for (const record of records) {
-        const shape = this.scene.get(record.shapeId);
+        const shape = resolveShape(this.scene, record.path);
         if (!shape) continue;
         this.applyBinding(shape, record.binding, vv.value);
       }
@@ -160,6 +149,40 @@ export class BindingEngine {
     this.cancelTransition(shape.id, binding.targetProp);
     if (newValue !== undefined) {
       (shape as any)[binding.targetProp] = newValue;
+    }
+  }
+
+  private removeRecords(pred: (path: ShapePath) => boolean): void {
+    for (const [variableId, records] of this.index) {
+      const filtered = records.filter((r) => !pred(r.path));
+      if (filtered.length === 0) {
+        this.index.delete(variableId);
+      } else {
+        records.length = 0;
+        records.push(...filtered);
+      }
+    }
+  }
+
+  private indexSubtree(shape: ShapeBase, path: ShapePath): void {
+    this.indexShape(shape, path);
+    if (shape instanceof GroupShape) {
+      for (const child of shape.children) {
+        this.indexSubtree(child, [...path, child.id]);
+      }
+    }
+  }
+
+  private applyCurrentValues(shape: ShapeBase, path: ShapePath): void {
+    for (const binding of shape.bindings) {
+      const vv = this.variables.getValue(binding.variableId);
+      if (!vv) continue;
+      this.applyBinding(shape, binding, vv.value);
+    }
+    if (shape instanceof GroupShape) {
+      for (const child of shape.children) {
+        this.applyCurrentValues(child, [...path, child.id]);
+      }
     }
   }
 

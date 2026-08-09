@@ -2,6 +2,7 @@
 export * from "./shapes";
 export * from "./settings";
 export * from "./scene";
+export * from "./inspector";
 export * from "./view";
 export * from "./history";
 export * from "./serialization";

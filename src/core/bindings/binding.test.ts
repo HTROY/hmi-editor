@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SceneGraph } from "../scene";
-import { createShape } from "../shapes";
+import { GroupShape, createShape } from "../shapes";
 import { VariableManager } from "../variables";
 import { BindingEngine } from "./BindingEngine";
 import type { Binding } from "../types";
@@ -104,5 +104,52 @@ describe("BindingEngine 平滑过渡", () => {
     shape.bindings = [numericBinding()];
     engine.reindexShape("r1");
     expect(shape.opacity).toBeCloseTo(0);
+  });
+});
+
+describe("BindingEngine 组内子图元", () => {
+  function childSetup() {
+    const scene = new SceneGraph();
+    const variables = new VariableManager();
+    const engine = new BindingEngine(scene, variables, () => 1000);
+    variables.define({
+      id: "v1",
+      name: "测试变量",
+      type: "AI",
+      address: "0",
+      defaultValue: 0,
+      unit: "",
+      description: "",
+      group: "test",
+      min: 0,
+      max: 100,
+    });
+    const group = new GroupShape({
+      id: "g",
+      children: [
+        createShape("rect", {
+          id: "c",
+          opacity: 0,
+          bindings: [numericBinding({ smooth: false })],
+        }).toJSON(),
+      ],
+    });
+    scene.add(group);
+    const child = group.children[0];
+    return { scene, variables, engine, child };
+  }
+
+  it("子图元绑定随变量变化生效", () => {
+    const { engine, child } = childSetup();
+    engine.start();
+    engine.trigger("v1", 1);
+    expect(child.opacity).toBe(1);
+  });
+
+  it("reindexPath 为子图元刷新索引并立即应用当前值", () => {
+    const { engine, variables, child } = childSetup();
+    variables.setValue("v1", 0.5);
+    engine.reindexPath(["g", "c"]);
+    expect(child.opacity).toBe(0.5);
   });
 });

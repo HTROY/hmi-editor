@@ -12,6 +12,7 @@ import {
   scaleShape,
   computeScaleFactor,
   applyResize,
+  GroupShape,
   isOverRasterWarningSize,
   isRasterFile,
   rasterDataUrlToImageShape,
@@ -19,7 +20,12 @@ import {
   DEFAULT_CONNECTION_CONFIG,
   loadConnectionConfig,
   saveConnectionConfig,
+  reorderSibling,
+  resolveShape,
+  unwrapGroup,
+  wrapShapesInGroup,
 } from "../core";
+import type { ShapePath } from "../core";
 import type {
   ShapeCommand,
   ShapeProps,
@@ -143,10 +149,8 @@ export type PushResult =
   | { ok: false; reason: "conflict"; projectId: string; error: Error }
   | { ok: false; reason: "error"; error: Error };
 
-export type RightPanel =
-  | "properties"
-  | "bindings"
-  | "animations"
+export type LeftPanel =
+  | "library"
   | "variables"
   | "connections"
   | "pages"
@@ -162,6 +166,7 @@ interface EditorState {
   history: CommandHistory;
   mode: ToolMode;
   selectedId: string | null;
+  selectedPath: ShapePath | null;
   clipboard: ShapeBase | null;
   library: LibraryItem[];
   libraryGroups: LibraryGroup[];
@@ -191,7 +196,7 @@ interface EditorState {
   scriptEngine: ScriptEngine;
   reportEngine: ReportEngine;
   activePageId: string;
-  rightPanel: RightPanel;
+  leftPanel: LeftPanel;
   simRunning: boolean;
   previewRunning: boolean;
   wsConfig: { url: string; backupUrl?: string };
@@ -210,9 +215,17 @@ interface EditorState {
   outOfBounds: OutOfBoundsShape[];
   setRenderer: (r: Renderer) => void;
   setMode: (m: ToolMode) => void;
-  setRightPanel: (p: RightPanel) => void;
+  setLeftPanel: (p: LeftPanel) => void;
   selectShape: (id: string | null) => void;
   selectShapes: (ids: string[]) => void;
+  selectShapeAt: (path: ShapePath) => void;
+  updateShapeAt: (path: ShapePath, props: any, record?: boolean) => void;
+  groupSelected: () => void;
+  ungroupSelected: () => void;
+  reorderSelected: (toIndex: number) => void;
+  toggleShapeVisible: (path: ShapePath) => void;
+  toggleShapeLocked: (path: ShapePath) => void;
+  renameShape: (path: ShapePath, name: string) => void;
   addShape: (t: ShapeType, x?: number, y?: number) => void;
   saveSelectionToLibrary: (
     name: string,
@@ -470,6 +483,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       pageHeight: f.meta.height,
       pageBackground: f.meta.background,
       selectedId: null,
+      selectedPath: null,
       library: s.projectManager.getLibrary(),
       libraryGroups: s.projectManager.getLibraryGroups(),
       libraryCollapsed: mergeLibraryCollapsed(
@@ -515,6 +529,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     renderer: null,
     mode: "select",
     selectedId: null,
+    selectedPath: null,
     clipboard: null,
     library: projectManager.getLibrary(),
     libraryGroups: [],
@@ -526,7 +541,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     pageHeight: dp.height,
     pageBackground: dp.background,
     activePageId: dp.id,
-    rightPanel: "properties",
+    leftPanel: "library",
     simRunning: false,
     previewRunning: false,
     wsConfig: { url: "ws://localhost:8080/iscs/data" },
@@ -554,22 +569,40 @@ export const useEditorStore = create<EditorState>((set, get) => {
       s.fitPage();
     },
     setMode: (m) => set({ mode: m }),
-    setRightPanel: (p) => set({ rightPanel: p }),
+    setLeftPanel: (p) => set({ leftPanel: p }),
     selectShape: (id) => {
       const s = get();
       if (id === null) pendingEdit = null;
-      set({ selectedId: id });
+      set({ selectedId: id, selectedPath: id ? [id] : null });
       if (s.renderer) {
         s.renderer.selectedIds.clear();
+        s.renderer.selectedChildPath = null;
         if (id) s.renderer.selectedIds.add(id);
         s.renderer.render();
       }
     },
     selectShapes: (ids) => {
       const s = get();
-      set({ selectedId: ids[0] ?? null });
+      set({
+        selectedId: ids[0] ?? null,
+        selectedPath: ids[0] ? [ids[0]] : null,
+      });
       if (s.renderer) {
         s.renderer.selectedIds = new Set(ids);
+        s.renderer.selectedChildPath = null;
+        s.renderer.render();
+      }
+    },
+    selectShapeAt: (path) => {
+      const s = get();
+      const shape = resolveShape(s.scene, path);
+      if (!shape) return;
+      const isChild = path.length > 1;
+      set({ selectedId: shape.id, selectedPath: path });
+      if (s.renderer) {
+        s.renderer.selectedIds.clear();
+        s.renderer.selectedChildPath = isChild ? path : null;
+        if (!isChild) s.renderer.selectedIds.add(shape.id);
         s.renderer.render();
       }
     },
@@ -641,6 +674,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     deleteSelected: () => {
       const s = get();
+      // 组内子图元不允许删除（仅在检查器中编辑）
+      if (s.selectedPath && s.selectedPath.length > 1) return;
       if (s.selectedId) {
         const sh = s.scene.get(s.selectedId);
         if (sh) {
@@ -654,9 +689,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
           s.scene.remove(sh.id);
           pushCommand(command);
         }
-        set({ selectedId: null });
+        set({ selectedId: null, selectedPath: null });
         if (s.renderer) {
           s.renderer.selectedIds.clear();
+          s.renderer.selectedChildPath = null;
           s.renderer.render();
         }
       }
@@ -664,6 +700,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     copySelected: () => {
       const s = get();
+      // 复制/粘贴仅支持顶层图元
+      if (s.selectedPath && s.selectedPath.length > 1) return;
       if (s.selectedId) {
         const sh = s.scene.get(s.selectedId);
         if (sh) set({ clipboard: sh.clone() });
@@ -683,7 +721,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
           after: c.toJSON(),
           index: s.scene.getAll().indexOf(c),
         });
-        set({ selectedId: c.id });
+        set({ selectedId: c.id, selectedPath: [c.id] });
         syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
         s.renderer?.render();
       }
@@ -713,6 +751,154 @@ export const useEditorStore = create<EditorState>((set, get) => {
           });
         }
       }
+    },
+    updateShapeAt: (path, props, record = true) => {
+      const s = get();
+      const sh = resolveShape(s.scene, path);
+      if (!sh) return;
+      const before = sh.toJSON();
+      if (sh.type === "metro-breaker" && props.breakerStatus !== undefined) {
+        (sh as any).setStatus(props.breakerStatus);
+        delete props.breakerStatus;
+      }
+      Object.assign(sh, props);
+      const after = sh.toJSON();
+      if (before.zIndex !== after.zIndex && path.length === 1) {
+        s.scene.markDirty();
+      }
+      s.renderer?.render();
+      s.bumpShapeRevision();
+      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
+      if (record && JSON.stringify(before) !== JSON.stringify(after)) {
+        pushCommand({
+          id: sh.id,
+          before,
+          after,
+          index: path.length === 1 ? s.scene.getAll().indexOf(sh) : 0,
+          path: path.length > 1 ? path.slice(0, -1) : undefined,
+        });
+      }
+    },
+    groupSelected: () => {
+      const s = get();
+      const ids = s.renderer?.selectedIds
+        ? Array.from(s.renderer.selectedIds)
+        : [];
+      if (ids.length < 2) return;
+      const shapes = ids
+        .map((id) => s.scene.get(id))
+        .filter((sh): sh is ShapeBase => !!sh);
+      if (shapes.length < 2 || shapes.some((sh) => sh.locked)) return;
+      const commands: ShapeCommand[] = [];
+      const group = wrapShapesInGroup(shapes, "组");
+      const indexes = new Map(
+        shapes.map((sh) => [sh.id, s.scene.getAll().indexOf(sh)])
+      );
+      const index = Math.min(
+        ...shapes.map((sh) => s.scene.getAll().indexOf(sh))
+      );
+      for (const sh of shapes) {
+        commands.push({
+          id: sh.id,
+          before: sh.toJSON(),
+          after: null,
+          index: indexes.get(sh.id) ?? 0,
+        });
+        s.scene.remove(sh.id);
+        s.bindingEngine.reindexShape(sh.id);
+      }
+      s.scene.insertAt(group, index);
+      commands.push({
+        id: group.id,
+        before: null,
+        after: group.toJSON(),
+        index,
+      });
+      pushBatchCommand(commands);
+      s.selectShape(group.id);
+      s.bindingEngine.reindexPath([group.id]);
+      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
+      s.renderer?.render();
+      s.bumpShapeRevision();
+      flushAutosave();
+    },
+    ungroupSelected: () => {
+      const s = get();
+      if (!s.selectedId || (s.selectedPath && s.selectedPath.length > 1)) {
+        return;
+      }
+      const group = s.scene.get(s.selectedId);
+      if (!(group instanceof GroupShape) || group.locked) return;
+      const children = unwrapGroup(group);
+      const index = s.scene.getAll().indexOf(group);
+      const commands: ShapeCommand[] = [
+        {
+          id: group.id,
+          before: group.toJSON(),
+          after: null,
+          index,
+        },
+      ];
+      s.scene.remove(group.id);
+      s.bindingEngine.reindexShape(group.id);
+      for (const child of children) {
+        commands.push({
+          id: child.id,
+          before: null,
+          after: child.toJSON(),
+          index: s.scene.getAll().length,
+        });
+        s.scene.add(child);
+        s.bindingEngine.reindexPath([child.id]);
+      }
+      pushBatchCommand(commands);
+      if (children.length > 0) {
+        s.selectShapeAt([children[0].id]);
+      } else {
+        s.selectShape(null);
+      }
+      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
+      s.renderer?.render();
+      s.bumpShapeRevision();
+      flushAutosave();
+    },
+    reorderSelected: (toIndex) => {
+      const s = get();
+      if (!s.selectedPath) return;
+      const result = reorderSibling(s.scene, s.selectedPath, toIndex);
+      if (!result || result.before.join(",") === result.after.join(",")) {
+        return;
+      }
+      pushCommand({
+        id: s.selectedId ?? "",
+        before: null,
+        after: null,
+        index: 0,
+        reorder: {
+          parentPath: s.selectedPath.slice(0, -1),
+          before: result.before,
+          after: result.after,
+        },
+      });
+      s.renderer?.render();
+      s.bumpShapeRevision();
+      flushAutosave();
+    },
+    toggleShapeVisible: (path) => {
+      const shape = resolveShape(get().scene, path);
+      if (shape) {
+        get().updateShapeAt(path, { visible: !shape.visible });
+      }
+    },
+    toggleShapeLocked: (path) => {
+      const shape = resolveShape(get().scene, path);
+      if (shape) {
+        get().updateShapeAt(path, { locked: !shape.locked });
+      }
+    },
+    renameShape: (path, name) => {
+      if (!name.trim()) return;
+      get().updateShapeAt(path, { name: name.trim() });
     },
     beginShapeEdit: (id) => {
       const s = get();
@@ -748,21 +934,36 @@ export const useEditorStore = create<EditorState>((set, get) => {
       pendingEdit = null;
       const command = activeHistory.undo(s.scene);
       if (!command) return;
-      if (command.batch) {
-        for (const c of command.batch) s.bindingEngine.reindexShape(c.id);
-        set({ selectedId: null });
+      if (command.reorder) {
+        s.renderer?.render();
+      } else if (command.path && command.path.length > 0) {
+        const path = [...command.path, command.id];
+        s.bindingEngine.reindexPath(path);
+        set({ selectedId: command.id, selectedPath: path });
         if (s.renderer) {
           s.renderer.selectedIds.clear();
+          s.renderer.selectedChildPath = path;
+          s.renderer.render();
+        }
+      } else if (command.batch) {
+        for (const c of command.batch) s.bindingEngine.reindexShape(c.id);
+        set({ selectedId: null, selectedPath: null });
+        if (s.renderer) {
+          s.renderer.selectedIds.clear();
+          s.renderer.selectedChildPath = null;
           s.renderer.render();
         }
       } else {
         s.bindingEngine.reindexShape(command.id);
+        const exists = !!s.scene.get(command.id);
         set({
-          selectedId: s.scene.get(command.id) ? command.id : null,
+          selectedId: exists ? command.id : null,
+          selectedPath: exists ? [command.id] : null,
         });
         if (s.renderer) {
           s.renderer.selectedIds.clear();
-          if (s.scene.get(command.id)) s.renderer.selectedIds.add(command.id);
+          s.renderer.selectedChildPath = null;
+          if (exists) s.renderer.selectedIds.add(command.id);
           s.renderer.render();
         }
       }
@@ -775,21 +976,36 @@ export const useEditorStore = create<EditorState>((set, get) => {
       pendingEdit = null;
       const command = activeHistory.redo(s.scene);
       if (!command) return;
-      if (command.batch) {
-        for (const c of command.batch) s.bindingEngine.reindexShape(c.id);
-        set({ selectedId: null });
+      if (command.reorder) {
+        s.renderer?.render();
+      } else if (command.path && command.path.length > 0) {
+        const path = [...command.path, command.id];
+        s.bindingEngine.reindexPath(path);
+        set({ selectedId: command.id, selectedPath: path });
         if (s.renderer) {
           s.renderer.selectedIds.clear();
+          s.renderer.selectedChildPath = path;
+          s.renderer.render();
+        }
+      } else if (command.batch) {
+        for (const c of command.batch) s.bindingEngine.reindexShape(c.id);
+        set({ selectedId: null, selectedPath: null });
+        if (s.renderer) {
+          s.renderer.selectedIds.clear();
+          s.renderer.selectedChildPath = null;
           s.renderer.render();
         }
       } else {
         s.bindingEngine.reindexShape(command.id);
+        const exists = !!s.scene.get(command.id);
         set({
-          selectedId: s.scene.get(command.id) ? command.id : null,
+          selectedId: exists ? command.id : null,
+          selectedPath: exists ? [command.id] : null,
         });
         if (s.renderer) {
           s.renderer.selectedIds.clear();
-          if (s.scene.get(command.id)) s.renderer.selectedIds.add(command.id);
+          s.renderer.selectedChildPath = null;
+          if (exists) s.renderer.selectedIds.add(command.id);
           s.renderer.render();
         }
       }
@@ -861,6 +1077,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
           pageHeight: f.meta.height,
           pageBackground: f.meta.background,
           selectedId: null,
+          selectedPath: null,
           library: [],
           libraryGroups: [],
           libraryCollapsed: loadLibraryCollapsedFromStorage().filter((k) =>
@@ -958,6 +1175,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
             pageHeight: m.height,
             pageBackground: m.background,
             selectedId: null,
+            selectedPath: null,
           });
         let h = historyByPage.get(pageId);
         if (!h) {
@@ -992,6 +1210,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
         pageHeight: meta.height,
         pageBackground: meta.background,
         selectedId: null,
+        selectedPath: null,
         history: h,
         historyRevision: 0,
         pageViews: {
@@ -1585,6 +1804,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
             pageHeight: f.meta.height,
             pageBackground: f.meta.background,
             selectedId: null,
+            selectedPath: null,
             library: s.projectManager.getLibrary(),
             libraryGroups: s.projectManager.getLibraryGroups(),
             libraryCollapsed: mergeLibraryCollapsed(

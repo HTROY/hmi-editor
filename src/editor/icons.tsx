@@ -41,7 +41,9 @@ export type IconName =
   | "down"
   | "sun"
   | "moon"
-  | "eye";
+  | "eye"
+  | "group"
+  | "ungroup";
 
 const STROKE: Record<string, React.ReactNode> = {
   cursor: <path d="M4 3l6.6 16 2.5-6.3 6.4-2.5L4 3z" />,
@@ -226,6 +228,19 @@ const STROKE: Record<string, React.ReactNode> = {
     <>
       <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
       <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  group: (
+    <>
+      <rect x="3" y="3" width="11" height="11" rx="1" />
+      <rect x="10" y="10" width="11" height="11" rx="1" />
+    </>
+  ),
+  ungroup: (
+    <>
+      <rect x="3" y="3" width="8" height="8" rx="1" />
+      <rect x="13" y="13" width="8" height="8" rx="1" />
+      <path d="M11 7h4v4M7 11v4h4" />
     </>
   ),
 };

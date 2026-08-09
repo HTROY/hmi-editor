@@ -1,6 +1,17 @@
 import { createShape } from "../shapes";
+import { GroupShape } from "../shapes/GroupShape";
 import type { SceneGraph } from "../scene";
 import type { ShapeProps } from "../types";
+import { applySiblingOrder } from "../inspector/reorder";
+import { resolveShape } from "../inspector/tree";
+
+/** 同父换序命令：parentPath 为空表示顶层 */
+export interface ShapeReorder {
+  parentPath: string[];
+  /** 换序前/后的展示顺序（最上层优先） */
+  before: string[];
+  after: string[];
+}
 
 /** 一条针对单个图元的编辑命令（before/after 为图元序列化快照） */
 export interface ShapeCommand {
@@ -13,6 +24,10 @@ export interface ShapeCommand {
   index: number;
   /** 批量命令：一组图元的一次编辑（如整页等比缩放），非空时整体撤销/重做 */
   batch?: ShapeCommand[];
+  /** 子图元命令：从场景根到父级的路径（不含命令目标自身） */
+  path?: string[];
+  /** 同父换序命令（与 before/after 互斥使用） */
+  reorder?: ShapeReorder;
 }
 
 /**
@@ -85,6 +100,18 @@ export class CommandHistory {
   }
 
   private applyUndo(scene: SceneGraph, command: ShapeCommand): void {
+    if (command.reorder) {
+      applySiblingOrder(
+        scene,
+        command.reorder.parentPath,
+        command.reorder.before
+      );
+      return;
+    }
+    if (command.path && command.path.length > 0) {
+      this.applyChildSnapshot(scene, command, "before");
+      return;
+    }
     if (command.before === null) {
       // 新增 → 撤销即删除
       scene.remove(command.id);
@@ -109,6 +136,18 @@ export class CommandHistory {
   }
 
   private applyRedo(scene: SceneGraph, command: ShapeCommand): void {
+    if (command.reorder) {
+      applySiblingOrder(
+        scene,
+        command.reorder.parentPath,
+        command.reorder.after
+      );
+      return;
+    }
+    if (command.path && command.path.length > 0) {
+      this.applyChildSnapshot(scene, command, "after");
+      return;
+    }
     if (command.after === null) {
       scene.remove(command.id);
       return;
@@ -128,5 +167,21 @@ export class CommandHistory {
       // zIndex 可能变化，使排序缓存失效
       scene.markDirty();
     }
+  }
+
+  private applyChildSnapshot(
+    scene: SceneGraph,
+    command: ShapeCommand,
+    which: "before" | "after"
+  ): void {
+    const parent = resolveShape(scene, command.path ?? []);
+    if (!(parent instanceof GroupShape)) return;
+    const snapshot = command[which];
+    if (snapshot === null) {
+      parent.children = parent.children.filter((c) => c.id !== command.id);
+      return;
+    }
+    const child = parent.children.find((c) => c.id === command.id);
+    if (child) child.fromJSON(snapshot);
   }
 }

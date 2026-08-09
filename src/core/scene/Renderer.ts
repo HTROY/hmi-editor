@@ -1,9 +1,12 @@
 import { SceneGraph } from "./SceneGraph";
 import { ShapeBase } from "../shapes/ShapeBase";
+import { GroupShape } from "../shapes/GroupShape";
 import { ImageShape } from "../shapes/ImageShape";
 import { Viewport } from "../view";
 import { getAnimatedAABB, getRotatedAABB } from "./resize";
 import type { AnimationFrameState } from "../bindings/animation";
+import { getShapeWorldAABB } from "../inspector/groupOps";
+import type { BoundingBox } from "../types";
 
 // ============================================================
 // Renderer — Canvas 渲染器
@@ -21,6 +24,8 @@ export class Renderer {
 
   // 选中的图元 ID 集合
   selectedIds: Set<string> = new Set();
+  /** 树中选中的子图元路径（只读高亮，无手柄） */
+  selectedChildPath: string[] | null = null;
   private attachedImages = new WeakSet<ImageShape>();
   private animationState: Map<string, AnimationFrameState> = new Map();
 
@@ -77,7 +82,7 @@ export class Renderer {
     // 绘制所有图元（世界坐标，视图变换不影响图元坐标）
     const shapes = this.scene.getAll();
     for (const shape of shapes) {
-      this.renderShape(ctx, shape);
+      this.renderTree(ctx, shape);
       if (shape instanceof ImageShape) this.attachImageReload(shape);
     }
 
@@ -88,29 +93,65 @@ export class Renderer {
       }
     }
 
+    // 树选中的子图元：只读高亮框（不参与画布拖拽/缩放）
+    if (this.selectedChildPath) {
+      const bb = getShapeWorldAABB(this.scene, this.selectedChildPath);
+      if (bb) this.drawChildSelection(bb, zoom);
+    }
+
     ctx.restore();
   }
 
-  /** 绘制单个图元；有动画帧状态时先叠加位移/旋转/缩放/透明度/色相 */
-  private renderShape(ctx: CanvasRenderingContext2D, shape: ShapeBase): void {
-    const anim = this.animationState.get(shape.id);
-    if (!anim) {
-      shape.render(ctx);
+  /**
+   * 递归绘制：组负责位移/旋转/动画变换与透明度叠乘，
+   * 子图元各自叠加动画帧状态；alphaMul 逐层传入叶子图元。
+   */
+  private renderTree(
+    ctx: CanvasRenderingContext2D,
+    shape: ShapeBase,
+    alphaMul = 1
+  ): void {
+    if (shape instanceof GroupShape) {
+      const anim = this.animationState.get(shape.id);
+      ctx.save();
+      ctx.translate(shape.x, shape.y);
+      ctx.rotate((shape.rotation * Math.PI) / 180);
+      if (anim) {
+        this.applyAnimationTransform(ctx, shape, anim);
+        if (anim.hueRotate !== undefined && anim.hueRotate !== 0) {
+          ctx.filter = "hue-rotate(" + anim.hueRotate + "deg)";
+        }
+      }
+      const groupOpacity =
+        anim?.opacity !== undefined
+          ? Math.min(1, Math.max(0, anim.opacity))
+          : shape.opacity;
+      for (const child of shape.children) {
+        this.renderTree(ctx, child, alphaMul * groupOpacity);
+      }
+      ctx.restore();
       return;
     }
 
+    const anim = this.animationState.get(shape.id);
     const prevOpacity = shape.opacity;
-    if (anim.opacity !== undefined) {
+    if (anim?.opacity !== undefined) {
       shape.opacity = Math.min(1, Math.max(0, anim.opacity));
     }
     try {
-      ctx.save();
-      this.applyAnimationTransform(ctx, shape, anim);
-      if (anim.hueRotate !== undefined && anim.hueRotate !== 0) {
-        ctx.filter = "hue-rotate(" + anim.hueRotate + "deg)";
+      if (anim) {
+        ctx.save();
+        this.applyAnimationTransform(ctx, shape, anim);
+        if (anim.hueRotate !== undefined && anim.hueRotate !== 0) {
+          ctx.filter = "hue-rotate(" + anim.hueRotate + "deg)";
+        }
+        shape.opacity = shape.opacity * alphaMul;
+        shape.render(ctx);
+        ctx.restore();
+      } else {
+        shape.opacity = shape.opacity * alphaMul;
+        shape.render(ctx);
       }
-      shape.render(ctx);
-      ctx.restore();
     } finally {
       shape.opacity = prevOpacity;
     }
@@ -240,6 +281,22 @@ export class Renderer {
       );
     }
 
+    ctx.restore();
+  }
+
+  /** 子图元只读高亮：细虚线框，不提供手柄 */
+  private drawChildSelection(bb: BoundingBox, zoom: number): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.strokeStyle = "#69C0FF";
+    ctx.lineWidth = 1.5 / zoom;
+    ctx.setLineDash([3 / zoom, 3 / zoom]);
+    ctx.strokeRect(
+      bb.x - 1.5 / zoom,
+      bb.y - 1.5 / zoom,
+      bb.width + 3 / zoom,
+      bb.height + 3 / zoom
+    );
     ctx.restore();
   }
 
