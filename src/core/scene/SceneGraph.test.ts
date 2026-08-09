@@ -92,3 +92,26 @@ describe("SceneGraph.hitTest 动画命中", () => {
     expect(sg.hitTest(10, 10, anim)).toBeNull();
   });
 });
+
+describe("SceneGraph 结构版本", () => {
+  it("增删/插入/清空/标记脏都会递增 version（供图元树重建）", () => {
+    const sg = new SceneGraph();
+    const v0 = sg.version;
+    sg.add(createShape("rect", { id: "r1" }));
+    expect(sg.version).toBeGreaterThan(v0);
+
+    const v1 = sg.version;
+    sg.remove("r1");
+    expect(sg.version).toBeGreaterThan(v1);
+
+    const v2 = sg.version;
+    sg.add(createShape("rect", { id: "r2" }));
+    sg.insertAt(createShape("rect", { id: "r3" }), 0);
+    sg.clear();
+    expect(sg.version).toBeGreaterThan(v2);
+
+    const v3 = sg.version;
+    sg.markDirty();
+    expect(sg.version).toBeGreaterThan(v3);
+  });
+});

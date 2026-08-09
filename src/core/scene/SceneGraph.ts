@@ -11,17 +11,27 @@ export class SceneGraph {
   private shapes: Map<string, ShapeBase> = new Map();
   private dirty = true;
   private sortedCache: ShapeBase[] = [];
+  private _version = 0;
+
+  /** 结构版本：增删/插入/清空/标记脏时递增，供依赖方（图元树等）重建派生数据 */
+  get version(): number {
+    return this._version;
+  }
 
   /** 添加图元 */
   add(shape: ShapeBase): void {
     this.shapes.set(shape.id, shape);
     this.dirty = true;
+    this._version++;
   }
 
   /** 删除图元 */
   remove(id: string): boolean {
     const result = this.shapes.delete(id);
-    if (result) this.dirty = true;
+    if (result) {
+      this.dirty = true;
+      this._version++;
+    }
     return result;
   }
 
@@ -37,6 +47,7 @@ export class SceneGraph {
     sorted.splice(at, 0, shape);
     this.shapes = new Map(sorted.map((s) => [s.id, s]));
     this.dirty = true;
+    this._version++;
   }
 
   /** 获取所有图元（按 zIndex 排序） */
@@ -92,6 +103,7 @@ export class SceneGraph {
   clear(): void {
     this.shapes.clear();
     this.dirty = true;
+    this._version++;
   }
 
   /** 图元数量 */
@@ -102,5 +114,6 @@ export class SceneGraph {
   /** 更新 zIndex 后标记排序失效 */
   markDirty(): void {
     this.dirty = true;
+    this._version++;
   }
 }

@@ -42,6 +42,7 @@ function siblingIndexOf(nodes: ShapeTreeNode[], targetPath: ShapePath): number {
 
 export function ShapeTree() {
   const scene = useEditorStore((s) => s.scene);
+  const sceneVersion = useEditorStore((s) => s.scene.version);
   const shapeRevision = useEditorStore((s) => s.shapeRevision);
   const activePageId = useEditorStore((s) => s.activePageId);
   const selectedPath = useEditorStore((s) => s.selectedPath);
@@ -54,8 +55,8 @@ export function ShapeTree() {
 
   const tree = useMemo(
     () => buildShapeTree(scene),
-    // scene 原地修改，shapeRevision 驱动重建
-    [scene, shapeRevision]
+    // scene 原地修改：结构变化看 sceneVersion，属性变化看 shapeRevision
+    [scene, sceneVersion, shapeRevision]
   );
 
   // 展开状态按页面记在会话内存
