@@ -2,6 +2,41 @@ import { describe, expect, it } from "vitest";
 import { PROJECT_SCHEMA_VERSION, upgradeProjectData } from "./upgrade";
 
 describe("旧 .hmi.json 自动升级", () => {
+  it("图元库条目补默认值并保留", () => {
+    const upgraded = upgradeProjectData({
+      schemaVersion: 1,
+      meta: {},
+      pages: [{ meta: {}, shapes: [] }],
+      library: [
+        { id: "lib_1", name: "通风机组", shape: { id: "x", type: "rect" } },
+      ],
+    });
+
+    expect(upgraded.library).toHaveLength(1);
+    const item = upgraded.library![0];
+    expect(item.id).toBe("lib_1");
+    expect(item.name).toBe("通风机组");
+    expect(item.shape.type).toBe("rect");
+    expect(item.shape.x).toBe(0);
+    expect(item.shape.width).toBe(100);
+    expect(typeof item.createdAt).toBe("string");
+    expect(typeof item.updatedAt).toBe("string");
+  });
+
+  it("图元库条目 id 重复时追加后缀", () => {
+    const upgraded = upgradeProjectData({
+      schemaVersion: 1,
+      meta: {},
+      pages: [{ meta: {}, shapes: [] }],
+      library: [
+        { id: "lib_1", name: "A", shape: { type: "rect" } },
+        { id: "lib_1", name: "B", shape: { type: "circle" } },
+      ],
+    });
+
+    expect(upgraded.library!.map((i) => i.id)).toEqual(["lib_1", "lib_1_2"]);
+  });
+
   it("无 schemaVersion 的旧工程按 v1 导入并补 meta/页面默认值", () => {
     const legacy = {
       meta: { name: "旧工程" },

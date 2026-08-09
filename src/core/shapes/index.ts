@@ -10,6 +10,16 @@ export { GroupShape } from "./GroupShape";
 export { ImageShape } from "./ImageShape";
 export { createShape } from "./factory";
 export {
+  cloneShapeWithNewIds,
+  createLibraryItem,
+  generateLibraryId,
+  getShapeBounds,
+  libraryItemToShape,
+  offsetShapeProps,
+  renderShapeThumbnail,
+} from "./library";
+export type { LibraryItem } from "./library";
+export {
   MetroBreaker,
   MetroBusBar,
   MetroFan,

@@ -350,6 +350,33 @@ export function EditorCanvas() {
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragOver(false);
+    const shapePayload = e.dataTransfer.getData("application/x-hmi-shape");
+    if (shapePayload) {
+      const store = useEditorStore.getState();
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const world = store.viewport.screenToWorld(
+        e.clientX - rect.left,
+        e.clientY - rect.top
+      );
+      try {
+        const payload = JSON.parse(shapePayload) as {
+          kind?: string;
+          id?: string;
+          type?: string;
+        };
+        if (payload?.kind === "library" && payload.id) {
+          store.placeLibraryItem(payload.id, world.x, world.y);
+        } else if (payload?.kind === "builtin" && payload.type) {
+          store.addShape(payload.type as any, world.x - 60, world.y - 40);
+          store.setMode("select");
+        }
+      } catch {
+        /* 无效拖拽载荷忽略 */
+      }
+      return;
+    }
     const files = Array.from(e.dataTransfer?.files ?? []);
     const svgFile = files.find(
       (f) => f.type === "image/svg+xml" || f.name.toLowerCase().endsWith(".svg")
@@ -454,8 +481,8 @@ export function EditorCanvas() {
       )}
       {dragOver && (
         <div className="svg-drop-overlay">
-          <span className="svg-drop-icon">图片/SVG</span>
-          <span>释放以导入 PNG/JPG 或 SVG 文件</span>
+          <span className="svg-drop-icon">图元 / 图片</span>
+          <span>释放以放置图元，或导入 PNG/JPG / SVG 文件</span>
         </div>
       )}
     </div>

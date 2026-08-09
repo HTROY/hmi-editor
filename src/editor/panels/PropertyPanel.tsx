@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React, { useState } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import {
   RectShape,
@@ -6,6 +6,7 @@ import {
   PathShape,
   GroupShape,
   ImageShape,
+  ShapeBase,
 } from "../../core/shapes";
 import {
   MetroBreaker,
@@ -15,27 +16,280 @@ import {
   MetroBusBar,
   MetroTransformer,
 } from "../../core/shapes/metro";
+import { getBindingStatus } from "../../core/bindings";
+import type { Binding } from "../../core/types";
 
 // ============================================================
-// PropertyPanel — 图元属性编辑面板（支持通用 + 地铁专用图元）
+// PropertyPanel — 图元属性面板（调度台账 + 接线表）
+// 分区：GEO 位置与尺寸 / STY 样式 / SEM 类型特有 / IO 绑定
+// 可绑定属性行带「端子」，点击快速创建绑定；多选时批量编辑公共属性
 // ============================================================
+
+const NUMERIC_PROPS = new Set([
+  "rotation",
+  "x",
+  "y",
+  "width",
+  "height",
+  "opacity",
+  "fontSize",
+  "strokeWidth",
+  "cornerRadius",
+  "speedPercent",
+  "value",
+]);
+
+const BINDABLE_PROPS = new Set([
+  "fill",
+  "stroke",
+  "rotation",
+  "opacity",
+  "visible",
+  "x",
+  "y",
+  "width",
+  "height",
+  "text",
+]);
+
+function Section({ code, title }: { code: string; title: string }) {
+  return (
+    <div className="prop-section">
+      <span className="prop-section-code">{code}</span>
+      <span className="prop-section-title">{title}</span>
+    </div>
+  );
+}
+
+function NumCell({
+  label,
+  value,
+  unit,
+  onChange,
+  terminal,
+}: {
+  label: string;
+  value: number;
+  unit?: string;
+  onChange: (v: number) => void;
+  terminal?: React.ReactNode;
+}) {
+  return (
+    <label className="prop-cell">
+      <span className="prop-cell-label">{label}</span>
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+      {unit && <span className="prop-cell-unit">{unit}</span>}
+      {terminal}
+    </label>
+  );
+}
+
+/** 可绑定属性行的「端子」：点击展开变量选择，直接创建/替换该属性的绑定 */
+function BindTerminal({ prop, shapeId }: { prop: string; shapeId: string }) {
+  const varManager = useEditorStore((s) => s.varManager);
+  const shape = useEditorStore((s) => s.scene.get(shapeId));
+  const [open, setOpen] = useState(false);
+  const allVars = varManager?.getAllDefs() ?? [];
+  const binding = shape?.bindings.find((b) => b.targetProp === prop);
+
+  const commit = (variableId: string) => {
+    if (variableId && shape) {
+      const s = useEditorStore.getState();
+      const v = allVars.find((x) => x.id === variableId);
+      const digital = v?.type === "DI" || v?.type === "DO";
+      const isColorProp = prop === "fill" || prop === "stroke";
+      const newBinding: Binding = {
+        variableId,
+        variableType: v?.type ?? "DI",
+        targetProp: prop,
+        mapping:
+          digital && isColorProp
+            ? { type: "enum", map: { "0": "#808080", "1": "#00FF00" } }
+            : { type: "direct" },
+        smooth: NUMERIC_PROPS.has(prop),
+        smoothMs: 300,
+      };
+      const bindings = shape.bindings.some((b) => b.targetProp === prop)
+        ? shape.bindings.map((b) => (b.targetProp === prop ? newBinding : b))
+        : [...shape.bindings, newBinding];
+      s.updateShape(shapeId, { bindings });
+      s.bindingEngine?.reindexShape(shapeId);
+    }
+    setOpen(false);
+  };
+
+  if (!open) {
+    return (
+      <button
+        className={"prop-terminal" + (binding ? " bound" : "")}
+        data-bind-prop={prop}
+        title={
+          binding ? `已绑定 ${binding.variableId}（点击更换）` : "快速绑定变量"
+        }
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          setOpen(true);
+        }}
+      >
+        <span className="prop-terminal-dot" />
+      </button>
+    );
+  }
+  return (
+    <select
+      className="quick-bind-select"
+      autoFocus
+      value=""
+      onChange={(e) => commit(e.target.value)}
+      onBlur={() => setOpen(false)}
+    >
+      <option value="">
+        {binding ? `已绑 ${binding.variableId}` : "选择变量…"}
+      </option>
+      {allVars.map((v) => (
+        <option key={v.id} value={v.id}>
+          {v.id} ({v.name})
+        </option>
+      ))}
+    </select>
+  );
+}
 
 export function PropertyPanel() {
-  const { scene, selectedId, updateShape } = useEditorStore();
+  const { scene, selectedId, updateShape, varManager, setRightPanel } =
+    useEditorStore();
+  // 选中集合跟随 renderer（多选框选）；selectedId 变化即触发重渲染
+  const renderer = useEditorStore((s) => s.renderer);
+  const selectedIds = renderer?.selectedIds
+    ? Array.from(renderer.selectedIds)
+    : selectedId
+      ? [selectedId]
+      : [];
   const shape = selectedId ? scene.get(selectedId) : null;
+
+  const setProp = (key: string, value: any) => {
+    if (selectedId) updateShape(selectedId, { [key]: value });
+  };
 
   if (!shape) {
     return (
       <div className="panel">
         <div className="panel-title">属性</div>
-        <div className="panel-hint">请选中一个图元</div>
+        <div className="prop-empty">
+          <span className="prop-empty-dot" />
+          <div>
+            <div className="prop-empty-title">未选择图元</div>
+            <div className="prop-empty-desc">
+              在画布上点击或框选图元，属性将显示在这里
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
-  const setProp = (key: string, value: any) => {
-    if (selectedId) updateShape(selectedId, { [key]: value });
-  };
+  // ---- 多选：批量编辑公共样式属性 ----
+  if (selectedIds.length > 1) {
+    const selected = selectedIds
+      .map((id) => scene.get(id))
+      .filter((s): s is ShapeBase => !!s);
+    const apply = (key: string, value: any) => {
+      for (const id of selectedIds) updateShape(id, { [key]: value });
+    };
+    const first = selected[0];
+    return (
+      <div className="panel">
+        <div className="panel-title">属性</div>
+        <div className="prop-multi-header">
+          已选中 {selected.length} 个图元 · 公共属性同值应用
+        </div>
+        <Section code="STY" title="公共属性" />
+        <div className="prop-row">
+          <span className="prop-label">填充</span>
+          <input
+            type="color"
+            value={first.fill === "transparent" ? "#000000" : first.fill}
+            onChange={(e) => apply("fill", e.target.value)}
+          />
+          <input
+            value={first.fill}
+            onChange={(e) => apply("fill", e.target.value)}
+            className="prop-text-input prop-color-text"
+          />
+        </div>
+        <div className="prop-row">
+          <span className="prop-label">边框</span>
+          <input
+            type="color"
+            value={first.stroke === "transparent" ? "#000000" : first.stroke}
+            onChange={(e) => apply("stroke", e.target.value)}
+          />
+          <input
+            value={first.stroke}
+            onChange={(e) => apply("stroke", e.target.value)}
+            className="prop-text-input prop-color-text"
+          />
+        </div>
+        <div className="prop-row">
+          <span className="prop-label">线宽</span>
+          <input
+            type="number"
+            min="0"
+            max="20"
+            value={first.strokeWidth}
+            onChange={(e) => apply("strokeWidth", Number(e.target.value))}
+          />
+        </div>
+        <div className="prop-row">
+          <span className="prop-label">旋转</span>
+          <input
+            type="number"
+            value={Math.round(first.rotation)}
+            onChange={(e) => apply("rotation", Number(e.target.value))}
+          />
+          <span className="prop-cell-unit">°</span>
+        </div>
+        <div className="prop-row">
+          <span className="prop-label">不透明度</span>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.1"
+            value={first.opacity}
+            onChange={(e) => apply("opacity", Number(e.target.value))}
+          />
+          <span className="prop-value">{first.opacity}</span>
+        </div>
+        <div className="prop-check-row">
+          <label className="prop-check">
+            <input
+              type="checkbox"
+              checked={first.visible}
+              onChange={(e) => apply("visible", e.target.checked)}
+            />
+            可见
+          </label>
+          <label className="prop-check">
+            <input
+              type="checkbox"
+              checked={first.locked}
+              onChange={(e) => apply("locked", e.target.checked)}
+            />
+            锁定
+          </label>
+        </div>
+        <div className="panel-hint">
+          几何与类型特有属性请在画布上直接调整（拖拽 / 手柄缩放）
+        </div>
+      </div>
+    );
+  }
 
   const isRect = shape instanceof RectShape;
   const isText = shape instanceof TextShape;
@@ -48,98 +302,75 @@ export function PropertyPanel() {
   const isGauge = shape instanceof MetroGauge;
   const isBusBar = shape instanceof MetroBusBar;
   const isTransformer = shape instanceof MetroTransformer;
+  const terminal = (prop: string) => (
+    <BindTerminal prop={prop} shapeId={shape.id} />
+  );
 
   return (
     <div className="panel">
-      <div className="panel-title">属性</div>
-
-      {/* ---- 图元类型 + ID ---- */}
-      <div className="prop-group">
-        <label>类型</label>
-        <span style={{ fontSize: 12, color: "var(--accent)" }}>
-          {shape.type}
-        </span>
+      <div className="panel-title">
+        属性
+        {shape.bindings.length > 0 && (
+          <span className="panel-badge">{shape.bindings.length} 绑定</span>
+        )}
       </div>
-      <div className="prop-group">
-        <label>名称</label>
+
+      <div className="prop-identity">
+        <span className="prop-type-chip">{shape.type}</span>
         <input
+          className="binding-filter prop-name-input"
           value={shape.name}
           onChange={(e) => setProp("name", e.target.value)}
         />
       </div>
 
-      {/* ---- 通用位置属性 ---- */}
-      <div
-        style={{
-          marginTop: 8,
-          fontWeight: 600,
-          fontSize: 12,
-          color: "var(--text-secondary)",
-        }}
-      >
-        位置与尺寸
-      </div>
-      <div className="prop-group">
-        <label>X</label>
-        <input
-          type="number"
+      <Section code="GEO" title="位置与尺寸" />
+      <div className="prop-grid2">
+        <NumCell
+          label="X"
           value={Math.round(shape.x)}
-          onChange={(e) => setProp("x", Number(e.target.value))}
+          onChange={(v) => setProp("x", v)}
+          terminal={BINDABLE_PROPS.has("x") ? terminal("x") : undefined}
         />
-        <label>Y</label>
-        <input
-          type="number"
+        <NumCell
+          label="Y"
           value={Math.round(shape.y)}
-          onChange={(e) => setProp("y", Number(e.target.value))}
+          onChange={(v) => setProp("y", v)}
+          terminal={terminal("y")}
         />
-      </div>
-      <div className="prop-group">
-        <label>宽度</label>
-        <input
-          type="number"
+        <NumCell
+          label="宽度"
           value={Math.round(shape.width)}
-          onChange={(e) => setProp("width", Number(e.target.value))}
+          onChange={(v) => setProp("width", v)}
+          terminal={terminal("width")}
         />
-        <label>高度</label>
-        <input
-          type="number"
+        <NumCell
+          label="高度"
           value={Math.round(shape.height)}
-          onChange={(e) => setProp("height", Number(e.target.value))}
+          onChange={(v) => setProp("height", v)}
+          terminal={terminal("height")}
         />
-      </div>
-      <div className="prop-group">
-        <label>旋转</label>
-        <input
-          type="number"
+        <NumCell
+          label="旋转"
           value={Math.round(shape.rotation)}
-          onChange={(e) => setProp("rotation", Number(e.target.value))}
+          unit="°"
+          onChange={(v) => setProp("rotation", v)}
+          terminal={terminal("rotation")}
         />
-        <label>层级</label>
-        <input
-          type="number"
+        <NumCell
+          label="层级"
           value={shape.zIndex}
-          onChange={(e) => {
-            setProp("zIndex", Number(e.target.value));
+          onChange={(v) => {
+            setProp("zIndex", v);
             scene.markDirty();
             useEditorStore.getState().renderScene();
           }}
-          style={{ width: 50 }}
         />
       </div>
 
-      {/* ---- 通用样式属性 ---- */}
-      <div
-        style={{
-          marginTop: 8,
-          fontWeight: 600,
-          fontSize: 12,
-          color: "var(--text-secondary)",
-        }}
-      >
-        样式
-      </div>
-      <div className="prop-group">
-        <label>不透明度</label>
+      <Section code="STY" title="样式" />
+      <div className="prop-row">
+        <span className="prop-label">不透明度</span>
         <input
           type="range"
           min="0"
@@ -149,11 +380,12 @@ export function PropertyPanel() {
           onChange={(e) => setProp("opacity", Number(e.target.value))}
         />
         <span className="prop-value">{shape.opacity}</span>
+        {terminal("opacity")}
       </div>
 
       {!isBreaker && !isFan && !isSignal && (
-        <div className="prop-group">
-          <label>填充色</label>
+        <div className="prop-row">
+          <span className="prop-label">填充</span>
           <input
             type="color"
             value={shape.fill === "transparent" ? "#000000" : shape.fill}
@@ -162,13 +394,14 @@ export function PropertyPanel() {
           <input
             value={shape.fill}
             onChange={(e) => setProp("fill", e.target.value)}
-            className="prop-text-input"
+            className="prop-text-input prop-color-text"
           />
+          {terminal("fill")}
         </div>
       )}
 
-      <div className="prop-group">
-        <label>边框色</label>
+      <div className="prop-row">
+        <span className="prop-label">边框</span>
         <input
           type="color"
           value={shape.stroke === "transparent" ? "#000000" : shape.stroke}
@@ -177,11 +410,13 @@ export function PropertyPanel() {
         <input
           value={shape.stroke}
           onChange={(e) => setProp("stroke", e.target.value)}
-          className="prop-text-input"
+          className="prop-text-input prop-color-text"
         />
+        {terminal("stroke")}
       </div>
-      <div className="prop-group">
-        <label>线宽</label>
+
+      <div className="prop-row">
+        <span className="prop-label">线宽</span>
         <input
           type="number"
           min="0"
@@ -191,10 +426,31 @@ export function PropertyPanel() {
         />
       </div>
 
-      {/* ---- 矩形特有 ---- */}
+      <div className="prop-check-row">
+        <label className="prop-check">
+          <input
+            type="checkbox"
+            checked={shape.visible}
+            onChange={(e) => setProp("visible", e.target.checked)}
+          />
+          可见
+        </label>
+        <label className="prop-check">
+          <input
+            type="checkbox"
+            checked={shape.locked}
+            onChange={(e) => setProp("locked", e.target.checked)}
+          />
+          锁定
+        </label>
+        {terminal("visible")}
+      </div>
+
+      <Section code="SEM" title="类型属性" />
+
       {isRect && (
-        <div className="prop-group">
-          <label>圆角</label>
+        <div className="prop-row">
+          <span className="prop-label">圆角</span>
           <input
             type="number"
             min="0"
@@ -205,18 +461,18 @@ export function PropertyPanel() {
         </div>
       )}
 
-      {/* ---- 文本特有 ---- */}
       {isText && (
         <>
-          <div className="prop-group">
-            <label>文本</label>
+          <div className="prop-row">
+            <span className="prop-label">文本</span>
             <input
               value={(shape as TextShape).text}
               onChange={(e) => setProp("text", e.target.value)}
             />
+            {terminal("text")}
           </div>
-          <div className="prop-group">
-            <label>字号</label>
+          <div className="prop-row">
+            <span className="prop-label">字号</span>
             <input
               type="number"
               min="8"
@@ -228,51 +484,43 @@ export function PropertyPanel() {
         </>
       )}
 
-      {/* ---- 路径特有 ---- */}
       {isPath && (
-        <div className="prop-group">
-          <label>路径数据 (d)</label>
+        <div className="prop-row prop-row-stack">
+          <span className="prop-label">路径 d</span>
           <textarea
             rows={3}
-            style={{ width: "100%", fontFamily: "monospace", fontSize: 11 }}
+            className="prop-textarea"
             value={(shape as PathShape).d}
             onChange={(e) => setProp("d", e.target.value)}
           />
         </div>
       )}
 
-      {/* ---- 组特有 ---- */}
       {isGroup && (
-        <div className="prop-group">
-          <label>子图元</label>
-          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+        <div className="prop-row">
+          <span className="prop-label">子图元</span>
+          <span className="prop-value">
             {(shape as GroupShape).children.length} 个
           </span>
         </div>
       )}
 
-      {/* ---- 栅格图特有 ---- */}
       {isImage && (
-        <div className="prop-group">
-          <label>图片数据</label>
+        <div className="prop-row prop-row-stack">
+          <span className="prop-label">图片</span>
           <input
             value={(shape as ImageShape).src}
             onChange={(e) => setProp("src", e.target.value)}
             placeholder="data:image/png;base64,... 或图片 URL"
-            style={{ fontFamily: "monospace", fontSize: 10 }}
+            className="prop-textarea-src"
           />
         </div>
       )}
 
-      {/* ============================================================ */}
-      {/* 轨道交通专用图元属性 */}
-      {/* ============================================================ */}
-
-      {/* ---- 断路器 ---- */}
       {isBreaker && (
         <>
-          <div className="prop-group">
-            <label>状态</label>
+          <div className="prop-row">
+            <span className="prop-label">状态</span>
             <select
               value={(shape as MetroBreaker).breakerStatus}
               onChange={(e) => setProp("breakerStatus", e.target.value)}
@@ -282,25 +530,24 @@ export function PropertyPanel() {
               <option value="tripped">跳闸 (红色)</option>
             </select>
           </div>
-          <div className="prop-group">
-            <label>标签</label>
-            <input
-              type="checkbox"
-              checked={(shape as MetroBreaker).showLabel}
-              onChange={(e) => setProp("showLabel", e.target.checked)}
-            />
-            <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+          <div className="prop-row">
+            <span className="prop-label">标签</span>
+            <label className="prop-check">
+              <input
+                type="checkbox"
+                checked={(shape as MetroBreaker).showLabel}
+                onChange={(e) => setProp("showLabel", e.target.checked)}
+              />
               显示分合标识
-            </span>
+            </label>
           </div>
         </>
       )}
 
-      {/* ---- 母线 ---- */}
       {isBusBar && (
         <>
-          <div className="prop-group">
-            <label>电压等级</label>
+          <div className="prop-row">
+            <span className="prop-label">电压等级</span>
             <select
               value={(shape as MetroBusBar).voltageLevel}
               onChange={(e) => setProp("voltageLevel", e.target.value)}
@@ -313,39 +560,38 @@ export function PropertyPanel() {
               <option value="DC750V">DC750V</option>
             </select>
           </div>
-          <div className="prop-group">
-            <label>带电</label>
-            <input
-              type="checkbox"
-              checked={(shape as MetroBusBar).energized}
-              onChange={(e) => setProp("energized", e.target.checked)}
-            />
-            <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+          <div className="prop-row">
+            <span className="prop-label">带电</span>
+            <label className="prop-check">
+              <input
+                type="checkbox"
+                checked={(shape as MetroBusBar).energized}
+                onChange={(e) => setProp("energized", e.target.checked)}
+              />
               母线上电
-            </span>
+            </label>
           </div>
         </>
       )}
 
-      {/* ---- 风机 ---- */}
       {isFan && (
         <>
-          <div className="prop-group">
-            <label>运行</label>
-            <input
-              type="checkbox"
-              checked={(shape as MetroFan).running}
-              onChange={(e) => {
-                setProp("running", e.target.checked);
-                if (!e.target.checked) setProp("speedPercent", 0);
-              }}
-            />
-            <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+          <div className="prop-row">
+            <span className="prop-label">运行</span>
+            <label className="prop-check">
+              <input
+                type="checkbox"
+                checked={(shape as MetroFan).running}
+                onChange={(e) => {
+                  setProp("running", e.target.checked);
+                  if (!e.target.checked) setProp("speedPercent", 0);
+                }}
+              />
               风机旋转
-            </span>
+            </label>
           </div>
-          <div className="prop-group">
-            <label>转速</label>
+          <div className="prop-row">
+            <span className="prop-label">转速</span>
             <input
               type="range"
               min="0"
@@ -361,8 +607,8 @@ export function PropertyPanel() {
               {(shape as MetroFan).speedPercent}%
             </span>
           </div>
-          <div className="prop-group">
-            <label>叶片色</label>
+          <div className="prop-row">
+            <span className="prop-label">叶片色</span>
             <input
               type="color"
               value={(shape as MetroFan).bladeColor}
@@ -372,11 +618,10 @@ export function PropertyPanel() {
         </>
       )}
 
-      {/* ---- 信号灯 ---- */}
       {isSignal && (
         <>
-          <div className="prop-group">
-            <label>信号色</label>
+          <div className="prop-row">
+            <span className="prop-label">信号色</span>
             <select
               value={(shape as MetroSignal).signalColor}
               onChange={(e) => setProp("signalColor", e.target.value)}
@@ -388,24 +633,27 @@ export function PropertyPanel() {
               <option value="gray">灰色 (离线)</option>
             </select>
           </div>
-          <div className="prop-group">
-            <label>闪烁</label>
-            <input
-              type="checkbox"
-              checked={(shape as MetroSignal).blinking}
-              onChange={(e) => setProp("blinking", e.target.checked)}
-            />
+          <div className="prop-row">
+            <span className="prop-label">闪烁</span>
+            <label className="prop-check">
+              <input
+                type="checkbox"
+                checked={(shape as MetroSignal).blinking}
+                onChange={(e) => setProp("blinking", e.target.checked)}
+              />
+              闪烁
+            </label>
           </div>
-          <div className="prop-group">
-            <label>标签文字</label>
+          <div className="prop-row">
+            <span className="prop-label">标签文字</span>
             <input
               value={(shape as MetroSignal).label}
               onChange={(e) => setProp("label", e.target.value)}
               placeholder="留空使用默认"
             />
           </div>
-          <div className="prop-group">
-            <label>标签位置</label>
+          <div className="prop-row">
+            <span className="prop-label">标签位置</span>
             <select
               value={(shape as MetroSignal).labelPosition}
               onChange={(e) => setProp("labelPosition", e.target.value)}
@@ -420,35 +668,34 @@ export function PropertyPanel() {
         </>
       )}
 
-      {/* ---- 仪表 ---- */}
       {isGauge && (
         <>
-          <div className="prop-group">
-            <label>当前值</label>
+          <div className="prop-row">
+            <span className="prop-label">当前值</span>
             <input
               type="number"
               value={(shape as MetroGauge).value}
               onChange={(e) => setProp("value", Number(e.target.value))}
             />
           </div>
-          <div className="prop-group">
-            <label>量程</label>
+          <div className="prop-row">
+            <span className="prop-label">量程</span>
             <input
               type="number"
-              style={{ width: "45%" }}
+              className="prop-range-input"
               value={(shape as MetroGauge).min}
               onChange={(e) => setProp("min", Number(e.target.value))}
             />
-            <span>~</span>
+            <span className="prop-cell-unit">~</span>
             <input
               type="number"
-              style={{ width: "45%" }}
+              className="prop-range-input"
               value={(shape as MetroGauge).max}
               onChange={(e) => setProp("max", Number(e.target.value))}
             />
           </div>
-          <div className="prop-group">
-            <label>单位</label>
+          <div className="prop-row">
+            <span className="prop-label">单位</span>
             <input
               value={(shape as MetroGauge).unit}
               onChange={(e) => setProp("unit", e.target.value)}
@@ -458,71 +705,76 @@ export function PropertyPanel() {
         </>
       )}
 
-      {/* ---- 变压器 ---- */}
       {isTransformer && (
         <>
-          <div className="prop-group">
-            <label>一次侧</label>
+          <div className="prop-row">
+            <span className="prop-label">一次侧</span>
             <input
               value={(shape as MetroTransformer).primaryVoltage}
               onChange={(e) => setProp("primaryVoltage", e.target.value)}
               placeholder="35kV"
             />
           </div>
-          <div className="prop-group">
-            <label>二次侧</label>
+          <div className="prop-row">
+            <span className="prop-label">二次侧</span>
             <input
               value={(shape as MetroTransformer).secondaryVoltage}
               onChange={(e) => setProp("secondaryVoltage", e.target.value)}
               placeholder="400V"
             />
           </div>
-          <div className="prop-group">
-            <label>容量</label>
+          <div className="prop-row">
+            <span className="prop-label">容量</span>
             <input
               value={(shape as MetroTransformer).ratedPower}
               onChange={(e) => setProp("ratedPower", e.target.value)}
               placeholder="2000kVA"
             />
           </div>
-          <div className="prop-group">
-            <label>带电</label>
-            <input
-              type="checkbox"
-              checked={(shape as MetroTransformer).energized}
-              onChange={(e) => setProp("energized", e.target.checked)}
-            />
+          <div className="prop-row">
+            <span className="prop-label">带电</span>
+            <label className="prop-check">
+              <input
+                type="checkbox"
+                checked={(shape as MetroTransformer).energized}
+                onChange={(e) => setProp("energized", e.target.checked)}
+              />
+              上电
+            </label>
           </div>
         </>
       )}
 
-      {/* ---- 绑定信息摘要 ---- */}
-      {shape.bindings.length > 0 && (
-        <div
-          style={{
-            marginTop: 12,
-            paddingTop: 8,
-            borderTop: "1px solid var(--border)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              color: "var(--text-secondary)",
-              marginBottom: 4,
-            }}
-          >
-            已绑定 {shape.bindings.length} 个变量
-          </div>
-          {shape.bindings.map((b, i) => (
-            <div
-              key={i}
-              style={{ fontSize: 10, color: "var(--accent)", padding: "1px 0" }}
-            >
-              {b.variableId} → {b.targetProp} ({b.mapping.type})
-            </div>
-          ))}
+      <Section code="IO" title="变量绑定" />
+      {shape.bindings.length === 0 ? (
+        <div className="panel-hint">
+          该图元还没有绑定 — 点击属性行右侧端子，或到「绑定」面板添加
         </div>
+      ) : (
+        shape.bindings.map((b, i) => {
+          const status = getBindingStatus(b, varManager);
+          return (
+            <button
+              key={i}
+              className="binding-mini-row"
+              title="在绑定面板中编辑"
+              onClick={() => setRightPanel("bindings")}
+            >
+              <span
+                className={"var-type-badge " + b.variableType.toLowerCase()}
+              >
+                {b.variableType}
+              </span>
+              <span className="binding-mini-var">{b.variableId}</span>
+              <span className="binding-mini-arrow">→</span>
+              <span className="binding-mini-prop">{b.targetProp}</span>
+              <span
+                className={"binding-wire-status " + status.level}
+                title={status.text}
+              />
+            </button>
+          );
+        })
       )}
     </div>
   );

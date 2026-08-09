@@ -30,6 +30,8 @@ import type {
   ConnectionConfig,
 } from "../core";
 import { generateId } from "../core/shapes";
+import { createLibraryItem, libraryItemToShape } from "../core/shapes/library";
+import type { LibraryItem } from "../core/shapes/library";
 import { importSvg } from "../core/svg";
 import type { SvgImportResult } from "../core/svg";
 import { VariableManager } from "../core/variables";
@@ -96,6 +98,7 @@ interface EditorState {
   mode: ToolMode;
   selectedId: string | null;
   clipboard: ShapeBase | null;
+  library: LibraryItem[];
   pageTitle: string;
   pageWidth: number;
   pageHeight: number;
@@ -130,6 +133,7 @@ interface EditorState {
   pageRevision: number;
   varRevision: number;
   shapeRevision: number;
+  libraryRevision: number;
   historyRevision: number;
   viewport: Viewport;
   zoom: number;
@@ -143,6 +147,13 @@ interface EditorState {
   selectShape: (id: string | null) => void;
   selectShapes: (ids: string[]) => void;
   addShape: (t: ShapeType, x?: number, y?: number) => void;
+  saveSelectionToLibrary: (name: string) => LibraryItem | null;
+  importSvgToLibrary: (file: File) => void;
+  renameLibraryItem: (id: string, name: string) => void;
+  deleteLibraryItem: (id: string) => void;
+  overwriteLibraryItem: (id: string) => void;
+  placeLibraryItem: (id: string, x?: number, y?: number) => void;
+  resyncFromLibrary: (itemId: string, shapeId: string) => void;
   deleteSelected: () => void;
   copySelected: () => void;
   pasteClipboard: () => void;
@@ -383,6 +394,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
       pageHeight: f.meta.height,
       pageBackground: f.meta.background,
       selectedId: null,
+      library: s.projectManager.getLibrary(),
+      libraryRevision: 0,
       pageViews: defaultPageViews(s.projectManager),
       remoteLink: null,
     });
@@ -420,6 +433,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     mode: "select",
     selectedId: null,
     clipboard: null,
+    library: projectManager.getLibrary(),
     pageTitle: dp.title,
     pageWidth: dp.width,
     pageHeight: dp.height,
@@ -434,6 +448,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     pageRevision: 0,
     varRevision: 0,
     shapeRevision: 0,
+    libraryRevision: 0,
     historyRevision: 0,
     viewport: initialViewport,
     zoom: 1,
@@ -759,6 +774,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
           pageHeight: f.meta.height,
           pageBackground: f.meta.background,
           selectedId: null,
+          library: [],
+          libraryRevision: 0,
           pageViews: defaultPageViews(s.projectManager),
           remoteLink: null,
         });
@@ -1040,6 +1057,148 @@ export const useEditorStore = create<EditorState>((set, get) => {
       reader.onerror = () => alert("SVG 文件读取失败");
       reader.readAsText(file);
     },
+    saveSelectionToLibrary: (name) => {
+      const s = get();
+      const ids = s.renderer?.selectedIds
+        ? Array.from(s.renderer.selectedIds)
+        : [];
+      const shapes = ids
+        .map((id) => s.scene.get(id))
+        .filter((sh): sh is ShapeBase => !!sh);
+      if (shapes.length === 0) return null;
+      const item = createLibraryItem(shapes, name.trim() || "未命名图元");
+      const library = [...s.library, item];
+      set({ library, libraryRevision: s.libraryRevision + 1 });
+      s.projectManager.setLibrary(library);
+      flushAutosave();
+      return item;
+    },
+    importSvgToLibrary: (file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const s = get();
+          const result = importSvg(reader.result as string, {
+            pageWidth: s.pageWidth,
+            pageHeight: s.pageHeight,
+          });
+          if (result.shapes.length === 0) {
+            alert("未找到可导入的图元");
+            return;
+          }
+          const baseName = file.name.replace(/\.svg$/i, "") || "SVG 图元";
+          const item = createLibraryItem(result.shapes, baseName);
+          const library = [...s.library, item];
+          set({ library, libraryRevision: s.libraryRevision + 1 });
+          s.projectManager.setLibrary(library);
+          flushAutosave();
+          const lines: string[] = [...result.warnings];
+          if (result.outOfBounds.length > 0) {
+            lines.push(result.outOfBounds.length + " 个图元超出页面边界");
+          }
+          if (lines.length > 0) alert(lines.join("\n"));
+        } catch (e) {
+          alert(
+            "SVG 导入失败：" + (e instanceof Error ? e.message : String(e))
+          );
+        }
+      };
+      reader.onerror = () => alert("SVG 文件读取失败");
+      reader.readAsText(file);
+    },
+    renameLibraryItem: (id, name) => {
+      const s = get();
+      const library = s.library.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              name: name.trim() || item.name,
+              updatedAt: new Date().toISOString(),
+            }
+          : item
+      );
+      set({ library, libraryRevision: s.libraryRevision + 1 });
+      s.projectManager.setLibrary(library);
+      flushAutosave();
+    },
+    deleteLibraryItem: (id) => {
+      const s = get();
+      const library = s.library.filter((item) => item.id !== id);
+      set({ library, libraryRevision: s.libraryRevision + 1 });
+      s.projectManager.setLibrary(library);
+      flushAutosave();
+    },
+    overwriteLibraryItem: (id) => {
+      const s = get();
+      const target = s.library.find((item) => item.id === id);
+      if (!target) return;
+      const ids = s.renderer?.selectedIds
+        ? Array.from(s.renderer.selectedIds)
+        : [];
+      const shapes = ids
+        .map((shapeId) => s.scene.get(shapeId))
+        .filter((sh): sh is ShapeBase => !!sh);
+      if (shapes.length === 0) return;
+      const rebuilt = createLibraryItem(shapes, target.name);
+      const library = s.library.map((item) =>
+        item.id === id
+          ? {
+              ...rebuilt,
+              id: item.id,
+              createdAt: item.createdAt,
+              updatedAt: new Date().toISOString(),
+            }
+          : item
+      );
+      set({ library, libraryRevision: s.libraryRevision + 1 });
+      s.projectManager.setLibrary(library);
+      flushAutosave();
+    },
+    placeLibraryItem: (id, x, y) => {
+      const s = get();
+      const item = s.library.find((i) => i.id === id);
+      if (!item) return;
+      const sh = libraryItemToShape(item, x, y);
+      s.scene.add(sh);
+      pushCommand({
+        id: sh.id,
+        before: null,
+        after: sh.toJSON(),
+        index: s.scene.getAll().indexOf(sh),
+      });
+      s.selectShape(sh.id);
+      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
+      s.renderer?.render();
+      s.projectManager.dirty = true;
+      flushAutosave();
+    },
+    resyncFromLibrary: (itemId, shapeId) => {
+      const s = get();
+      const item = s.library.find((i) => i.id === itemId);
+      const old = s.scene.get(shapeId);
+      if (!item || !old) return;
+      const bbox = old.boundingBox;
+      const center = {
+        x: bbox.x + bbox.width / 2,
+        y: bbox.y + bbox.height / 2,
+      };
+      const index = s.scene.getAll().indexOf(old);
+      const before = old.toJSON();
+      const sh = libraryItemToShape(item, center.x, center.y);
+      s.scene.remove(shapeId);
+      s.scene.insertAt(sh, index);
+      pushBatchCommand([
+        { id: shapeId, before, after: null, index },
+        { id: sh.id, before: null, after: sh.toJSON(), index },
+      ]);
+      s.bindingEngine.reindexShape(shapeId);
+      s.bindingEngine.reindexShape(sh.id);
+      s.selectShape(sh.id);
+      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
+      s.renderer?.render();
+      s.bumpShapeRevision();
+      flushAutosave();
+    },
     importRasterFile: async (file) => {
       if (!isRasterFile(file)) {
         alert("仅支持 PNG/JPG 图片");
@@ -1250,6 +1409,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
             pageHeight: f.meta.height,
             pageBackground: f.meta.background,
             selectedId: null,
+            library: s.projectManager.getLibrary(),
+            libraryRevision: 0,
             pageViews: views,
           });
           s.bindingEngine.rebuildIndex();
@@ -1499,6 +1660,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
 useEditorStore.subscribe((state, prev) => {
   if (
     state.shapeRevision !== prev.shapeRevision ||
+    state.libraryRevision !== prev.libraryRevision ||
     state.historyRevision !== prev.historyRevision ||
     state.pageRevision !== prev.pageRevision
   ) {
