@@ -62,18 +62,21 @@ async function readAll(
 
 async function deflateRaw(data: Uint8Array): Promise<Uint8Array> {
   const stream = new CompressionStream("deflate-raw");
+  // 必须先消费 readable，否则大输入的输出队列反压会导致 write/close 死锁
+  const readPromise = readAll(stream.readable);
   const writer = stream.writable.getWriter();
   await writer.write(data);
   await writer.close();
-  return readAll(stream.readable);
+  return readPromise;
 }
 
 async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
   const stream = new DecompressionStream("deflate-raw");
+  const readPromise = readAll(stream.readable);
   const writer = stream.writable.getWriter();
   await writer.write(data);
   await writer.close();
-  return readAll(stream.readable);
+  return readPromise;
 }
 
 function concatBytes(chunks: Uint8Array[]): Uint8Array {

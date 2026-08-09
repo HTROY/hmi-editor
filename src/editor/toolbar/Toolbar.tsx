@@ -30,6 +30,8 @@ export function Toolbar() {
     togglePreview,
     projectManager,
     setRightPanel,
+    remoteUser,
+    setRemoteDialog,
     zoom,
     zoomBy,
     zoomTo,
@@ -178,6 +180,21 @@ export function Toolbar() {
           <Icon name="eye" className="tool-icon" />
           <span className="tool-label">
             {previewRunning ? "停预览" : "预览"}
+          </span>
+        </button>
+        <div className="toolbar-divider" />
+        <button
+          className="tool-btn"
+          title={
+            remoteUser
+              ? `后端账号：${remoteUser.username}（${remoteUser.role}）`
+              : "登录后端（用于工程同步）"
+          }
+          onClick={() => setRemoteDialog("auth")}
+        >
+          <Icon name="lock" className="tool-icon" />
+          <span className="tool-label">
+            {remoteUser ? remoteUser.username : "登录"}
           </span>
         </button>
       </div>

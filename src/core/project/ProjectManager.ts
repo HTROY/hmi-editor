@@ -4,6 +4,15 @@ import type { PageMeta, ProjectMeta, ProjectData, RecentFile } from "./types";
 import { PROJECT_SCHEMA_VERSION, upgradeProjectData } from "./upgrade";
 import { packProjectPackage, unpackProjectPackage } from "./package";
 
+export interface RemoteProjectLink {
+  id: string;
+  name: string;
+  version: number;
+  linkedAt: string;
+}
+
+const REMOTE_LINK_STORAGE_KEY = "hmi_remote_link";
+
 // ============================================================
 // ProjectManager — 工程管理器
 // 管理多页面、工程文件导入/导出、最近文件
@@ -28,6 +37,9 @@ export class ProjectManager {
   // 当前文件路径（已保存的）
   currentFilePath = "";
 
+  // 关联的远端工程（同步目标）
+  remoteLink: RemoteProjectLink | null = null;
+
   // 修改标志
   private _dirty = false;
   private dirtyListeners: Set<(dirty: boolean) => void> = new Set();
@@ -35,6 +47,7 @@ export class ProjectManager {
   constructor() {
     this.meta = this.createDefaultMeta();
     this.loadRecentFiles();
+    this.loadRemoteLink();
   }
 
   get dirty(): boolean {
@@ -261,9 +274,43 @@ export class ProjectManager {
     this.pageScenes.clear();
     this.meta = this.createDefaultMeta();
     this.currentFilePath = "";
+    this.setRemoteLink(null);
     const { meta, scene } = this.createPage("主画面");
     this.activePageId = meta.id;
     this.dirty = false;
+  }
+
+  // ---- 远端工程关联 ----
+
+  private loadRemoteLink(): void {
+    try {
+      const raw = localStorage.getItem(REMOTE_LINK_STORAGE_KEY);
+      if (!raw) return;
+      const parsed: unknown = JSON.parse(raw);
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        typeof (parsed as Record<string, unknown>).id === "string" &&
+        typeof (parsed as Record<string, unknown>).version === "number"
+      ) {
+        this.remoteLink = parsed as RemoteProjectLink;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  setRemoteLink(link: RemoteProjectLink | null): void {
+    this.remoteLink = link;
+    try {
+      if (!link) {
+        localStorage.removeItem(REMOTE_LINK_STORAGE_KEY);
+      } else {
+        localStorage.setItem(REMOTE_LINK_STORAGE_KEY, JSON.stringify(link));
+      }
+    } catch {
+      /* ignore */
+    }
   }
 
   // ---- 最近文件 ----

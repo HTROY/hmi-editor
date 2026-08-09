@@ -14,6 +14,7 @@ import { ScriptPanel } from "./editor/panels/script/ScriptPanel";
 import { ReportPanel } from "./editor/panels/script/ReportPanel";
 import { ShapeLibrary } from "./editor/panels/ShapeLibrary";
 import { StatusBar } from "./editor/StatusBar";
+import { SyncDialogs } from "./editor/dialogs/SyncDialogs";
 import { Icon, type IconName } from "./editor/icons";
 import { useEditorStore } from "./store/editorStore";
 import "./App.css";
@@ -67,6 +68,7 @@ function App() {
   // 启动时恢复上次自动保存的工程（IndexedDB）
   React.useEffect(() => {
     void useEditorStore.getState().restoreSession();
+    void useEditorStore.getState().initRemoteAuth();
   }, []);
   // 记录已访问过的面板：首次访问后保持挂载（切走时隐藏而非卸载），
   // 避免切回面板时本地状态全部重置
@@ -163,6 +165,7 @@ function App() {
         </div>
       </div>
       <StatusBar />
+      <SyncDialogs />
     </div>
   );
 }
