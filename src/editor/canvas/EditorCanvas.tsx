@@ -88,9 +88,15 @@ export function EditorCanvas() {
       const r = container.getBoundingClientRect();
       renderer.resize(r.width, r.height);
     };
+    // 侧栏收起/展开等布局变化不会触发 window resize，必须监听容器尺寸
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(container);
     window.addEventListener("resize", handleResize);
 
-    return () => window.removeEventListener("resize", handleResize);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", handleResize);
+    };
   }, [scene, setRenderer]);
 
   const getCanvasPos = useCallback((clientX: number, clientY: number) => {
