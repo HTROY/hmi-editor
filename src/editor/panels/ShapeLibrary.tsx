@@ -16,6 +16,7 @@ import { Icon, type IconName } from "../icons";
 // ============================================================
 
 const DRAG_MIME = "application/x-hmi-shape";
+const REORDER_MIME = "application/x-hmi-group-reorder";
 
 interface ShapeLibItem {
   type: ShapeType;
@@ -114,7 +115,8 @@ function CustomCard({
       DRAG_MIME,
       JSON.stringify({ kind: "library", id: item.id })
     );
-    e.dataTransfer.effectAllowed = "copy";
+    // copy：拖到画布放置；move：拖到分组标题改变归属
+    e.dataTransfer.effectAllowed = "copyMove";
     try {
       const canvas = renderShapeThumbnail(item.shape, 96);
       e.dataTransfer.setDragImage(canvas, 48, 48);
@@ -284,6 +286,7 @@ function CategorySection({
   className = "",
   onDragOver,
   onDrop,
+  onDragLeave,
 }: {
   title: React.ReactNode;
   collapsed: boolean;
@@ -293,6 +296,7 @@ function CategorySection({
   className?: string;
   onDragOver?: React.DragEventHandler<HTMLDivElement>;
   onDrop?: React.DragEventHandler<HTMLDivElement>;
+  onDragLeave?: React.DragEventHandler<HTMLDivElement>;
 }) {
   return (
     <div className={"shape-category" + (className ? " " + className : "")}>
@@ -301,6 +305,7 @@ function CategorySection({
         onClick={onToggle}
         onDragOver={onDragOver}
         onDrop={onDrop}
+        onDragLeave={onDragLeave}
       >
         <span className="shape-category-chevron">▾</span>
         {title}
@@ -343,6 +348,7 @@ export function ShapeLibrary() {
   const [groupRenameError, setGroupRenameError] = useState("");
   const [dragGroupId, setDragGroupId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [cardDropKey, setCardDropKey] = useState<string | null>(null);
   const svgInputRef = useRef<HTMLInputElement>(null);
 
   const selectedIds = renderer?.selectedIds
@@ -462,6 +468,67 @@ export function ShapeLibrary() {
       if (renamingGroupId === group.id) setRenamingGroupId(null);
     }
   };
+
+  const isCardDrag = (e: React.DragEvent<HTMLDivElement>): boolean =>
+    Array.from(e.dataTransfer.types).includes(DRAG_MIME);
+
+  const handleGroupHeaderDragOver = (
+    e: React.DragEvent<HTMLDivElement>,
+    targetKey: string
+  ) => {
+    if (isCardDrag(e)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      setCardDropKey(targetKey);
+      return;
+    }
+    if (!reorderEnabled || !dragGroupId) return;
+    if (targetKey === UNGROUPED_KEY) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropIndex(indexOfGroup(targetKey));
+  };
+
+  const handleGroupHeaderDrop = (
+    e: React.DragEvent<HTMLDivElement>,
+    targetKey: string
+  ) => {
+    if (isCardDrag(e)) {
+      e.preventDefault();
+      try {
+        const payload = JSON.parse(e.dataTransfer.getData(DRAG_MIME)) as {
+          kind?: string;
+          id?: string;
+        };
+        if (payload.kind === "library" && payload.id) {
+          useEditorStore
+            .getState()
+            .moveLibraryItemToGroup(
+              payload.id,
+              targetKey === UNGROUPED_KEY ? null : targetKey
+            );
+        }
+      } catch {
+        /* 非法载荷忽略 */
+      }
+      setCardDropKey(null);
+      return;
+    }
+    e.preventDefault();
+    if (reorderEnabled && dragGroupId && targetKey !== UNGROUPED_KEY)
+      moveLibraryGroup(dragGroupId, indexOfGroup(targetKey));
+    setDragGroupId(null);
+    setDropIndex(null);
+  };
+
+  const handleGroupHeaderDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setCardDropKey(null);
+    }
+  };
+
+  const indexOfGroup = (groupId: string): number =>
+    libraryGroups.findIndex((g) => g.id === groupId);
 
   return (
     <div className="panel">
@@ -646,7 +713,7 @@ export function ShapeLibrary() {
         );
       })}
 
-      {groupSections.map(({ group, items }, index) => (
+      {groupSections.map(({ group, items }) => (
         <CategorySection
           key={group.id}
           title={
@@ -693,6 +760,7 @@ export function ShapeLibrary() {
                   title="拖拽排序"
                   onDragStart={(e) => {
                     e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData(REORDER_MIME, group.id);
                     setDragGroupId(group.id);
                   }}
                   onDragEnd={() => {
@@ -720,23 +788,16 @@ export function ShapeLibrary() {
             </>
           }
           className={
-            reorderEnabled && dragGroupId && dropIndex === index
+            (reorderEnabled &&
+              dragGroupId &&
+              dropIndex === indexOfGroup(group.id)) ||
+            cardDropKey === group.id
               ? "shape-category-drag-over"
               : ""
           }
-          onDragOver={(e) => {
-            if (!reorderEnabled || !dragGroupId) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "move";
-            setDropIndex(index);
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            if (reorderEnabled && dragGroupId)
-              moveLibraryGroup(dragGroupId, index);
-            setDragGroupId(null);
-            setDropIndex(null);
-          }}
+          onDragOver={(e) => handleGroupHeaderDragOver(e, group.id)}
+          onDrop={(e) => handleGroupHeaderDrop(e, group.id)}
+          onDragLeave={handleGroupHeaderDragLeave}
         >
           {items.length === 0 ? (
             <div className="panel-hint">该分组暂无库项</div>
@@ -755,6 +816,12 @@ export function ShapeLibrary() {
         title={<span className="shape-category-name">未分组</span>}
         collapsed={isSectionCollapsed(UNGROUPED_KEY, ungroupedItems.length > 0)}
         onToggle={() => toggleLibraryCollapsed(UNGROUPED_KEY)}
+        className={
+          cardDropKey === UNGROUPED_KEY ? "shape-category-drag-over" : ""
+        }
+        onDragOver={(e) => handleGroupHeaderDragOver(e, UNGROUPED_KEY)}
+        onDrop={(e) => handleGroupHeaderDrop(e, UNGROUPED_KEY)}
+        onDragLeave={handleGroupHeaderDragLeave}
       >
         {ungroupedItems.length === 0 ? (
           <div className="panel-hint">

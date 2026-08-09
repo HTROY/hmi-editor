@@ -126,6 +126,16 @@ describe("moveItemToGroup 移动库项归属", () => {
       added
     );
   });
+
+  it("移动到当前所在分组时不修改状态", () => {
+    const base = emptyGrouping([item]);
+    const added = addGroup(base, "供电").state;
+    const assigned = moveItemToGroup(added, item.id, added.groups[0].id);
+
+    expect(moveItemToGroup(assigned, item.id, assigned.groups[0].id)).toBe(
+      assigned
+    );
+  });
 });
 
 describe("moveGroup 拖拽排序", () => {

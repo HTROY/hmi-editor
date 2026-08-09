@@ -131,6 +131,7 @@ export function moveItemToGroup(
   if (groupId !== null && groupId !== undefined) {
     if (!state.groups.some((g) => g.id === groupId)) return state;
   }
+  if (item.groupId === (groupId ?? undefined)) return state;
   return {
     ...state,
     items: state.items.map((i) =>
