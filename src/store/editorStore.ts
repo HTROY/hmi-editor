@@ -32,6 +32,21 @@ import type {
 import { generateId } from "../core/shapes";
 import { createLibraryItem, libraryItemToShape } from "../core/shapes/library";
 import type { LibraryItem } from "../core/shapes/library";
+import {
+  UNGROUPED_KEY,
+  addGroup,
+  deleteGroup,
+  emptyGrouping,
+  isBuiltinSectionKey,
+  moveGroup,
+  moveItemToGroup,
+  renameGroup,
+  toggleCollapsed,
+} from "../core/shapes/libraryGroups";
+import type {
+  LibraryGroup,
+  LibraryGrouping,
+} from "../core/shapes/libraryGroups";
 import { importSvg } from "../core/svg";
 import type { SvgImportResult } from "../core/svg";
 import { VariableManager } from "../core/variables";
@@ -70,6 +85,56 @@ import {
 } from "../core";
 import type { AutosaveSnapshot, PageViewState } from "../core";
 
+// 图元库折叠状态：内置分类只存 localStorage；
+// 自定义分组与未分组双写工程文件 + localStorage，工程文件优先
+const LIBRARY_COLLAPSED_STORAGE_KEY = "hmi-editor:shape-library:collapsed";
+
+function loadLibraryCollapsedFromStorage(): string[] {
+  try {
+    const raw = localStorage.getItem(LIBRARY_COLLAPSED_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((k): k is string => typeof k === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLibraryCollapsedToStorage(keys: string[]): void {
+  try {
+    localStorage.setItem(
+      LIBRARY_COLLAPSED_STORAGE_KEY,
+      JSON.stringify([...new Set(keys)])
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 合并工程文件与 localStorage 的折叠状态：工程优先，localStorage 兜底 */
+function mergeLibraryCollapsed(
+  projectKeys: string[],
+  storageKeys: string[],
+  validGroupIds: string[]
+): string[] {
+  const projectSet = new Set(projectKeys);
+  const valid = new Set(validGroupIds);
+  const merged = [...projectKeys];
+  for (const key of storageKeys) {
+    if (isBuiltinSectionKey(key) || key === UNGROUPED_KEY || valid.has(key)) {
+      if (!projectSet.has(key)) merged.push(key);
+    }
+  }
+  return [...new Set(merged)];
+}
+
+/** 组装当前图元库分组状态（库项、分组、折叠集合） */
+function currentGrouping(s: EditorState): LibraryGrouping {
+  return emptyGrouping(s.library, s.libraryGroups, s.libraryCollapsed);
+}
+
 export type ToolMode = "select" | "rect" | "circle" | "line" | "text";
 export type RemoteDialog = "none" | "auth" | "projects" | "push";
 
@@ -99,6 +164,8 @@ interface EditorState {
   selectedId: string | null;
   clipboard: ShapeBase | null;
   library: LibraryItem[];
+  libraryGroups: LibraryGroup[];
+  libraryCollapsed: string[];
   pageTitle: string;
   pageWidth: number;
   pageHeight: number;
@@ -147,13 +214,22 @@ interface EditorState {
   selectShape: (id: string | null) => void;
   selectShapes: (ids: string[]) => void;
   addShape: (t: ShapeType, x?: number, y?: number) => void;
-  saveSelectionToLibrary: (name: string) => LibraryItem | null;
-  importSvgToLibrary: (file: File) => void;
+  saveSelectionToLibrary: (
+    name: string,
+    groupId?: string
+  ) => LibraryItem | null;
+  importSvgToLibrary: (file: File, groupId?: string) => void;
   renameLibraryItem: (id: string, name: string) => void;
   deleteLibraryItem: (id: string) => void;
   overwriteLibraryItem: (id: string) => void;
   placeLibraryItem: (id: string, x?: number, y?: number) => void;
   resyncFromLibrary: (itemId: string, shapeId: string) => void;
+  addLibraryGroup: (name: string) => boolean;
+  renameLibraryGroup: (id: string, name: string) => boolean;
+  deleteLibraryGroup: (id: string) => void;
+  moveLibraryItemToGroup: (itemId: string, groupId: string | null) => void;
+  moveLibraryGroup: (id: string, targetIndex: number) => void;
+  toggleLibraryCollapsed: (key: string) => void;
   deleteSelected: () => void;
   copySelected: () => void;
   pasteClipboard: () => void;
@@ -395,10 +471,17 @@ export const useEditorStore = create<EditorState>((set, get) => {
       pageBackground: f.meta.background,
       selectedId: null,
       library: s.projectManager.getLibrary(),
+      libraryGroups: s.projectManager.getLibraryGroups(),
+      libraryCollapsed: mergeLibraryCollapsed(
+        s.projectManager.getLibraryUi().collapsed,
+        loadLibraryCollapsedFromStorage(),
+        s.projectManager.getLibraryGroups().map((g) => g.id)
+      ),
       libraryRevision: 0,
       pageViews: defaultPageViews(s.projectManager),
       remoteLink: null,
     });
+    saveLibraryCollapsedToStorage(get().libraryCollapsed);
     s.projectManager.setRemoteLink(null);
     s.bindingEngine.rebuildIndex();
     activateViewport(true);
@@ -434,6 +517,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
     selectedId: null,
     clipboard: null,
     library: projectManager.getLibrary(),
+    libraryGroups: [],
+    libraryCollapsed: loadLibraryCollapsedFromStorage().filter((k) =>
+      isBuiltinSectionKey(k)
+    ),
     pageTitle: dp.title,
     pageWidth: dp.width,
     pageHeight: dp.height,
@@ -775,10 +862,15 @@ export const useEditorStore = create<EditorState>((set, get) => {
           pageBackground: f.meta.background,
           selectedId: null,
           library: [],
+          libraryGroups: [],
+          libraryCollapsed: loadLibraryCollapsedFromStorage().filter((k) =>
+            isBuiltinSectionKey(k)
+          ),
           libraryRevision: 0,
           pageViews: defaultPageViews(s.projectManager),
           remoteLink: null,
         });
+        saveLibraryCollapsedToStorage(get().libraryCollapsed);
         activateViewport(true);
         s.renderer?.render();
         flushAutosave();
@@ -1057,7 +1149,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       reader.onerror = () => alert("SVG 文件读取失败");
       reader.readAsText(file);
     },
-    saveSelectionToLibrary: (name) => {
+    saveSelectionToLibrary: (name, groupId) => {
       const s = get();
       const ids = s.renderer?.selectedIds
         ? Array.from(s.renderer.selectedIds)
@@ -1066,14 +1158,18 @@ export const useEditorStore = create<EditorState>((set, get) => {
         .map((id) => s.scene.get(id))
         .filter((sh): sh is ShapeBase => !!sh);
       if (shapes.length === 0) return null;
-      const item = createLibraryItem(shapes, name.trim() || "未命名图元");
+      const item = createLibraryItem(
+        shapes,
+        name.trim() || "未命名图元",
+        groupId
+      );
       const library = [...s.library, item];
       set({ library, libraryRevision: s.libraryRevision + 1 });
       s.projectManager.setLibrary(library);
       flushAutosave();
       return item;
     },
-    importSvgToLibrary: (file) => {
+    importSvgToLibrary: (file, groupId) => {
       const reader = new FileReader();
       reader.onload = () => {
         try {
@@ -1087,7 +1183,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
             return;
           }
           const baseName = file.name.replace(/\.svg$/i, "") || "SVG 图元";
-          const item = createLibraryItem(result.shapes, baseName);
+          const item = createLibraryItem(result.shapes, baseName, groupId);
           const library = [...s.library, item];
           set({ library, libraryRevision: s.libraryRevision + 1 });
           s.projectManager.setLibrary(library);
@@ -1147,6 +1243,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
               id: item.id,
               createdAt: item.createdAt,
               updatedAt: new Date().toISOString(),
+              groupId: item.groupId,
             }
           : item
       );
@@ -1198,6 +1295,85 @@ export const useEditorStore = create<EditorState>((set, get) => {
       s.renderer?.render();
       s.bumpShapeRevision();
       flushAutosave();
+    },
+    addLibraryGroup: (name) => {
+      const s = get();
+      const result = addGroup(currentGrouping(s), name);
+      if (!result.ok) return false;
+      set({
+        libraryGroups: result.state.groups,
+        libraryCollapsed: result.state.collapsed,
+        libraryRevision: s.libraryRevision + 1,
+      });
+      s.projectManager.setLibraryGroups(result.state.groups);
+      flushAutosave();
+      return true;
+    },
+    renameLibraryGroup: (id, name) => {
+      const s = get();
+      const result = renameGroup(currentGrouping(s), id, name);
+      if (!result.ok) return false;
+      set({
+        libraryGroups: result.state.groups,
+        libraryRevision: s.libraryRevision + 1,
+      });
+      s.projectManager.setLibraryGroups(result.state.groups);
+      flushAutosave();
+      return true;
+    },
+    deleteLibraryGroup: (id) => {
+      const s = get();
+      const state = deleteGroup(currentGrouping(s), id);
+      set({
+        library: state.items,
+        libraryGroups: state.groups,
+        libraryCollapsed: state.collapsed,
+        libraryRevision: s.libraryRevision + 1,
+      });
+      s.projectManager.setLibrary(state.items);
+      s.projectManager.setLibraryGroups(state.groups);
+      s.projectManager.setLibraryUi({
+        collapsed: state.collapsed.filter((k) => !isBuiltinSectionKey(k)),
+      });
+      saveLibraryCollapsedToStorage(state.collapsed);
+      flushAutosave();
+    },
+    moveLibraryItemToGroup: (itemId, groupId) => {
+      const s = get();
+      const state = moveItemToGroup(currentGrouping(s), itemId, groupId);
+      if (state.items === s.library) return;
+      set({ library: state.items, libraryRevision: s.libraryRevision + 1 });
+      s.projectManager.setLibrary(state.items);
+      flushAutosave();
+    },
+    moveLibraryGroup: (id, targetIndex) => {
+      const s = get();
+      const state = moveGroup(currentGrouping(s), id, targetIndex);
+      if (state.groups === s.libraryGroups) return;
+      set({
+        libraryGroups: state.groups,
+        libraryRevision: s.libraryRevision + 1,
+      });
+      s.projectManager.setLibraryGroups(state.groups);
+      flushAutosave();
+    },
+    toggleLibraryCollapsed: (key) => {
+      const s = get();
+      const state = toggleCollapsed(currentGrouping(s), key);
+      const isProjectKey = !isBuiltinSectionKey(key);
+      set({
+        libraryCollapsed: state.collapsed,
+        libraryRevision: isProjectKey
+          ? s.libraryRevision + 1
+          : s.libraryRevision,
+      });
+      saveLibraryCollapsedToStorage(state.collapsed);
+      if (isProjectKey) {
+        s.projectManager.setLibraryUi({
+          collapsed: state.collapsed.filter((k) => !isBuiltinSectionKey(k)),
+        });
+        flushAutosave();
+      }
     },
     importRasterFile: async (file) => {
       if (!isRasterFile(file)) {
@@ -1410,9 +1586,16 @@ export const useEditorStore = create<EditorState>((set, get) => {
             pageBackground: f.meta.background,
             selectedId: null,
             library: s.projectManager.getLibrary(),
+            libraryGroups: s.projectManager.getLibraryGroups(),
+            libraryCollapsed: mergeLibraryCollapsed(
+              s.projectManager.getLibraryUi().collapsed,
+              loadLibraryCollapsedFromStorage(),
+              s.projectManager.getLibraryGroups().map((g) => g.id)
+            ),
             libraryRevision: 0,
             pageViews: views,
           });
+          saveLibraryCollapsedToStorage(get().libraryCollapsed);
           s.bindingEngine.rebuildIndex();
           syncOutOfBounds(s.scene, f.meta.width, f.meta.height);
           activateViewport(false);

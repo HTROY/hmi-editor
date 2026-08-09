@@ -160,4 +160,65 @@ describe("旧 .hmi.json 自动升级", () => {
       })
     ).toThrow(/页面/);
   });
+
+  it("老工程无分组字段时补空分组与折叠默认值", () => {
+    const upgraded = upgradeProjectData({
+      schemaVersion: 1,
+      meta: {},
+      pages: [{ meta: {}, shapes: [] }],
+      library: [{ id: "lib_1", name: "通风机组", shape: { type: "rect" } }],
+    });
+
+    expect(upgraded.libraryGroups).toEqual([]);
+    expect(upgraded.libraryUi).toEqual({ collapsed: [] });
+    expect(upgraded.library![0].groupId).toBeUndefined();
+  });
+
+  it("分组与折叠状态保留，失效引用清除", () => {
+    const upgraded = upgradeProjectData({
+      schemaVersion: 1,
+      meta: {},
+      pages: [{ meta: {}, shapes: [] }],
+      library: [
+        {
+          id: "lib_1",
+          name: "断路器",
+          shape: { type: "rect" },
+          groupId: "grp_1",
+        },
+        {
+          id: "lib_2",
+          name: "遗留库项",
+          shape: { type: "circle" },
+          groupId: "grp_missing",
+        },
+      ],
+      libraryGroups: [
+        { id: "grp_1", name: "供电" },
+        { id: "grp_1", name: "BAS" },
+        { id: "grp_2", name: "供电" },
+        { id: "", name: "无名" },
+      ],
+      libraryUi: {
+        collapsed: [
+          "grp_1",
+          "grp_missing",
+          "builtin:基本",
+          "@ungrouped",
+          "@ungrouped",
+        ],
+      },
+    });
+
+    expect(upgraded.libraryGroups).toEqual([
+      { id: "grp_1", name: "供电" },
+      { id: "grp_1_2", name: "BAS" },
+      { id: "grp_2", name: "供电_2" },
+    ]);
+    expect(upgraded.library![0].groupId).toBe("grp_1");
+    expect(upgraded.library![1].groupId).toBeUndefined();
+    expect(upgraded.libraryUi).toEqual({
+      collapsed: ["grp_1", "@ungrouped"],
+    });
+  });
 });

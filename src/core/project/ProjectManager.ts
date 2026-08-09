@@ -1,6 +1,7 @@
 ﻿import { SceneGraph } from "../scene/SceneGraph";
 import { createShape, ShapeBase } from "../shapes";
 import type { LibraryItem } from "../shapes/library";
+import type { LibraryGroup, LibraryUi } from "../shapes/libraryGroups";
 import type { PageMeta, ProjectMeta, ProjectData, RecentFile } from "./types";
 import { PROJECT_SCHEMA_VERSION, upgradeProjectData } from "./upgrade";
 import { packProjectPackage, unpackProjectPackage } from "./package";
@@ -34,6 +35,12 @@ export class ProjectManager {
 
   // 工程图元库（自定义图元条目，随工程保存/打包）
   private library: LibraryItem[] = [];
+
+  // 自定义分组（顺序即显示顺序，随工程保存）
+  private libraryGroups: LibraryGroup[] = [];
+
+  // 自定义分组折叠状态等 UI 数据（随工程保存）
+  private libraryUi: LibraryUi = { collapsed: [] };
 
   // 最近文件列表（存储在 localStorage）
   recentFiles: RecentFile[] = [];
@@ -194,6 +201,28 @@ export class ProjectManager {
     this.dirty = true;
   }
 
+  /** 获取自定义分组（浅拷贝） */
+  getLibraryGroups(): LibraryGroup[] {
+    return this.libraryGroups.map((g) => ({ ...g }));
+  }
+
+  /** 整体替换自定义分组（数组顺序即显示顺序） */
+  setLibraryGroups(groups: LibraryGroup[]): void {
+    this.libraryGroups = groups.map((g) => ({ ...g }));
+    this.dirty = true;
+  }
+
+  /** 获取自定义分组 UI 状态（浅拷贝） */
+  getLibraryUi(): LibraryUi {
+    return { collapsed: [...this.libraryUi.collapsed] };
+  }
+
+  /** 整体替换自定义分组 UI 状态 */
+  setLibraryUi(ui: LibraryUi): void {
+    this.libraryUi = { collapsed: [...(ui?.collapsed ?? [])] };
+    this.dirty = true;
+  }
+
   /** 导出当前工程为 ProjectData */
   exportProject(): ProjectData {
     const pages = this.getPages().map((meta) => {
@@ -209,6 +238,8 @@ export class ProjectManager {
       meta: { ...this.meta, updatedAt: new Date().toISOString() },
       pages,
       library: this.library.map((item) => ({ ...item })),
+      libraryGroups: this.libraryGroups.map((g) => ({ ...g })),
+      libraryUi: this.getLibraryUi(),
     };
   }
 
@@ -225,6 +256,12 @@ export class ProjectManager {
 
     // 导入图元库
     this.library = (upgraded.library ?? []).map((item) => ({ ...item }));
+    this.libraryGroups = (upgraded.libraryGroups ?? []).map((g) => ({
+      ...g,
+    }));
+    this.libraryUi = {
+      collapsed: [...(upgraded.libraryUi?.collapsed ?? [])],
+    };
 
     // 导入页面
     for (const pageData of upgraded.pages) {
@@ -292,6 +329,8 @@ export class ProjectManager {
     this.pageMetas.clear();
     this.pageScenes.clear();
     this.library = [];
+    this.libraryGroups = [];
+    this.libraryUi = { collapsed: [] };
     this.meta = this.createDefaultMeta();
     this.currentFilePath = "";
     this.setRemoteLink(null);

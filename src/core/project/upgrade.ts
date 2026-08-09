@@ -1,5 +1,6 @@
 import { createShape } from "../shapes";
 import type { LibraryItem } from "../shapes";
+import { normalizeGrouping } from "../shapes/libraryGroups";
 import type { PageMeta, ProjectData, ProjectMeta } from "./types";
 import type { ShapeProps } from "../types";
 
@@ -109,7 +110,7 @@ export function upgradeProjectData(value: unknown): ProjectData {
   });
 
   const seenLibIds = new Set<string>();
-  const library = (Array.isArray(raw.library) ? raw.library : [])
+  const libraryItems = (Array.isArray(raw.library) ? raw.library : [])
     .map((item: any, index: number): LibraryItem | null => {
       if (!item || typeof item !== "object" || !item.shape) return null;
       let id = isNonEmptyString(item.id) ? item.id : `lib_${index + 1}`;
@@ -123,6 +124,10 @@ export function upgradeProjectData(value: unknown): ProjectData {
         return {
           id,
           name: isNonEmptyString(item.name) ? item.name : `库项 ${index + 1}`,
+          groupId:
+            typeof item.groupId === "string" && item.groupId.length > 0
+              ? item.groupId
+              : undefined,
           shape: normalizeShapeProps(item.shape),
           createdAt: stringOr(item.createdAt, now()),
           updatedAt: stringOr(item.updatedAt, now()),
@@ -134,5 +139,18 @@ export function upgradeProjectData(value: unknown): ProjectData {
     })
     .filter((item: unknown): item is LibraryItem => !!item);
 
-  return { schemaVersion: PROJECT_SCHEMA_VERSION, meta, pages, library };
+  const grouping = normalizeGrouping(
+    libraryItems,
+    Array.isArray(raw.libraryGroups) ? raw.libraryGroups : [],
+    Array.isArray(raw.libraryUi?.collapsed) ? raw.libraryUi.collapsed : []
+  );
+
+  return {
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    meta,
+    pages,
+    library: grouping.items,
+    libraryGroups: grouping.groups,
+    libraryUi: { collapsed: grouping.collapsed },
+  };
 }

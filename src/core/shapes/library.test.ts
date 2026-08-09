@@ -126,6 +126,12 @@ describe("createLibraryItem 库项创建", () => {
   it("空选择抛出错误", () => {
     expect(() => createLibraryItem([], "空")).toThrow("没有可保存的图元");
   });
+
+  it("指定分组时写入 groupId", () => {
+    const rect = new RectShape({ name: "进线柜" });
+    const item = createLibraryItem([rect], "进线柜", "grp_1");
+    expect(item.groupId).toBe("grp_1");
+  });
 });
 
 describe("libraryItemToShape 放置副本", () => {

@@ -2,13 +2,16 @@ import React, { useEffect, useRef, useState } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import { createShape } from "../../core/shapes";
 import { renderShapeThumbnail } from "../../core/shapes/library";
+import { UNGROUPED_KEY } from "../../core/shapes/libraryGroups";
 import type { LibraryItem } from "../../core/shapes/library";
+import type { LibraryGroup } from "../../core/shapes/libraryGroups";
 import type { ShapeProps, ShapeType } from "../../core/types";
 import { Icon, type IconName } from "../icons";
 
 // ============================================================
 // ShapeLibrary — 图元库面板（统一注册表）
-// 内置图元（只读，保留分类）+ 自定义图元（工程级库项）
+// 内置图元（只读分类，可折叠）+ 自定义分组（可折叠/新建/重命名/
+// 删除/拖拽排序）+ 未分组兜底
 // 交互：点击添加到画布中心；拖拽放到画布指定位置
 // ============================================================
 
@@ -91,13 +94,20 @@ function Thumb({
   return <canvas ref={ref} width={size} height={size} className={className} />;
 }
 
-function CustomCard({ item }: { item: LibraryItem }) {
+function CustomCard({
+  item,
+  groups,
+}: {
+  item: LibraryItem;
+  groups: LibraryGroup[];
+}) {
   const placeLibraryItem = useEditorStore((s) => s.placeLibraryItem);
   const setMode = useEditorStore((s) => s.setMode);
   const selectedId = useEditorStore((s) => s.selectedId);
   const [hover, setHover] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(item.name);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData(
@@ -161,6 +171,11 @@ function CustomCard({ item }: { item: LibraryItem }) {
     }
   };
 
+  const moveTo = (groupId: string | null) => {
+    useEditorStore.getState().moveLibraryItemToGroup(item.id, groupId);
+    setMenuOpen(false);
+  };
+
   return (
     <div
       className="shape-grid-item lib-custom-card"
@@ -219,6 +234,34 @@ function CustomCard({ item }: { item: LibraryItem }) {
         >
           <Icon name="refresh" size={11} />
         </button>
+        <span className="lib-group-menu-wrap">
+          <button
+            className="lib-card-btn"
+            title="移动到分组"
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            <Icon name="folder" size={11} />
+          </button>
+          {menuOpen && (
+            <div className="lib-group-menu">
+              <button
+                className={item.groupId ? "" : "active"}
+                onClick={() => moveTo(null)}
+              >
+                未分组
+              </button>
+              {groups.map((g) => (
+                <button
+                  key={g.id}
+                  className={item.groupId === g.id ? "active" : ""}
+                  onClick={() => moveTo(g.id)}
+                >
+                  {g.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </span>
         <button
           className="lib-card-btn lib-card-btn-danger"
           title="删除"
@@ -231,15 +274,75 @@ function CustomCard({ item }: { item: LibraryItem }) {
   );
 }
 
+/** 可折叠分类区块：标题整行点击切换，右侧可放操作按钮 */
+function CategorySection({
+  title,
+  collapsed,
+  onToggle,
+  actions,
+  children,
+  className = "",
+  onDragOver,
+  onDrop,
+}: {
+  title: React.ReactNode;
+  collapsed: boolean;
+  onToggle: () => void;
+  actions?: React.ReactNode;
+  children?: React.ReactNode;
+  className?: string;
+  onDragOver?: React.DragEventHandler<HTMLDivElement>;
+  onDrop?: React.DragEventHandler<HTMLDivElement>;
+}) {
+  return (
+    <div className={"shape-category" + (className ? " " + className : "")}>
+      <div
+        className={"shape-category-title" + (collapsed ? " collapsed" : "")}
+        onClick={onToggle}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+      >
+        <span className="shape-category-chevron">▾</span>
+        {title}
+        {actions && (
+          <span
+            className="shape-category-actions"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {actions}
+          </span>
+        )}
+      </div>
+      {!collapsed && children}
+    </div>
+  );
+}
+
 export function ShapeLibrary() {
   const addShape = useEditorStore((s) => s.addShape);
   const setMode = useEditorStore((s) => s.setMode);
   const library = useEditorStore((s) => s.library);
+  const libraryGroups = useEditorStore((s) => s.libraryGroups);
+  const libraryCollapsed = useEditorStore((s) => s.libraryCollapsed);
   const selectedId = useEditorStore((s) => s.selectedId);
   const renderer = useEditorStore((s) => s.renderer);
+  const toggleLibraryCollapsed = useEditorStore(
+    (s) => s.toggleLibraryCollapsed
+  );
+  const moveLibraryGroup = useEditorStore((s) => s.moveLibraryGroup);
   const [query, setQuery] = useState("");
   const [pendingSave, setPendingSave] = useState(false);
   const [saveName, setSaveName] = useState("");
+  const [saveGroupId, setSaveGroupId] = useState("");
+  const [importGroupId, setImportGroupId] = useState("");
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [groupCreateError, setGroupCreateError] = useState("");
+  const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
+  const [groupName, setGroupName] = useState("");
+  const [groupRenameError, setGroupRenameError] = useState("");
+  const [dragGroupId, setDragGroupId] = useState<string | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
   const svgInputRef = useRef<HTMLInputElement>(null);
 
   const selectedIds = renderer?.selectedIds
@@ -248,6 +351,7 @@ export function ShapeLibrary() {
       ? [selectedId]
       : [];
   const q = query.trim().toLowerCase();
+  const searching = q.length > 0;
   const filteredBuiltin = shapeItems.filter(
     (item) =>
       item.label.toLowerCase().includes(q) ||
@@ -259,6 +363,18 @@ export function ShapeLibrary() {
       item.shape.type.toLowerCase().includes(q)
   );
   const categories = [...new Set(filteredBuiltin.map((s) => s.category))];
+  const groupSections = libraryGroups
+    .map((group) => ({
+      group,
+      items: filteredCustom.filter((item) => item.groupId === group.id),
+    }))
+    .filter(({ items }) => !searching || items.length > 0);
+  const ungroupedItems = filteredCustom.filter((item) => !item.groupId);
+  const reorderEnabled = !searching;
+
+  /** 搜索时强制展开有命中项的分类，清空搜索后恢复折叠状态 */
+  const isSectionCollapsed = (key: string, hasMatch: boolean): boolean =>
+    libraryCollapsed.includes(key) && !(searching && hasMatch);
 
   const handleSaveClick = () => {
     if (selectedIds.length === 0) {
@@ -270,10 +386,13 @@ export function ShapeLibrary() {
   };
 
   const confirmSave = () => {
-    const item = useEditorStore.getState().saveSelectionToLibrary(saveName);
+    const item = useEditorStore
+      .getState()
+      .saveSelectionToLibrary(saveName, saveGroupId || undefined);
     if (item) {
       setPendingSave(false);
       setSaveName("");
+      setSaveGroupId("");
     } else {
       alert("请先在画布上选中一个或多个图元");
     }
@@ -301,6 +420,49 @@ export function ShapeLibrary() {
     setMode("select");
   };
 
+  const confirmCreateGroup = () => {
+    const ok = useEditorStore.getState().addLibraryGroup(newGroupName);
+    if (!ok) {
+      setGroupCreateError(
+        newGroupName.trim() ? "分组名已存在" : "请输入分组名"
+      );
+      return;
+    }
+    setCreatingGroup(false);
+    setNewGroupName("");
+    setGroupCreateError("");
+  };
+
+  const startRenameGroup = (group: LibraryGroup) => {
+    setRenamingGroupId(group.id);
+    setGroupName(group.name);
+    setGroupRenameError("");
+  };
+
+  const confirmRenameGroup = () => {
+    if (!renamingGroupId) return;
+    const ok = useEditorStore
+      .getState()
+      .renameLibraryGroup(renamingGroupId, groupName);
+    if (!ok) {
+      setGroupRenameError(groupName.trim() ? "分组名已存在" : "请输入分组名");
+      return;
+    }
+    setRenamingGroupId(null);
+    setGroupRenameError("");
+  };
+
+  const confirmDeleteGroup = (group: LibraryGroup) => {
+    if (
+      window.confirm(
+        `删除分组「${group.name}」？组内库项将移到未分组，库项本身不会被删除。`
+      )
+    ) {
+      useEditorStore.getState().deleteLibraryGroup(group.id);
+      if (renamingGroupId === group.id) setRenamingGroupId(null);
+    }
+  };
+
   return (
     <div className="panel">
       <div className="panel-title">图元库</div>
@@ -312,6 +474,58 @@ export function ShapeLibrary() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        {creatingGroup ? (
+          <div className="lib-save-form lib-group-create-form">
+            <input
+              className="binding-filter"
+              value={newGroupName}
+              autoFocus
+              placeholder="分组名称"
+              onChange={(e) => {
+                setNewGroupName(e.target.value);
+                setGroupCreateError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") confirmCreateGroup();
+                if (e.key === "Escape") {
+                  setCreatingGroup(false);
+                  setNewGroupName("");
+                  setGroupCreateError("");
+                }
+              }}
+            />
+            {groupCreateError && (
+              <div className="lib-group-error">{groupCreateError}</div>
+            )}
+            <div className="lib-save-actions">
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={confirmCreateGroup}
+              >
+                创建
+              </button>
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  setCreatingGroup(false);
+                  setNewGroupName("");
+                  setGroupCreateError("");
+                }}
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            className="variable-action-btn"
+            onClick={() => setCreatingGroup(true)}
+            title="新建自定义分组"
+          >
+            <Icon name="plus" size={12} />
+            新建分组
+          </button>
+        )}
       </div>
       <div className="lib-toolbar">
         <button
@@ -322,6 +536,19 @@ export function ShapeLibrary() {
           <Icon name="save" size={12} />
           保存选中{selectedIds.length > 0 ? `(${selectedIds.length})` : ""}
         </button>
+        <select
+          className="lib-group-select"
+          value={importGroupId}
+          onChange={(e) => setImportGroupId(e.target.value)}
+          title="导入 SVG 的目标分组"
+        >
+          <option value="">未分组</option>
+          {libraryGroups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+        </select>
         <button
           className="variable-action-btn"
           onClick={() => svgInputRef.current?.click()}
@@ -336,7 +563,10 @@ export function ShapeLibrary() {
           style={{ display: "none" }}
           onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) useEditorStore.getState().importSvgToLibrary(f);
+            if (f)
+              useEditorStore
+                .getState()
+                .importSvgToLibrary(f, importGroupId || undefined);
             e.target.value = "";
           }}
         />
@@ -355,6 +585,19 @@ export function ShapeLibrary() {
               if (e.key === "Escape") setPendingSave(false);
             }}
           />
+          <select
+            className="lib-group-select lib-save-group-select"
+            value={saveGroupId}
+            onChange={(e) => setSaveGroupId(e.target.value)}
+            title="保存到分组"
+          >
+            <option value="">未分组</option>
+            {libraryGroups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
           <div className="lib-save-actions">
             <button className="btn btn-sm btn-primary" onClick={confirmSave}>
               保存
@@ -369,13 +612,17 @@ export function ShapeLibrary() {
         </div>
       )}
 
-      {categories.map((cat) => (
-        <div key={cat} className="shape-category">
-          <div className="shape-category-title">{cat}</div>
-          <div className="shape-grid">
-            {filteredBuiltin
-              .filter((s) => s.category === cat)
-              .map((item) => (
+      {categories.map((cat) => {
+        const items = filteredBuiltin.filter((s) => s.category === cat);
+        return (
+          <CategorySection
+            key={cat}
+            title={<span className="shape-category-name">{cat}</span>}
+            collapsed={isSectionCollapsed("builtin:" + cat, items.length > 0)}
+            onToggle={() => toggleLibraryCollapsed("builtin:" + cat)}
+          >
+            <div className="shape-grid">
+              {items.map((item) => (
                 <button
                   key={item.type}
                   className="shape-grid-item"
@@ -394,24 +641,133 @@ export function ShapeLibrary() {
                   <span className="shape-grid-label">{item.label}</span>
                 </button>
               ))}
-          </div>
-        </div>
+            </div>
+          </CategorySection>
+        );
+      })}
+
+      {groupSections.map(({ group, items }, index) => (
+        <CategorySection
+          key={group.id}
+          title={
+            renamingGroupId === group.id ? (
+              <>
+                <input
+                  className={
+                    "lib-group-rename-input" +
+                    (groupRenameError ? " error" : "")
+                  }
+                  value={groupName}
+                  autoFocus
+                  placeholder="分组名称"
+                  onChange={(e) => {
+                    setGroupName(e.target.value);
+                    setGroupRenameError("");
+                  }}
+                  onBlur={confirmRenameGroup}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") confirmRenameGroup();
+                    if (e.key === "Escape") {
+                      setRenamingGroupId(null);
+                      setGroupRenameError("");
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                {groupRenameError && (
+                  <span className="lib-group-error">{groupRenameError}</span>
+                )}
+              </>
+            ) : (
+              <span className="shape-category-name">{group.name}</span>
+            )
+          }
+          collapsed={isSectionCollapsed(group.id, items.length > 0)}
+          onToggle={() => toggleLibraryCollapsed(group.id)}
+          actions={
+            <>
+              {reorderEnabled && (
+                <span
+                  className="shape-category-drag-handle"
+                  draggable
+                  title="拖拽排序"
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = "move";
+                    setDragGroupId(group.id);
+                  }}
+                  onDragEnd={() => {
+                    setDragGroupId(null);
+                    setDropIndex(null);
+                  }}
+                >
+                  ⠿
+                </span>
+              )}
+              <button
+                className="lib-card-btn"
+                title="重命名分组"
+                onClick={() => startRenameGroup(group)}
+              >
+                <Icon name="pencil" size={11} />
+              </button>
+              <button
+                className="lib-card-btn lib-card-btn-danger"
+                title="删除分组"
+                onClick={() => confirmDeleteGroup(group)}
+              >
+                <Icon name="trash" size={11} />
+              </button>
+            </>
+          }
+          className={
+            reorderEnabled && dragGroupId && dropIndex === index
+              ? "shape-category-drag-over"
+              : ""
+          }
+          onDragOver={(e) => {
+            if (!reorderEnabled || !dragGroupId) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            setDropIndex(index);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (reorderEnabled && dragGroupId)
+              moveLibraryGroup(dragGroupId, index);
+            setDragGroupId(null);
+            setDropIndex(null);
+          }}
+        >
+          {items.length === 0 ? (
+            <div className="panel-hint">该分组暂无库项</div>
+          ) : (
+            <div className="shape-grid">
+              {items.map((item) => (
+                <CustomCard key={item.id} item={item} groups={libraryGroups} />
+              ))}
+            </div>
+          )}
+        </CategorySection>
       ))}
 
-      <div className="shape-category">
-        <div className="shape-category-title">自定义</div>
-        {filteredCustom.length === 0 ? (
+      <CategorySection
+        key={UNGROUPED_KEY}
+        title={<span className="shape-category-name">未分组</span>}
+        collapsed={isSectionCollapsed(UNGROUPED_KEY, ungroupedItems.length > 0)}
+        onToggle={() => toggleLibraryCollapsed(UNGROUPED_KEY)}
+      >
+        {ungroupedItems.length === 0 ? (
           <div className="panel-hint">
             画布上选中图元后点「保存选中」，或直接导入 SVG 建立库项
           </div>
         ) : (
           <div className="shape-grid">
-            {filteredCustom.map((item) => (
-              <CustomCard key={item.id} item={item} />
+            {ungroupedItems.map((item) => (
+              <CustomCard key={item.id} item={item} groups={libraryGroups} />
             ))}
           </div>
         )}
-      </div>
+      </CategorySection>
     </div>
   );
 }

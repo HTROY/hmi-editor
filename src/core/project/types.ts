@@ -3,6 +3,7 @@
 // ============================================================
 
 import type { LibraryItem } from "../shapes/library";
+import type { LibraryGroup, LibraryUi } from "../shapes/libraryGroups";
 
 /** 页面元数据 */
 export interface PageMeta {
@@ -40,6 +41,10 @@ export interface ProjectData {
   }[];
   /** 工程图元库（自定义图元条目）；旧工程可缺省 */
   library?: LibraryItem[];
+  /** 自定义分组（顺序即显示顺序）；旧工程可缺省 */
+  libraryGroups?: LibraryGroup[];
+  /** 自定义分组折叠状态等 UI 数据；旧工程可缺省 */
+  libraryUi?: LibraryUi;
 }
 
 /** 最近打开的文件 */

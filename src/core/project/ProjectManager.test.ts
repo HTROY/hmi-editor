@@ -24,3 +24,49 @@ describe("ProjectManager.setPageBackground", () => {
     expect(pm.dirty).toBe(false);
   });
 });
+
+describe("ProjectManager 图元库分组", () => {
+  it("分组与折叠状态随工程导出/导入往返", () => {
+    const pm = new ProjectManager();
+    pm.newProject();
+    pm.setLibraryGroups([
+      { id: "grp_1", name: "供电" },
+      { id: "grp_2", name: "BAS" },
+    ]);
+    pm.setLibraryUi({ collapsed: ["grp_1", "@ungrouped"] });
+    pm.setLibrary([
+      {
+        id: "lib_1",
+        name: "断路器",
+        groupId: "grp_1",
+        shape: { id: "s1", type: "rect" } as any,
+        createdAt: "",
+        updatedAt: "",
+      },
+    ]);
+
+    const restored = new ProjectManager();
+    restored.importProject(pm.exportProject());
+
+    expect(restored.getLibraryGroups()).toEqual([
+      { id: "grp_1", name: "供电" },
+      { id: "grp_2", name: "BAS" },
+    ]);
+    expect(restored.getLibraryUi()).toEqual({
+      collapsed: ["grp_1", "@ungrouped"],
+    });
+    expect(restored.getLibrary()[0].groupId).toBe("grp_1");
+  });
+
+  it("新建工程清空分组与折叠状态", () => {
+    const pm = new ProjectManager();
+    pm.newProject();
+    pm.setLibraryGroups([{ id: "grp_1", name: "供电" }]);
+    pm.setLibraryUi({ collapsed: ["grp_1"] });
+
+    pm.newProject();
+
+    expect(pm.getLibraryGroups()).toEqual([]);
+    expect(pm.getLibraryUi()).toEqual({ collapsed: [] });
+  });
+});

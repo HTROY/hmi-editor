@@ -20,6 +20,21 @@ export {
 } from "./library";
 export type { LibraryItem } from "./library";
 export {
+  BUILTIN_KEY_PREFIX,
+  UNGROUPED_KEY,
+  addGroup,
+  deleteGroup,
+  emptyGrouping,
+  generateLibraryGroupId,
+  isBuiltinSectionKey,
+  moveGroup,
+  moveItemToGroup,
+  normalizeGrouping,
+  renameGroup,
+  toggleCollapsed,
+} from "./libraryGroups";
+export type { LibraryGroup, LibraryGrouping, LibraryUi } from "./libraryGroups";
+export {
   MetroBreaker,
   MetroBusBar,
   MetroFan,

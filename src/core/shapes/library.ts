@@ -11,6 +11,8 @@ import { generateId, ShapeBase } from "./ShapeBase";
 export interface LibraryItem {
   id: string;
   name: string;
+  /** 所属自定义分组；缺省表示未分组 */
+  groupId?: string;
   /** 库项内容：单个图元（含组）的序列化定义 */
   shape: ShapeProps;
   createdAt: string;
@@ -126,7 +128,8 @@ export function getShapeBounds(props: ShapeProps): BoundingBox {
  */
 export function createLibraryItem(
   shapes: ShapeBase[],
-  name: string
+  name: string,
+  groupId?: string
 ): LibraryItem {
   if (shapes.length === 0) {
     throw new Error("没有可保存的图元");
@@ -170,6 +173,7 @@ export function createLibraryItem(
   return {
     id: generateLibraryId(),
     name,
+    groupId,
     shape,
     createdAt: now,
     updatedAt: now,
