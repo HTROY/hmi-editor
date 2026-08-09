@@ -15,6 +15,8 @@ export interface RemoteProjectLink {
 
 const REMOTE_LINK_STORAGE_KEY = "hmi_remote_link";
 
+let nextPageSeq = 0;
+
 // ============================================================
 // ProjectManager — 工程管理器
 // 管理多页面、工程文件导入/导出、最近文件
@@ -98,7 +100,8 @@ export class ProjectManager {
 
   /** 创建新页面 */
   createPage(title?: string): { meta: PageMeta; scene: SceneGraph } {
-    const id = "page_" + Date.now().toString(36);
+    const id =
+      "page_" + Date.now().toString(36) + "_" + (++nextPageSeq).toString(36);
     const now = new Date().toISOString();
     const maxOrder = Math.max(
       0,
@@ -431,9 +434,11 @@ export class ProjectManager {
     };
   }
 
-  /** 更新当前场景的图元数据到 pageScenes */
+  /** 把当前场景快照写入 pageScenes（不共享同一 SceneGraph 实例） */
   syncScene(pageId: string, scene: SceneGraph): void {
-    this.pageScenes.set(pageId, scene);
+    const snapshot = new SceneGraph();
+    for (const sh of scene.getAll()) snapshot.add(sh.clone());
+    this.pageScenes.set(pageId, snapshot);
     this.dirty = true;
   }
 

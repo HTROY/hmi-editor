@@ -59,6 +59,21 @@ describe("editorStore 图元树刷新", () => {
     expect(useEditorStore.getState().scene.version).toBeGreaterThan(before);
   });
 
+  it("切到其他页面再切回后，原页面图元不丢失", () => {
+    useEditorStore.getState().newProject();
+    const pageA = useEditorStore.getState().activePageId;
+    useEditorStore.getState().addShape("rect", 0, 0);
+    const shapeId = useEditorStore.getState().scene.getAll()[0].id;
+    useEditorStore.getState().addPage();
+    const pageB = useEditorStore.getState().activePageId;
+    expect(pageB).not.toBe(pageA);
+    useEditorStore.getState().switchPage(pageA);
+    const s = useEditorStore.getState();
+    expect(s.activePageId).toBe(pageA);
+    expect(s.scene.get(shapeId)).toBeDefined();
+    expect(s.projectManager.getPageScene(pageA)?.get(shapeId)).toBeDefined();
+  });
+
   it("importScene 后场景结构版本递增（导入场景后图元树刷新）", () => {
     const before = useEditorStore.getState().scene.version;
     useEditorStore.getState().importScene(
