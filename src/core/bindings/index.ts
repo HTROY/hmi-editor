@@ -12,3 +12,5 @@ export {
 } from "./animation";
 export type { AnimationFrameState, AnimationRuntime } from "./animation";
 export { applyValueMapping } from "./mapping";
+export { getBindingStatus } from "./status";
+export type { BindingStatus, BindingStatusLevel } from "./status";

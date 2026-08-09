@@ -1,5 +1,6 @@
 ﻿import { SceneGraph } from "../scene/SceneGraph";
 import { createShape, ShapeBase } from "../shapes";
+import type { LibraryItem } from "../shapes/library";
 import type { PageMeta, ProjectMeta, ProjectData, RecentFile } from "./types";
 import { PROJECT_SCHEMA_VERSION, upgradeProjectData } from "./upgrade";
 import { packProjectPackage, unpackProjectPackage } from "./package";
@@ -30,6 +31,9 @@ export class ProjectManager {
 
   // 每个页面对应的 SceneGraph（按需加载）
   private pageScenes: Map<string, SceneGraph> = new Map();
+
+  // 工程图元库（自定义图元条目，随工程保存/打包）
+  private library: LibraryItem[] = [];
 
   // 最近文件列表（存储在 localStorage）
   recentFiles: RecentFile[] = [];
@@ -179,6 +183,17 @@ export class ProjectManager {
 
   // ---- 工程导入/导出 ----
 
+  /** 获取工程图元库（浅拷贝，避免外部直接改内部引用） */
+  getLibrary(): LibraryItem[] {
+    return this.library.map((item) => ({ ...item }));
+  }
+
+  /** 整体替换工程图元库 */
+  setLibrary(items: LibraryItem[]): void {
+    this.library = items.map((item) => ({ ...item }));
+    this.dirty = true;
+  }
+
   /** 导出当前工程为 ProjectData */
   exportProject(): ProjectData {
     const pages = this.getPages().map((meta) => {
@@ -193,6 +208,7 @@ export class ProjectManager {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       meta: { ...this.meta, updatedAt: new Date().toISOString() },
       pages,
+      library: this.library.map((item) => ({ ...item })),
     };
   }
 
@@ -206,6 +222,9 @@ export class ProjectManager {
 
     // 导入元信息
     this.meta = { ...upgraded.meta };
+
+    // 导入图元库
+    this.library = (upgraded.library ?? []).map((item) => ({ ...item }));
 
     // 导入页面
     for (const pageData of upgraded.pages) {
@@ -272,6 +291,7 @@ export class ProjectManager {
   newProject(): void {
     this.pageMetas.clear();
     this.pageScenes.clear();
+    this.library = [];
     this.meta = this.createDefaultMeta();
     this.currentFilePath = "";
     this.setRemoteLink(null);

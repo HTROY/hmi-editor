@@ -75,6 +75,32 @@ function makeProject(): ProjectData {
 }
 
 describe(".hmi.zip 工程包", () => {
+  it("库项内的图片资源随工程包抽取，解包后恢复为 data URL", async () => {
+    const project = makeProject();
+    project.library = [
+      {
+        id: "lib_1",
+        name: "带图库项",
+        shape: createShape("image", {
+          id: "l1",
+          src: PNG_DATA_URL,
+          width: 50,
+          height: 50,
+        }).toJSON(),
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+
+    const bytes = await packProjectPackage(project);
+    const unpacked = await unpackProjectPackage(bytes);
+
+    expect(unpacked.library).toHaveLength(1);
+    expect(unpacked.library![0].name).toBe("带图库项");
+    expect(unpacked.library![0].shape.type).toBe("image");
+    expect(unpacked.library![0].shape.src).toBe(PNG_DATA_URL);
+  });
+
   it("打包后 manifest 含 schemaVersion=1、assets 清单且图元引用 asset://", async () => {
     const bytes = await packProjectPackage(makeProject());
     const files = await parseZip(bytes);

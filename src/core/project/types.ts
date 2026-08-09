@@ -2,6 +2,8 @@
 // 工程管理类型定义
 // ============================================================
 
+import type { LibraryItem } from "../shapes/library";
+
 /** 页面元数据 */
 export interface PageMeta {
   id: string;
@@ -36,6 +38,8 @@ export interface ProjectData {
     meta: PageMeta;
     shapes: any[];
   }[];
+  /** 工程图元库（自定义图元条目）；旧工程可缺省 */
+  library?: LibraryItem[];
 }
 
 /** 最近打开的文件 */

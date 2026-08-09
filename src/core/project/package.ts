@@ -136,7 +136,12 @@ export async function packProjectPackage(
   };
 
   walkShapes(
-    clone.pages.flatMap((page) => page.shapes),
+    [
+      ...clone.pages.flatMap((page) => page.shapes),
+      ...(clone.library ?? []).flatMap((item) =>
+        item?.shape ? [item.shape] : []
+      ),
+    ],
     (shape) => {
       if (typeof shape.src !== "string") return;
       const src = shape.src;
@@ -231,6 +236,9 @@ export async function unpackProjectPackage(
 
   for (const page of project.pages ?? []) {
     walkShapes(page.shapes ?? [], restoreShape);
+  }
+  for (const item of project.library ?? []) {
+    if (item?.shape) walkShapes([item.shape], restoreShape);
   }
   return upgradeProjectData(project);
 }

@@ -1,4 +1,5 @@
 import { createShape } from "../shapes";
+import type { LibraryItem } from "../shapes";
 import type { PageMeta, ProjectData, ProjectMeta } from "./types";
 import type { ShapeProps } from "../types";
 
@@ -107,5 +108,31 @@ export function upgradeProjectData(value: unknown): ProjectData {
     return { meta: pageMeta, shapes };
   });
 
-  return { schemaVersion: PROJECT_SCHEMA_VERSION, meta, pages };
+  const seenLibIds = new Set<string>();
+  const library = (Array.isArray(raw.library) ? raw.library : [])
+    .map((item: any, index: number): LibraryItem | null => {
+      if (!item || typeof item !== "object" || !item.shape) return null;
+      let id = isNonEmptyString(item.id) ? item.id : `lib_${index + 1}`;
+      if (seenLibIds.has(id)) {
+        let suffix = 2;
+        while (seenLibIds.has(`${id}_${suffix}`)) suffix++;
+        id = `${id}_${suffix}`;
+      }
+      seenLibIds.add(id);
+      try {
+        return {
+          id,
+          name: isNonEmptyString(item.name) ? item.name : `库项 ${index + 1}`,
+          shape: normalizeShapeProps(item.shape),
+          createdAt: stringOr(item.createdAt, now()),
+          updatedAt: stringOr(item.updatedAt, now()),
+        };
+      } catch (e) {
+        console.warn("导入库项失败:", e);
+        return null;
+      }
+    })
+    .filter((item: unknown): item is LibraryItem => !!item);
+
+  return { schemaVersion: PROJECT_SCHEMA_VERSION, meta, pages, library };
 }

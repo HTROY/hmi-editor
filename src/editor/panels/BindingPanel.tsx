@@ -1,12 +1,14 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { useEditorStore } from "../../store/editorStore";
+import { getBindingStatus } from "../../core/bindings";
 import type { Binding, ValueMapping } from "../../core/types";
 import type { VariableDef } from "../../core/variables/types";
 import { MappingEditor } from "./MappingEditor";
 
 // ============================================================
-// BindingPanel — 图元变量绑定面板
-// 为选中的图元添加/编辑/删除变量绑定
+// BindingPanel — 变量绑定面板（接线表）
+// 每条绑定是一条「信号路径」：变量徽章 → 轨道线 → 目标属性
+// 端子显示信号状态（正常 / 数据不确定 / 变量缺失或数据异常）
 // ============================================================
 import { Icon } from "../icons";
 
@@ -54,7 +56,15 @@ export function BindingPanel() {
     return (
       <div className="panel">
         <div className="panel-title">变量绑定</div>
-        <div className="panel-hint">请选中一个图元</div>
+        <div className="prop-empty">
+          <span className="prop-empty-dot" />
+          <div>
+            <div className="prop-empty-title">未选择图元</div>
+            <div className="prop-empty-desc">
+              选中图元后，在这里把变量接到图元属性上
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -115,6 +125,9 @@ export function BindingPanel() {
       <div className="panel-title">
         变量绑定
         <span className="panel-subtitle">{shape.name}</span>
+        {shape.bindings.length > 0 && (
+          <span className="panel-badge">{shape.bindings.length} 条</span>
+        )}
       </div>
 
       <button
@@ -128,31 +141,40 @@ export function BindingPanel() {
         <div className="panel-hint">请先在"点表管理"中添加变量</div>
       )}
 
+      {shape.bindings.length === 0 && allVars.length > 0 && (
+        <div className="panel-hint">
+          还没有绑定 — 点「添加绑定」，或回到属性面板点属性行端子
+        </div>
+      )}
+
       {shape.bindings.map((binding, idx) => {
         const isEditing = editingBindingIdx === idx;
         const vDef = getVarDef(binding.variableId);
+        const status = getBindingStatus(binding, varManager);
         return (
           <div key={idx} className="binding-item">
             <div
-              className="binding-header"
+              className="binding-header binding-wire"
               onClick={() => setEditingBindingIdx(isEditing ? null : idx)}
             >
-              <div className="binding-summary">
-                <span
-                  className={
-                    "var-type-badge " + binding.variableType.toLowerCase()
-                  }
-                >
-                  {binding.variableType}
-                </span>
-                <span className="binding-var-id">
-                  {binding.variableId || "(未选择)"}
-                </span>
-              </div>
-              <div className="binding-arrows">
-                <span className="binding-arrow">→</span>
-                <span className="binding-prop">{binding.targetProp}</span>
-              </div>
+              <span
+                className={
+                  "var-type-badge " + binding.variableType.toLowerCase()
+                }
+              >
+                {binding.variableType}
+              </span>
+              <span className="binding-var-id">
+                {binding.variableId || "(未选择)"}
+              </span>
+              <span className="binding-wire-track">
+                <span className="binding-wire-arrow" />
+              </span>
+              <span className="binding-prop-chip">{binding.targetProp}</span>
+              <span
+                className={"binding-wire-status " + status.level}
+                title={status.text}
+              />
               <button
                 className="btn-icon"
                 onClick={(e) => {
@@ -162,6 +184,7 @@ export function BindingPanel() {
               >
                 <Icon name="close" size={12} />
               </button>
+              <Icon name={isEditing ? "up" : "down"} size={12} />
             </div>
 
             {isEditing && (
@@ -179,11 +202,24 @@ export function BindingPanel() {
                     }}
                   >
                     <option value="">-- 选择变量 --</option>
-                    {allVars.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.id} ({v.name})
-                      </option>
-                    ))}
+                    {diVars.length > 0 && (
+                      <optgroup label="开关量 DI/DO">
+                        {diVars.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.id} ({v.name})
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {aiVars.length > 0 && (
+                      <optgroup label="模拟量 AI/AO">
+                        {aiVars.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.id} ({v.name})
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                 </div>
 
