@@ -41,4 +41,27 @@ describe("zip 工具", () => {
   it("无效 ZIP 抛错", async () => {
     await expect(parseZip(new Uint8Array([1, 2, 3]))).rejects.toThrow();
   });
+
+  it("大载荷打包/解包不会死锁（CompressionStream 反压回归）", async () => {
+    const size = 24 * 1024 * 1024;
+    const data = new Uint8Array(size);
+    for (let i = 0; i < size; i += 4096) {
+      data[i] = (i * 31 + (i >> 12)) & 0xff;
+    }
+
+    const packed = await Promise.race([
+      createZip([{ name: "big.bin", data }]),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("打包超时（死锁）")), 15_000)
+      ),
+    ]);
+    const files = await Promise.race([
+      parseZip(packed),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("解包超时（死锁）")), 15_000)
+      ),
+    ]);
+
+    expect(files.get("big.bin")!.length).toBe(size);
+  });
 });
