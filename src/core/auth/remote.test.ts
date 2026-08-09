@@ -54,13 +54,15 @@ const TOKEN_PAIR = {
 
 function makeClient(
   fetchImpl: (url: string, init?: RequestInit) => Promise<Response>,
-  storage?: MemoryStorage
+  storage?: MemoryStorage,
+  timeoutMs?: number
 ) {
   const mem = storage ?? new MemoryStorage();
   const client = new RemoteAuthClient({
     fetchImpl: fetchImpl as typeof fetch,
     storage: mem as any,
     now: () => Date.now(),
+    timeoutMs,
   });
   return { client, storage: mem };
 }
@@ -253,6 +255,29 @@ describe("RemoteAuthClient", () => {
     expect(refreshCalls).toBe(1);
     expect(client.session?.accessToken).toContain(".");
     expect(client.session?.refreshToken).toBe("refresh-2");
+  });
+
+  it("fails with a clear error when the backend never responds", async () => {
+    const { client } = makeClient(
+      async (url, init) => {
+        if (url.endsWith("/api/auth/login")) return jsonResponse(LOGIN_PAYLOAD);
+        return new Promise<Response>((_resolve, reject) => {
+          const signal = (init as RequestInit)?.signal as
+            AbortSignal | undefined;
+          signal?.addEventListener("abort", () =>
+            reject(signal.reason ?? new Error("aborted"))
+          );
+        });
+      },
+      undefined,
+      50
+    );
+    await client.login("eng", "secret");
+
+    await expect(client.request("/api/slow")).rejects.toMatchObject({
+      status: 0,
+      message: expect.stringContaining("请求超时"),
+    });
   });
 
   it("exposes RemoteAuthError with status", () => {

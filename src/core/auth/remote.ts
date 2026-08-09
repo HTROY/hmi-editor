@@ -40,6 +40,8 @@ export class RemoteAuthError extends Error {
 export const REMOTE_AUTH_STORAGE_KEY = "hmi_remote_auth_session";
 export const REMOTE_SERVER_URL_KEY = "hmi_remote_server_url";
 export const DEFAULT_REMOTE_API_BASE_URL = "http://localhost:8081";
+/** 单次请求超时：避免后端不可达时界面永久停留在「同步中」 */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
 /** 提前续期余量：access token 过期前 60s 主动刷新 */
 export const REFRESH_MARGIN_MS = 60_000;
@@ -69,6 +71,7 @@ export interface RemoteAuthOptions {
   storage?: StorageLike | null;
   now?: () => number;
   baseUrl?: string;
+  timeoutMs?: number;
 }
 
 /** 存储适配器：removeItem 可选（兼容 connectionConfig 的 StorageLike） */
@@ -170,6 +173,7 @@ export class RemoteAuthClient {
   private readonly fetchImpl: typeof fetch;
   private readonly storage: RemoteStorageLike | null;
   private readonly now: () => number;
+  private readonly timeoutMs: number;
 
   constructor(options: RemoteAuthOptions = {}) {
     this.fetchImpl =
@@ -183,7 +187,41 @@ export class RemoteAuthClient {
     this.storage =
       options.storage === undefined ? defaultStorage() : options.storage;
     this.now = options.now ?? (() => Date.now());
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.memoryBaseUrl = normalizeBaseUrl(options.baseUrl ?? "");
+  }
+
+  private fetchWithTimeout(
+    url: string,
+    init: RequestInit = {}
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort(new DOMException("请求超时", "TimeoutError"));
+    }, this.timeoutMs);
+    const external = init.signal;
+    const onExternalAbort = () => controller.abort(external?.reason);
+    if (external) {
+      if (external.aborted) {
+        clearTimeout(timer);
+        return Promise.reject(external.reason ?? new Error("请求已取消"));
+      }
+      external.addEventListener("abort", onExternalAbort, { once: true });
+    }
+    return this.fetchImpl(url, { ...init, signal: controller.signal })
+      .catch((e) => {
+        if (controller.signal.aborted) {
+          throw new RemoteAuthError(
+            `请求超时（${this.timeoutMs}ms），请确认后端已启动且地址正确`,
+            0
+          );
+        }
+        throw e;
+      })
+      .finally(() => {
+        clearTimeout(timer);
+        external?.removeEventListener("abort", onExternalAbort);
+      });
   }
 
   get user(): RemoteUser | null {
@@ -254,7 +292,7 @@ export class RemoteAuthClient {
     const base = normalizeBaseUrl(baseUrl ?? this.getBaseUrl());
     let res: Response;
     try {
-      res = await this.fetchImpl(base + "/api/auth/login", {
+      res = await this.fetchWithTimeout(base + "/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -306,7 +344,7 @@ export class RemoteAuthClient {
     if (!current) throw new RemoteAuthError("未登录", 401);
     let res: Response;
     try {
-      res = await this.fetchImpl(current.baseUrl + "/api/auth/refresh", {
+      res = await this.fetchWithTimeout(current.baseUrl + "/api/auth/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: current.refreshToken }),
@@ -355,7 +393,7 @@ export class RemoteAuthClient {
     if (!current) throw new RemoteAuthError("未登录", 401);
     let res: Response;
     try {
-      res = await this.fetchImpl(
+      res = await this.fetchWithTimeout(
         current.baseUrl + "/api/auth/change-password",
         {
           method: "POST",
@@ -481,7 +519,7 @@ export class RemoteAuthClient {
     const headers = new Headers(init.headers);
     headers.set("Authorization", `Bearer ${token}`);
     try {
-      return await this.fetchImpl(base + path, { ...init, headers });
+      return await this.fetchWithTimeout(base + path, { ...init, headers });
     } catch (e) {
       throw new RemoteAuthError(
         "网络错误: " + (e instanceof Error ? e.message : String(e)),

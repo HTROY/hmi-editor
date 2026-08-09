@@ -114,7 +114,7 @@ export function ProjectToolbar() {
         disabled={remoteBusy}
       >
         <Icon name="up" className="tool-icon" />
-        <span className="tool-label">同步</span>
+        <span className="tool-label">{remoteBusy ? "同步中" : "同步"}</span>
       </button>
 
       <button
