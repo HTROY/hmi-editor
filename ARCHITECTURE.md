@@ -171,6 +171,7 @@ WebSocket 消息协议（与后端对齐）：
 
 工程采用"本地优先 + 后端同步"：
 
+- **页面加载路径（PageController）**：`src/core/project/PageController.ts` 把打开/导入、新建、会话恢复、切页、新增页五个入口收敛到同一套「场景替换 → 历史切换 → 图元库/视图刷新 → 重建绑定索引 → 视口激活 → 自动保存」收尾语义（store 动作退化为薄委托）；页面元数据（标题/分辨率/背景）只以 `ProjectManager` 为唯一事实来源，组件经 `getPageMeta(activePageId)` 派生读取，越界清单在面板本地计算。
 - **自动保存**：停止编辑约 1s 后防抖写入 IndexedDB 快照（含页面、图元、图元库、页面视图状态），启动时自动恢复；页面切换/关闭前 flush。
 - **草稿备份**：定期把快照写入 IndexedDB 草稿存储，损坏或误操作时可回滚。
 - **工程包**：`.hmi.zip` = `manifest.json`（schemaVersion=1 + 资源清单）+ `assets/`；图片 data URL 抽为 `asset://<id>` 引用，导入时还原。旧 `.hmi.json` 导入时按版本升级并归一化旧字段。

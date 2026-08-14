@@ -30,15 +30,15 @@ function formatClock(d: Date) {
 export function StatusBar() {
   const {
     projectManager,
-    pageTitle,
-    pageWidth,
-    pageHeight,
+    activePageId,
     simRunning,
     mode,
     scene,
     dataBridge,
     alarmManager,
   } = useEditorStore();
+  // 页面元数据为派生值：唯一事实来源是 projectManager
+  const meta = projectManager?.getPageMeta(activePageId);
   // 订阅形状/报警变化，让图元计数与未确认数实时刷新
   useEditorStore((s) => s.shapeRevision);
   const [now, setNow] = useState(() => new Date());
@@ -99,7 +99,7 @@ export function StatusBar() {
       <span className="sb-sep" />
       <span className="sb-seg">
         <span className="sb-label">PAGE</span>
-        <span className="sb-value">{pageTitle}</span>
+        <span className="sb-value">{meta?.title}</span>
       </span>
       <span className="sb-sep" />
       <span className="sb-seg">
@@ -110,7 +110,7 @@ export function StatusBar() {
       <span className="sb-seg">
         <span className="sb-label">CANVAS</span>
         <span className="sb-value sb-mono">
-          {pageWidth} × {pageHeight}
+          {meta?.width} × {meta?.height}
         </span>
       </span>
       <span className="sb-sep" />

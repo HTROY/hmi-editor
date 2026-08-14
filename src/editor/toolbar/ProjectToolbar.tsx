@@ -1,4 +1,4 @@
-﻿import React, { useRef } from "react";
+import React, { useRef } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import { isProjectPackageFile } from "../../core";
 
@@ -21,7 +21,6 @@ export function ProjectToolbar() {
     importScene,
     importSvgFile,
     importRasterFile,
-    pageTitle,
     remoteAuth,
     remoteBusy,
     setRemoteDialog,

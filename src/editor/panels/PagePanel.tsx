@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { useEffect } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import {
@@ -8,6 +8,7 @@ import {
   MAX_PAGE_SIZE,
   DEFAULT_PAGE_BACKGROUND,
   sanitizePageBackground,
+  getOutOfBoundsShapes,
 } from "../../core";
 
 // ============================================================
@@ -20,20 +21,24 @@ export function PagePanel() {
   const {
     projectManager,
     activePageId,
+    scene,
     switchPage,
     addPage,
     deletePage,
     renamePage,
     movePage,
-    pageWidth,
-    pageHeight,
-    pageBackground,
     setPageResolution,
     setPageBackground,
     scaleShapesToResolution,
-    outOfBounds,
   } = useEditorStore();
   const pages = projectManager?.getPages() ?? [];
+  // 页面元数据与越界清单都是派生值：唯一事实来源是 projectManager
+  // （整库订阅保证 pageRevision/shapeRevision 变化时重新派生）
+  const meta = projectManager?.getPageMeta(activePageId);
+  const pageWidth = meta?.width ?? 0;
+  const pageHeight = meta?.height ?? 0;
+  const pageBackground = meta?.background ?? DEFAULT_PAGE_BACKGROUND;
+  const outOfBounds = getOutOfBoundsShapes(scene, pageWidth, pageHeight);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");

@@ -92,6 +92,35 @@ describe("editorStore 图元树刷新", () => {
   });
 });
 
+describe("editorStore 页面元数据单一来源", () => {
+  it("switchPage 后 pageRevision 递增，元数据只从 projectManager 读取", () => {
+    const s = useEditorStore.getState();
+    s.newProject();
+    s.addPage();
+    const pages = useEditorStore.getState().projectManager.getPages();
+    const other = pages.find(
+      (p) => p.id !== useEditorStore.getState().activePageId
+    )!;
+    const before = useEditorStore.getState().pageRevision;
+    useEditorStore.getState().switchPage(other.id);
+    expect(useEditorStore.getState().pageRevision).toBeGreaterThan(before);
+    const meta = useEditorStore.getState().projectManager.getPageMeta(other.id);
+    expect(meta?.title).toBe(other.title);
+  });
+
+  it("setPageResolution 后 pageRevision 递增且元数据已更新", () => {
+    const s = useEditorStore.getState();
+    s.newProject();
+    const id = useEditorStore.getState().activePageId;
+    const before = useEditorStore.getState().pageRevision;
+    useEditorStore.getState().setPageResolution(id, 1280, 720);
+    expect(useEditorStore.getState().pageRevision).toBeGreaterThan(before);
+    const meta = useEditorStore.getState().projectManager.getPageMeta(id);
+    expect(meta?.width).toBe(1280);
+    expect(meta?.height).toBe(720);
+  });
+});
+
 describe("editorStore 绑定索引一致性", () => {
   const indexOf = () =>
     (

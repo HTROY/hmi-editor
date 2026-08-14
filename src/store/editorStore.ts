@@ -3,13 +3,13 @@ import {
   SceneGraph,
   Renderer,
   SceneEditor,
+  PageController,
   createShape,
   ShapeBase,
   Serializer,
   CommandHistory,
   Viewport,
   sanitizeResolution,
-  getOutOfBoundsShapes,
   scaleShape,
   computeScaleFactor,
   isOverRasterWarningSize,
@@ -25,7 +25,6 @@ import type { ShapePath } from "../core";
 import type {
   ShapeCommand,
   ShapeProps,
-  OutOfBoundsShape,
   ResizeHandle,
   ResizeOptions,
   ProjectData,
@@ -168,10 +167,6 @@ interface EditorState {
   library: LibraryItem[];
   libraryGroups: LibraryGroup[];
   libraryCollapsed: string[];
-  pageTitle: string;
-  pageWidth: number;
-  pageHeight: number;
-  pageBackground: string;
   varManager: VariableManager;
   bindingEngine: BindingEngine;
   animEngine: AnimationEngine;
@@ -209,7 +204,6 @@ interface EditorState {
   panX: number;
   panY: number;
   viewRevision: number;
-  outOfBounds: OutOfBoundsShape[];
   setRenderer: (r: Renderer) => void;
   setMode: (m: ToolMode) => void;
   setLeftPanel: (p: LeftPanel) => void;
@@ -374,6 +368,58 @@ export const useEditorStore = create<EditorState>((set, get) => {
     }, 0);
   });
   const projectManager = new ProjectManager();
+  // 页面加载路径：打开/新建/恢复会话/切页/新增页统一收敛；
+  // 页面元数据只以 projectManager 为事实来源，store 不再镜像
+  const pageController = new PageController({
+    scene,
+    sceneEditor,
+    bindingEngine,
+    projectManager,
+    callbacks: {
+      onPageSwapped: (meta, opts) => {
+        const s = get();
+        const patch: Partial<EditorState> = {
+          activePageId: meta.id,
+          selectedId: null,
+          selectedPath: null,
+          historyRevision: 0,
+          pageRevision: s.pageRevision + 1,
+        };
+        if (opts.fullProject) {
+          patch.library = s.projectManager.getLibrary();
+          patch.libraryGroups = s.projectManager.getLibraryGroups();
+          patch.libraryCollapsed = mergeLibraryCollapsed(
+            s.projectManager.getLibraryUi().collapsed,
+            loadLibraryCollapsedFromStorage(),
+            s.projectManager.getLibraryGroups().map((g) => g.id)
+          );
+          patch.libraryRevision = 0;
+          patch.pageViews = opts.views ?? defaultPageViews(s.projectManager);
+        }
+        if (opts.clearRemoteLink) {
+          patch.remoteLink = null;
+          s.projectManager.setRemoteLink(null);
+        }
+        set(patch);
+        if (opts.fullProject)
+          saveLibraryCollapsedToStorage(get().libraryCollapsed);
+      },
+      onViewportActivated: (pageId, vp) =>
+        set((st) => ({
+          viewport: vp,
+          zoom: vp.zoom,
+          panX: vp.panX,
+          panY: vp.panY,
+          viewRevision: st.viewRevision + 1,
+          pageViews: {
+            ...st.pageViews,
+            [pageId]: normalizePageView(vp.toJSON()),
+          },
+        })),
+      getPageView: (pageId) => get().pageViews[pageId],
+      onFlushAutosave: () => flushAutosave(),
+    },
+  });
   const alarmManager = new AlarmManager(varManager);
   const historian = new Historian(varManager);
   const authManager = new AuthManager();
@@ -401,22 +447,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
     scheduleAutosave();
   };
 
-  const syncOutOfBounds = (
-    scene: SceneGraph,
-    width: number,
-    height: number
-  ) => {
-    const list = getOutOfBoundsShapes(scene, width, height);
-    const cur = get().outOfBounds;
-    if (JSON.stringify(cur) !== JSON.stringify(list))
-      set({ outOfBounds: list });
-  };
-
   /** 撤销/重做后应用 SceneEditor 返回的选中结果（与旧实现逐分支对齐） */
   const applyUndoRedoSelection = (r: UndoRedoResult | null) => {
     if (!r) return;
     const s = get();
-    syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
     if (r.keepSelection) return;
     set({
       selectedId: r.selected?.id ?? null,
@@ -435,83 +469,18 @@ export const useEditorStore = create<EditorState>((set, get) => {
     }
   };
 
-  const fitViewport = (vp: Viewport, width: number, height: number) => {
-    const r = get().renderer;
-    if (r) vp.fitPage(width, height, r.width, r.height);
-    else vp.fitPage(width, height, 1280, 800);
-  };
-
-  const activateViewport = (fit: boolean) => {
-    const s = get();
-    const pageId = s.activePageId;
-    const stored = normalizePageView(s.pageViews[pageId]);
-    const vp = new Viewport();
-    vp.zoom = stored.zoom;
-    vp.panX = stored.panX;
-    vp.panY = stored.panY;
-    const meta = s.projectManager.getPageMeta(pageId);
-    if (fit && meta) fitViewport(vp, meta.width, meta.height);
-    s.renderer?.setViewport(vp);
-    if (meta) {
-      s.renderer?.setPage(
-        meta.width,
-        meta.height,
-        meta.background ?? "#FFFFFF"
-      );
-    }
-    set({
-      viewport: vp,
-      zoom: vp.zoom,
-      panX: vp.panX,
-      panY: vp.panY,
-      viewRevision: get().viewRevision + 1,
-      pageViews: {
-        ...s.pageViews,
-        [pageId]: normalizePageView(vp.toJSON()),
-      },
-    });
-    s.renderer?.render();
-  };
-
   const resetHistory = (pageId: string) => {
     sceneEditor.resetHistories(pageId);
     set({ historyRevision: 0 });
   };
 
-  /** 用工程数据替换当前编辑内容（打开/导入共用） */
+  /** 用工程数据替换当前编辑内容（打开/导入共用；加载路径收敛到 PageController） */
   const loadProjectData = (data: ProjectData) => {
-    const s = get();
-    s.projectManager.importProject(data);
-    const f = s.projectManager.activePage;
-    if (!f) throw new Error("工程没有页面");
-    s.scene.clear();
-    for (const sh of f.scene.getAll()) s.scene.add(sh);
-    resetHistory(f.meta.id);
-    set({
-      activePageId: f.meta.id,
-      pageTitle: f.meta.title,
-      pageWidth: f.meta.width,
-      pageHeight: f.meta.height,
-      pageBackground: f.meta.background,
-      selectedId: null,
-      selectedPath: null,
-      library: s.projectManager.getLibrary(),
-      libraryGroups: s.projectManager.getLibraryGroups(),
-      libraryCollapsed: mergeLibraryCollapsed(
-        s.projectManager.getLibraryUi().collapsed,
-        loadLibraryCollapsedFromStorage(),
-        s.projectManager.getLibraryGroups().map((g) => g.id)
-      ),
-      libraryRevision: 0,
-      pageViews: defaultPageViews(s.projectManager),
-      remoteLink: null,
+    pageController.loadProject(data, {
+      fullProject: true,
+      fit: true,
+      clearRemoteLink: true,
     });
-    saveLibraryCollapsedToStorage(get().libraryCollapsed);
-    s.projectManager.setRemoteLink(null);
-    s.bindingEngine.rebuildIndex();
-    activateViewport(true);
-    s.renderer?.render();
-    flushAutosave();
   };
 
   return {
@@ -547,10 +516,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
     libraryCollapsed: loadLibraryCollapsedFromStorage().filter((k) =>
       isBuiltinSectionKey(k)
     ),
-    pageTitle: dp.title,
-    pageWidth: dp.width,
-    pageHeight: dp.height,
-    pageBackground: dp.background,
     activePageId: dp.id,
     leftPanel: "library",
     simRunning: false,
@@ -568,16 +533,17 @@ export const useEditorStore = create<EditorState>((set, get) => {
     panX: 0,
     panY: 0,
     viewRevision: 0,
-    outOfBounds: getOutOfBoundsShapes(scene, dp.width, dp.height),
     setRenderer: (r) => {
       set({ renderer: r });
       const s = get();
       r.setViewport(s.viewport);
       const meta = s.projectManager.getPageMeta(s.activePageId);
-      r.setPage(s.pageWidth, s.pageHeight, meta?.background ?? "#FFFFFF");
+      if (meta)
+        r.setPage(meta.width, meta.height, meta.background ?? "#FFFFFF");
       s.bindingEngine.setRenderer(r);
       s.animEngine.setRenderer(r);
       sceneEditor.setRenderer(r);
+      pageController.setRenderer(r);
       s.fitPage();
     },
     setMode: (m) => set({ mode: m }),
@@ -675,7 +641,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
         label: "",
         labelPosition: "bottom",
       });
-      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
     },
     deleteSelected: () => {
       const s = get();
@@ -689,7 +654,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
           s.renderer.selectedChildPath = null;
         }
       }
-      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
     },
     copySelected: () => {
       const s = get();
@@ -709,18 +673,15 @@ export const useEditorStore = create<EditorState>((set, get) => {
         c.y += 20;
         const placed = sceneEditor.addShape(c.toJSON() as ShapeProps);
         set({ selectedId: placed.id, selectedPath: [placed.id] });
-        syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
       }
     },
     updateShape: (id, props, record = true) => {
       const s = get();
       sceneEditor.updateShape(id, props, record);
-      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
     },
     updateShapeAt: (path, props, record = true) => {
       const s = get();
       sceneEditor.updateShapeAt(path, props, record);
-      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
     },
     groupSelected: () => {
       const s = get();
@@ -730,7 +691,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const group = sceneEditor.group(ids);
       if (group) {
         s.selectShape(group.id);
-        syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
       }
     },
     ungroupSelected: () => {
@@ -745,13 +705,11 @@ export const useEditorStore = create<EditorState>((set, get) => {
       } else {
         s.selectShape(null);
       }
-      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
     },
     reorderSelected: (toIndex) => {
       const s = get();
       if (!s.selectedPath) return;
       sceneEditor.reorder(s.selectedPath, toIndex);
-      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
     },
     toggleShapeVisible: (path) => {
       const shape = resolveShape(get().scene, path);
@@ -778,7 +736,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
     applyShapeResize: (id, handle, pointer, options) => {
       const s = get();
       sceneEditor.applyShapeResize(id, handle, pointer, options);
-      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
     },
     undo: () => {
       applyUndoRedoSelection(sceneEditor.undo());
@@ -821,7 +778,9 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const s = get();
       const r = s.renderer;
       if (!r) return;
-      s.viewport.zoomToPage(zoom, s.pageWidth, s.pageHeight, r.width, r.height);
+      const meta = s.projectManager.getPageMeta(s.activePageId);
+      if (!meta) return;
+      s.viewport.zoomToPage(zoom, meta.width, meta.height, r.width, r.height);
       syncView(s);
       r.render();
     },
@@ -829,7 +788,9 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const s = get();
       const r = s.renderer;
       if (!r) return;
-      s.viewport.fitPage(s.pageWidth, s.pageHeight, r.width, r.height);
+      const meta = s.projectManager.getPageMeta(s.activePageId);
+      if (!meta) return;
+      s.viewport.fitPage(meta.width, meta.height, r.width, r.height);
       syncView(s);
       r.render();
     },
@@ -837,34 +798,11 @@ export const useEditorStore = create<EditorState>((set, get) => {
       get().projectManager.syncScene(get().activePageId, get().scene);
     },
     newProject: () => {
-      const s = get();
-      s.projectManager.newProject();
-      const f = s.projectManager.activePage;
-      if (f) {
-        s.scene.clear();
-        resetHistory(f.meta.id);
-        set({
-          activePageId: f.meta.id,
-          pageTitle: f.meta.title,
-          pageWidth: f.meta.width,
-          pageHeight: f.meta.height,
-          pageBackground: f.meta.background,
-          selectedId: null,
-          selectedPath: null,
-          library: [],
-          libraryGroups: [],
-          libraryCollapsed: loadLibraryCollapsedFromStorage().filter((k) =>
-            isBuiltinSectionKey(k)
-          ),
-          libraryRevision: 0,
-          pageViews: defaultPageViews(s.projectManager),
-          remoteLink: null,
-        });
-        saveLibraryCollapsedToStorage(get().libraryCollapsed);
-        activateViewport(true);
-        s.renderer?.render();
-        flushAutosave();
-      }
+      pageController.newProject({
+        fullProject: true,
+        fit: true,
+        clearRemoteLink: true,
+      });
     },
     saveProject: () => {
       const s = get();
@@ -928,64 +866,16 @@ export const useEditorStore = create<EditorState>((set, get) => {
           // 整体替换场景：绑定索引必须整体重建（此前缺失）
           s.bindingEngine.rebuildIndex();
           resetHistory(s.activePageId);
-          activateViewport(true);
-          s.renderer?.render();
+          pageController.activateViewport(s.activePageId, true);
           flushAutosave();
         }
       } catch {}
     },
     switchPage: (pageId) => {
-      const s = get();
-      s.projectManager.syncScene(s.activePageId, s.scene);
-      const ps = s.projectManager.setActivePage(pageId);
-      if (ps) {
-        s.scene.clear();
-        for (const sh of ps.getAll()) s.scene.add(sh);
-        const m = s.projectManager.getPageMeta(pageId);
-        if (m)
-          set({
-            activePageId: pageId,
-            pageTitle: m.title,
-            pageWidth: m.width,
-            pageHeight: m.height,
-            pageBackground: m.background,
-            selectedId: null,
-            selectedPath: null,
-          });
-        sceneEditor.activatePage(pageId);
-        set({ historyRevision: 0 });
-        activateViewport(false);
-        if (m) syncOutOfBounds(s.scene, m.width, m.height);
-        s.bindingEngine.rebuildIndex();
-        s.renderer?.render();
-        flushAutosave();
-      }
+      pageController.switchPage(pageId);
     },
     addPage: () => {
-      const s = get();
-      s.projectManager.syncScene(s.activePageId, s.scene);
-      const { meta, scene: ns } = s.projectManager.createPage();
-      s.projectManager.activePageId = meta.id;
-      s.scene.clear();
-      for (const sh of ns.getAll()) s.scene.add(sh);
-      sceneEditor.activatePage(meta.id);
-      set({
-        activePageId: meta.id,
-        pageTitle: meta.title,
-        pageWidth: meta.width,
-        pageHeight: meta.height,
-        pageBackground: meta.background,
-        selectedId: null,
-        selectedPath: null,
-        historyRevision: 0,
-        pageViews: {
-          ...s.pageViews,
-          [meta.id]: { ...DEFAULT_PAGE_VIEW },
-        },
-      });
-      activateViewport(true);
-      s.renderer?.render();
-      flushAutosave();
+      pageController.addPage();
     },
     deletePage: (pageId) => {
       const s = get();
@@ -1003,7 +893,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
     renamePage: (pageId, newTitle) => {
       const s = get();
       s.projectManager.renamePage(pageId, newTitle);
-      if (pageId === s.activePageId) set({ pageTitle: newTitle });
+      // 页面元数据以 projectManager 为唯一来源：递增修订号驱动派生选择器刷新
+      set((st) => ({ pageRevision: st.pageRevision + 1 }));
       flushAutosave();
     },
     movePage: (pageId, newOrder) => {
@@ -1021,8 +912,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       meta.updatedAt = new Date().toISOString();
       s.projectManager.dirty = true;
       if (pageId === s.activePageId) {
-        set({ pageWidth: w, pageHeight: h });
-        syncOutOfBounds(s.scene, w, h);
+        set((st) => ({ pageRevision: st.pageRevision + 1 }));
         s.renderer?.setPage(w, h, meta.background ?? "#FFFFFF");
         s.renderer?.render();
       }
@@ -1055,8 +945,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       meta.height = newH;
       meta.updatedAt = new Date().toISOString();
       s.projectManager.dirty = true;
-      set({ pageWidth: newW, pageHeight: newH });
-      syncOutOfBounds(s.scene, newW, newH);
+      set((st) => ({ pageRevision: st.pageRevision + 1 }));
       s.renderer?.setPage(newW, newH, meta.background ?? "#FFFFFF");
       s.renderer?.render();
       flushAutosave();
@@ -1067,7 +956,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       s.projectManager.setPageBackground(pageId, color);
       const meta = s.projectManager.getPageMeta(pageId);
       if (pageId === s.activePageId && meta) {
-        set({ pageBackground: color });
+        set((st) => ({ pageRevision: st.pageRevision + 1 }));
         s.renderer?.setPage(meta.width, meta.height, color);
         s.renderer?.render();
       }
@@ -1084,9 +973,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     importSvgText: (svgText) => {
       const s = get();
+      const meta = s.projectManager.getPageMeta(s.activePageId);
       const result = importSvg(svgText, {
-        pageWidth: s.pageWidth,
-        pageHeight: s.pageHeight,
+        pageWidth: meta?.width ?? 0,
+        pageHeight: meta?.height ?? 0,
       });
       if (result.shapes.length === 0) return result;
 
@@ -1102,7 +992,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
       }
       sceneEditor.applyBatch(commands);
       s.selectShapes(result.shapes.map((sh) => sh.id));
-      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
       s.projectManager.dirty = true;
       return result;
     },
@@ -1154,9 +1043,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
       reader.onload = () => {
         try {
           const s = get();
+          const meta = s.projectManager.getPageMeta(s.activePageId);
           const result = importSvg(reader.result as string, {
-            pageWidth: s.pageWidth,
-            pageHeight: s.pageHeight,
+            pageWidth: meta?.width ?? 0,
+            pageHeight: meta?.height ?? 0,
           });
           if (result.shapes.length === 0) {
             alert("未找到可导入的图元");
@@ -1269,7 +1159,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
         { id: sh.id, before: null, after: sh.toJSON(), index },
       ]);
       s.selectShape(sh.id);
-      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
     },
     addLibraryGroup: (name) => {
       const s = get();
@@ -1370,9 +1259,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
             reject(reader.error ?? new Error("文件读取失败"));
           reader.readAsDataURL(file);
         });
+        const meta = s.projectManager.getPageMeta(s.activePageId);
         const shape = await rasterDataUrlToImageShape(src, {
-          pageWidth: s.pageWidth,
-          pageHeight: s.pageHeight,
+          pageWidth: meta?.width ?? 0,
+          pageHeight: meta?.height ?? 0,
         });
         s.scene.add(shape);
         sceneEditor.applyBatch([
@@ -1384,7 +1274,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
           },
         ]);
         s.selectShape(shape.id);
-        syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
         s.projectManager.dirty = true;
       } catch (e) {
         alert("图片导入失败：" + (e instanceof Error ? e.message : String(e)));
@@ -1532,7 +1421,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
         },
       }));
       scheduleAutosave();
-      if (pageId === get().activePageId) activateViewport(false);
+      if (pageId === get().activePageId)
+        pageController.activateViewport(pageId, false);
     },
     restoreSession: async () => {
       if (hydratePromise) return hydratePromise;
@@ -1550,31 +1440,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
             autosaveReady = true;
             return false;
           }
-          s.scene.clear();
-          for (const sh of f.scene.getAll()) s.scene.add(sh);
-          resetHistory(f.meta.id);
-          set({
-            activePageId: s.projectManager.activePageId,
-            pageTitle: f.meta.title,
-            pageWidth: f.meta.width,
-            pageHeight: f.meta.height,
-            pageBackground: f.meta.background,
-            selectedId: null,
-            selectedPath: null,
-            library: s.projectManager.getLibrary(),
-            libraryGroups: s.projectManager.getLibraryGroups(),
-            libraryCollapsed: mergeLibraryCollapsed(
-              s.projectManager.getLibraryUi().collapsed,
-              loadLibraryCollapsedFromStorage(),
-              s.projectManager.getLibraryGroups().map((g) => g.id)
-            ),
-            libraryRevision: 0,
-            pageViews: views,
-          });
-          saveLibraryCollapsedToStorage(get().libraryCollapsed);
-          s.bindingEngine.rebuildIndex();
-          syncOutOfBounds(s.scene, f.meta.width, f.meta.height);
-          activateViewport(false);
+          pageController.loadActivePage({ fullProject: true, views });
           autosaveReady = true;
           return true;
         } catch {
