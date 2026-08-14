@@ -83,7 +83,7 @@ io-backend/                       # Rust/WASM I/O 后端（Cargo workspace）
 编辑器采用"引擎层（core）— 状态层（store）— 展示层（editor）"三层结构：
 
 - `src/core/` 是纯 TypeScript 引擎集合，不 import React，便于单元测试与复用。
-- `src/store/editorStore.ts` 是 Zustand 全局 store，启动时一次性实例化全部引擎（`SceneGraph`、`VariableManager`、`BindingEngine`、`AnimationEngine`、`DataBridge`、`ProjectManager`、`AlarmManager`、`Historian`、`AuthManager`、`ScriptEngine`、`ReportEngine` 等），并暴露订阅切片与操作函数。
+- `src/store/editorStore.ts` 是 Zustand 全局 store，启动时一次性实例化全部引擎（`SceneGraph`、`SceneEditor`、`VariableManager`、`BindingEngine`、`AnimationEngine`、`DataBridge`、`ProjectManager`、`AlarmManager`、`Historian`、`AuthManager`、`ScriptEngine`、`ReportEngine` 等），并暴露订阅切片与操作函数。
 - `src/editor/` 只消费 store：左侧多 Tab 面板（图元库/点表/连接/页面/报警/趋势/权限/脚本/报表）、中间画布、右侧统一检查器、顶部工具栏与状态栏。
 
 主要 UI 布局：
@@ -115,14 +115,15 @@ io-backend/                       # Rust/WASM I/O 后端（Cargo workspace）
 - **图元库**：工程级 `ProjectData.library` 数据，条目是任意单个图元（含组）的序列化定义；放置时深拷贝并重新生成 ID，之后与库项无关；支持覆盖更新与显式重新同步。内置图元只读，自定义图元可放入用户自定义分组。
 - **导入**：SVG 导入器解析 shape/transform/gradient/path 等并转换为原生图元（含组）；栅格导入器把 PNG/JPG 转成 `ImageShape`（data URL 随工程持久化，打包时抽到 assets/）。
 - **检查器/图元树**：右栏顶部按 z 序（最上层优先）递归展示顶层与组内子图元；组内子图元只能在树中选中编辑，画布只画只读高亮；支持同父拖拽换序、可见/锁定、重命名、删除（仅顶层）。
-- **命令历史**：`CommandHistory` 以序列化快照记录新增/删除/属性修改/换序，支持批量命令与子图元路径寻址；撤销/重做作用于 `SceneGraph` 后刷新树与渲染。
+- **图元编辑事务（Shape Edit Transaction）**：`SceneEditor`（`src/core/scene/SceneEditor.ts`）是图元编辑的统一入口，动词接口（`updateShapeAt`/`addShape`/`deleteShape`/`group`/`ungroup`/`reorder`/`beginShapeEdit`/`endShapeEdit`/`applyShapeResize`/`applyBatch`）统一完成「变更场景 → 记录命令 → 重建绑定索引 → 重绘 → 通知」的收尾语义（`finishEdit`），撤销/重做与正向编辑共用同一收尾，避免语义漂移；store 的编辑动作退化为薄委托，消除逐动作重复的编辑仪式。依赖全部注入（scene/bindingEngine/renderer/回调），不接触 React 与 store。
+- **命令历史**：`SceneEditor` 持有每页独立的 `CommandHistory`（`activatePage`/`resetHistories`/`deletePageHistory` 管理其生命周期），以序列化快照记录新增/删除/属性修改/换序，支持批量命令（成组/取消成组）与子图元路径寻址；连续编辑（拖拽移动/缩放）在 `beginShapeEdit`/`endShapeEdit` 配对内只记录一条命令（`record=false` 的中间帧不入历史）；撤销/重做作用于 `SceneGraph` 后重建绑定索引、重绘并恢复选中结果。
 
 ### 3.3 场景、画布与视图
 
 - `SceneGraph` 用 `Map<id, Shape>` 存图元，脏标记延迟排序；命中测试按 zIndex 从高到低反查；支持区域查询（框选）。
 - `Renderer` 绑定 Canvas，绘制网格背景 → 图元 → 选中包围框与 8 个手柄；`resize`/`scaling` 模块处理物理像素与图元缩放（文字等特殊图元按角点规则缩放）。
 - `Viewport` 管理编辑视图变换（zoom 10%–800%、pan、锚点缩放、适配页面），只影响显示，不改图元坐标；每个页面的视图状态随自动保存持久化。
-- 页面拥有独立分辨率（逻辑宽高）与背景色；`EditorCanvas` 支持选择/框选/拖拽、工具创建、缩放平移、吸附（snap）、键盘快捷键（Delete、Ctrl+C/V、Ctrl+G 成组、Ctrl+Shift+G 取消成组、Ctrl+Z/Y 等）。
+- 页面拥有独立分辨率（逻辑宽高）与背景色；`EditorCanvas` 支持选择/框选/拖拽、工具创建、缩放平移、吸附（snap）、键盘快捷键（Delete、Ctrl+C/V、Ctrl+G 成组、Ctrl+Shift+G 取消成组、Ctrl+Z/Y 等）；画布编辑动作全部经 `SceneEditor` 事务落盘撤销历史（拖拽移动/缩放以 `beginShapeEdit`/`endShapeEdit` 配对记录单条命令，删除/成组/换序为原子操作）。
 
 ### 3.4 变量、绑定与动画
 
@@ -355,6 +356,7 @@ SQLite（`hmi_io.db`），主要表：
 | 工程 API 用 JWT | 独立 SPA 跨源访问，Bearer 干净；用户与角色由后端统一管理 | ADR-0004 |
 | 图元库工程级 + 副本语义 | 放置即深拷贝，之后与库项无关；覆盖更新/重新同步为显式操作 | ADR-0005 |
 | 统一检查器 | 右栏 = 图元树 + 属性/绑定/动画；组内子图元仅树选编辑，画布保持组级原子变换 | ADR-0006 |
+| 图元编辑事务 | `SceneEditor` 统一图元编辑的「变更→记录命令→重建绑定索引→重绘」收尾，撤销/重做与正向编辑共用语义；每页独立撤销历史 | — |
 | WASM 插件契约 | `hmi-plugin.wit` 单一来源，宿主/guest 共享生成代码 | — |
 | 双机热备 | 静态角色 + 心跳 + 数据健康 + 回切前数据就绪探测，避免脑裂与抖动 | — |
 
