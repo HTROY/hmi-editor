@@ -91,3 +91,59 @@ describe("editorStore 图元树刷新", () => {
     expect(useEditorStore.getState().scene.version).toBeGreaterThan(before);
   });
 });
+
+describe("editorStore 绑定索引一致性", () => {
+  const indexOf = () =>
+    (
+      useEditorStore.getState().bindingEngine as unknown as {
+        index: Map<string, unknown[]>;
+      }
+    ).index;
+
+  it("updateShapeAt 带 bindings 时重建索引，deleteSelected 后移除已删除图元的记录", () => {
+    const s = useEditorStore.getState();
+    s.newProject();
+    s.addShape("rect", 0, 0);
+    const id = s.scene.getAll()[0].id;
+    s.updateShapeAt([id], {
+      bindings: [
+        {
+          variableId: "TEST_VAR",
+          variableType: "DI",
+          targetProp: "fill",
+          mapping: { type: "direct" },
+          smooth: false,
+        },
+      ],
+    });
+    expect(indexOf().get("TEST_VAR")?.length).toBe(1);
+    s.selectShape(id);
+    s.deleteSelected();
+    expect(indexOf().get("TEST_VAR")).toBeUndefined();
+  });
+
+  it("placeLibraryItem 后带绑定的库项进入绑定索引", () => {
+    const s = useEditorStore.getState();
+    s.newProject();
+    const shape = createShape("rect", { x: 0, y: 0, width: 10, height: 10 });
+    shape.bindings = [
+      {
+        variableId: "LIB_VAR",
+        variableType: "DI",
+        targetProp: "fill",
+        mapping: { type: "direct" },
+        smooth: false,
+      },
+    ];
+    const item: LibraryItem = {
+      id: "lib-bind",
+      name: "带绑定",
+      shape: shape.toJSON(),
+      createdAt: "",
+      updatedAt: "",
+    };
+    useEditorStore.setState({ library: [item] });
+    useEditorStore.getState().placeLibraryItem("lib-bind", 100, 100);
+    expect(indexOf().get("LIB_VAR")?.length).toBe(1);
+  });
+});

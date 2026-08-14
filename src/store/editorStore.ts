@@ -1,7 +1,8 @@
-﻿import { create } from "zustand";
+import { create } from "zustand";
 import {
   SceneGraph,
   Renderer,
+  SceneEditor,
   createShape,
   ShapeBase,
   Serializer,
@@ -11,8 +12,6 @@ import {
   getOutOfBoundsShapes,
   scaleShape,
   computeScaleFactor,
-  applyResize,
-  GroupShape,
   isOverRasterWarningSize,
   isRasterFile,
   rasterDataUrlToImageShape,
@@ -20,11 +19,7 @@ import {
   DEFAULT_CONNECTION_CONFIG,
   loadConnectionConfig,
   saveConnectionConfig,
-  reorderSibling,
   resolveShape,
-  planUngroup,
-  unwrapGroup,
-  wrapShapesInGroup,
 } from "../core";
 import type { ShapePath } from "../core";
 import type {
@@ -35,6 +30,7 @@ import type {
   ResizeOptions,
   ProjectData,
   ConnectionConfig,
+  UndoRedoResult,
 } from "../core";
 import { generateId } from "../core/shapes";
 import { createLibraryItem, libraryItemToShape } from "../core/shapes/library";
@@ -352,15 +348,20 @@ function flushAutosave(): void {
 
 export const useEditorStore = create<EditorState>((set, get) => {
   const scene = new SceneGraph();
-  const historyByPage = new Map<string, CommandHistory>();
-  let activeHistory = new CommandHistory();
-  let pendingEdit: {
-    id: string;
-    before: ShapeProps;
-    index: number;
-  } | null = null;
   const varManager = new VariableManager();
   const bindingEngine = new BindingEngine(scene, varManager);
+  // 图元编辑事务：撤销/重做与历史归属（每页一份）都在 SceneEditor 内
+  const sceneEditor = new SceneEditor({
+    scene,
+    bindingEngine,
+    callbacks: {
+      onEditApplied: () =>
+        set((st) => ({ shapeRevision: st.shapeRevision + 1 })),
+      onHistoryApplied: () =>
+        set((st) => ({ historyRevision: st.historyRevision + 1 })),
+      onHistorySwap: (h) => set({ history: h }),
+    },
+  });
   // 绑定引擎常驻监听变量变化：无论数据来自模拟、io_backend 还是手动测试，
   // 绑定都立即应用到画布，不需要等到「启动模拟」
   bindingEngine.start();
@@ -385,18 +386,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
   scriptEngine.setScene(scene);
   const { meta: dp } = projectManager.createPage("主画面");
   projectManager.activePageId = dp.id;
-  historyByPage.set(dp.id, activeHistory);
+  sceneEditor.activatePage(dp.id);
   const initialViewport = new Viewport();
-
-  const pushCommand = (command: ShapeCommand) => {
-    activeHistory.push(command);
-    set((s) => ({ historyRevision: s.historyRevision + 1 }));
-  };
-
-  const pushBatchCommand = (commands: ShapeCommand[]) => {
-    activeHistory.pushBatch(commands);
-    set((s) => ({ historyRevision: s.historyRevision + 1 }));
-  };
 
   const syncView = (s: EditorState) => {
     const view = normalizePageView(s.viewport.toJSON());
@@ -419,6 +410,29 @@ export const useEditorStore = create<EditorState>((set, get) => {
     const cur = get().outOfBounds;
     if (JSON.stringify(cur) !== JSON.stringify(list))
       set({ outOfBounds: list });
+  };
+
+  /** 撤销/重做后应用 SceneEditor 返回的选中结果（与旧实现逐分支对齐） */
+  const applyUndoRedoSelection = (r: UndoRedoResult | null) => {
+    if (!r) return;
+    const s = get();
+    syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
+    if (r.keepSelection) return;
+    set({
+      selectedId: r.selected?.id ?? null,
+      selectedPath: r.selected?.path ?? null,
+    });
+    if (s.renderer) {
+      s.renderer.selectedIds.clear();
+      s.renderer.selectedChildPath = r.selected
+        ? r.selected.isChild
+          ? r.selected.path
+          : null
+        : null;
+      if (r.selected && !r.selected.isChild)
+        s.renderer.selectedIds.add(r.selected.id);
+      s.renderer.render();
+    }
   };
 
   const fitViewport = (vp: Viewport, width: number, height: number) => {
@@ -460,12 +474,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
   };
 
   const resetHistory = (pageId: string) => {
-    historyByPage.clear();
-    pendingEdit = null;
-    const h = new CommandHistory();
-    historyByPage.set(pageId, h);
-    activeHistory = h;
-    set({ history: h, historyRevision: 0 });
+    sceneEditor.resetHistories(pageId);
+    set({ historyRevision: 0 });
   };
 
   /** 用工程数据替换当前编辑内容（打开/导入共用） */
@@ -506,7 +516,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
 
   return {
     scene,
-    history: activeHistory,
+    history: sceneEditor.activeHistory!,
     varManager,
     bindingEngine,
     animEngine,
@@ -567,13 +577,14 @@ export const useEditorStore = create<EditorState>((set, get) => {
       r.setPage(s.pageWidth, s.pageHeight, meta?.background ?? "#FFFFFF");
       s.bindingEngine.setRenderer(r);
       s.animEngine.setRenderer(r);
+      sceneEditor.setRenderer(r);
       s.fitPage();
     },
     setMode: (m) => set({ mode: m }),
     setLeftPanel: (p) => set({ leftPanel: p }),
     selectShape: (id) => {
       const s = get();
-      if (id === null) pendingEdit = null;
+      if (id === null) sceneEditor.cancelShapeEdit();
       set({ selectedId: id, selectedPath: id ? [id] : null });
       if (s.renderer) {
         s.renderer.selectedIds.clear();
@@ -609,7 +620,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     addShape: (type, x, y) => {
       const s = get();
-      const sh = createShape(type, {
+      sceneEditor.addShape({
+        type,
         x: x ?? 200,
         y: y ?? 200,
         width: type === "circle" ? 80 : 120,
@@ -622,7 +634,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
         d: type === "path" ? "M15 10 L105 10 L105 70 L15 70 Z" : undefined,
         children:
           type === "group"
-            ? [
+            ? ([
                 {
                   id: generateId(),
                   type: "rect",
@@ -645,7 +657,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
                   stroke: "#333333",
                   strokeWidth: 2,
                 },
-              ]
+              ] as ShapeProps[])
             : undefined,
         src: type === "image" ? "" : undefined,
         breakerStatus: "open",
@@ -663,38 +675,18 @@ export const useEditorStore = create<EditorState>((set, get) => {
         label: "",
         labelPosition: "bottom",
       });
-      s.scene.add(sh);
-      pushCommand({
-        id: sh.id,
-        before: null,
-        after: sh.toJSON(),
-        index: s.scene.getAll().indexOf(sh),
-      });
       syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
-      s.renderer?.render();
     },
     deleteSelected: () => {
       const s = get();
       // 组内子图元不允许删除（仅在检查器中编辑）
       if (s.selectedPath && s.selectedPath.length > 1) return;
       if (s.selectedId) {
-        const sh = s.scene.get(s.selectedId);
-        if (sh) {
-          if (pendingEdit?.id === sh.id) pendingEdit = null;
-          const command: ShapeCommand = {
-            id: sh.id,
-            before: sh.toJSON(),
-            after: null,
-            index: s.scene.getAll().indexOf(sh),
-          };
-          s.scene.remove(sh.id);
-          pushCommand(command);
-        }
+        sceneEditor.deleteShape(s.selectedId);
         set({ selectedId: null, selectedPath: null });
         if (s.renderer) {
           s.renderer.selectedIds.clear();
           s.renderer.selectedChildPath = null;
-          s.renderer.render();
         }
       }
       syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
@@ -715,176 +707,51 @@ export const useEditorStore = create<EditorState>((set, get) => {
         c.id = generateId();
         c.x += 20;
         c.y += 20;
-        s.scene.add(c);
-        pushCommand({
-          id: c.id,
-          before: null,
-          after: c.toJSON(),
-          index: s.scene.getAll().indexOf(c),
-        });
-        set({ selectedId: c.id, selectedPath: [c.id] });
+        const placed = sceneEditor.addShape(c.toJSON() as ShapeProps);
+        set({ selectedId: placed.id, selectedPath: [placed.id] });
         syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
-        s.renderer?.render();
       }
     },
     updateShape: (id, props, record = true) => {
       const s = get();
-      const sh = s.scene.get(id);
-      if (sh) {
-        const before = sh.toJSON();
-        if (sh.type === "metro-breaker" && props.breakerStatus !== undefined) {
-          (sh as any).setStatus(props.breakerStatus);
-          delete props.breakerStatus;
-        }
-        Object.assign(sh, props);
-        const after = sh.toJSON();
-        if (before.zIndex !== after.zIndex) s.scene.markDirty();
-        s.renderer?.render();
-        // 通知 React：shape 是原地修改的，必须触发订阅面板（绑定/属性）重新渲染
-        s.bumpShapeRevision();
-        syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
-        if (record && JSON.stringify(before) !== JSON.stringify(after)) {
-          pushCommand({
-            id,
-            before,
-            after,
-            index: s.scene.getAll().indexOf(sh),
-          });
-        }
-      }
+      sceneEditor.updateShape(id, props, record);
+      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
     },
     updateShapeAt: (path, props, record = true) => {
       const s = get();
-      const sh = resolveShape(s.scene, path);
-      if (!sh) return;
-      const before = sh.toJSON();
-      if (sh.type === "metro-breaker" && props.breakerStatus !== undefined) {
-        (sh as any).setStatus(props.breakerStatus);
-        delete props.breakerStatus;
-      }
-      Object.assign(sh, props);
-      const after = sh.toJSON();
-      if (before.zIndex !== after.zIndex && path.length === 1) {
-        s.scene.markDirty();
-      }
-      s.renderer?.render();
-      s.bumpShapeRevision();
+      sceneEditor.updateShapeAt(path, props, record);
       syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
-      if (record && JSON.stringify(before) !== JSON.stringify(after)) {
-        pushCommand({
-          id: sh.id,
-          before,
-          after,
-          index: path.length === 1 ? s.scene.getAll().indexOf(sh) : 0,
-          path: path.length > 1 ? path.slice(0, -1) : undefined,
-        });
-      }
     },
     groupSelected: () => {
       const s = get();
       const ids = s.renderer?.selectedIds
         ? Array.from(s.renderer.selectedIds)
         : [];
-      if (ids.length < 2) return;
-      const shapes = ids
-        .map((id) => s.scene.get(id))
-        .filter((sh): sh is ShapeBase => !!sh);
-      if (shapes.length < 2 || shapes.some((sh) => sh.locked)) return;
-      const commands: ShapeCommand[] = [];
-      const group = wrapShapesInGroup(shapes, "组");
-      const indexes = new Map(
-        shapes.map((sh) => [sh.id, s.scene.getAll().indexOf(sh)])
-      );
-      const index = Math.min(
-        ...shapes.map((sh) => s.scene.getAll().indexOf(sh))
-      );
-      for (const sh of shapes) {
-        commands.push({
-          id: sh.id,
-          before: sh.toJSON(),
-          after: null,
-          index: indexes.get(sh.id) ?? 0,
-        });
-        s.scene.remove(sh.id);
-        s.bindingEngine.reindexShape(sh.id);
+      const group = sceneEditor.group(ids);
+      if (group) {
+        s.selectShape(group.id);
+        syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
       }
-      s.scene.insertAt(group, index);
-      commands.push({
-        id: group.id,
-        before: null,
-        after: group.toJSON(),
-        index,
-      });
-      pushBatchCommand(commands);
-      s.selectShape(group.id);
-      s.bindingEngine.reindexPath([group.id]);
-      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
-      s.renderer?.render();
-      s.bumpShapeRevision();
-      flushAutosave();
     },
     ungroupSelected: () => {
       const s = get();
       if (!s.selectedId || (s.selectedPath && s.selectedPath.length > 1)) {
         return;
       }
-      const group = s.scene.get(s.selectedId);
-      if (!(group instanceof GroupShape) || group.locked) return;
-      const plan = planUngroup(group);
-      const children = plan.children;
-      const index = s.scene.getAll().indexOf(group);
-      const commands: ShapeCommand[] = [
-        {
-          id: group.id,
-          before: plan.groupSnapshot,
-          after: null,
-          index,
-        },
-      ];
-      s.scene.remove(group.id);
-      s.bindingEngine.reindexShape(group.id);
-      for (const child of children) {
-        commands.push({
-          id: child.id,
-          before: null,
-          after: child.toJSON(),
-          index: s.scene.getAll().length,
-        });
-        s.scene.add(child);
-        s.bindingEngine.reindexPath([child.id]);
-      }
-      pushBatchCommand(commands);
-      if (children.length > 0) {
-        s.selectShapeAt([children[0].id]);
+      const result = sceneEditor.ungroup(s.selectedId);
+      if (!result.ok) return;
+      if (result.firstChildId !== null) {
+        s.selectShapeAt([result.firstChildId]);
       } else {
         s.selectShape(null);
       }
       syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
-      s.renderer?.render();
-      s.bumpShapeRevision();
-      flushAutosave();
     },
     reorderSelected: (toIndex) => {
       const s = get();
       if (!s.selectedPath) return;
-      const result = reorderSibling(s.scene, s.selectedPath, toIndex);
-      if (!result || result.before.join(",") === result.after.join(",")) {
-        return;
-      }
-      pushCommand({
-        id: s.selectedId ?? "",
-        before: null,
-        after: null,
-        index: 0,
-        reorder: {
-          parentPath: s.selectedPath.slice(0, -1),
-          before: result.before,
-          after: result.after,
-        },
-      });
-      s.renderer?.render();
-      s.bumpShapeRevision();
-      flushAutosave();
+      sceneEditor.reorder(s.selectedPath, toIndex);
+      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
     },
     toggleShapeVisible: (path) => {
       const shape = resolveShape(get().scene, path);
@@ -903,117 +770,21 @@ export const useEditorStore = create<EditorState>((set, get) => {
       get().updateShapeAt(path, { name: name.trim() });
     },
     beginShapeEdit: (id) => {
-      const s = get();
-      const sh = s.scene.get(id);
-      if (!sh) return;
-      pendingEdit = {
-        id,
-        before: sh.toJSON(),
-        index: s.scene.getAll().indexOf(sh),
-      };
+      sceneEditor.beginShapeEdit(id);
     },
     endShapeEdit: () => {
-      if (!pendingEdit) return;
-      const { id, before, index } = pendingEdit;
-      pendingEdit = null;
-      const sh = get().scene.get(id);
-      if (!sh) return;
-      const after = sh.toJSON();
-      if (JSON.stringify(before) === JSON.stringify(after)) return;
-      pushCommand({ id, before, after, index });
+      sceneEditor.endShapeEdit();
     },
     applyShapeResize: (id, handle, pointer, options) => {
       const s = get();
-      const sh = s.scene.get(id);
-      if (!sh || sh.locked) return;
-      applyResize(sh, handle, pointer, options);
-      s.renderer?.render();
-      s.bumpShapeRevision();
+      sceneEditor.applyShapeResize(id, handle, pointer, options);
       syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
     },
     undo: () => {
-      const s = get();
-      pendingEdit = null;
-      const command = activeHistory.undo(s.scene);
-      if (!command) return;
-      if (command.reorder) {
-        s.renderer?.render();
-      } else if (command.path && command.path.length > 0) {
-        const path = [...command.path, command.id];
-        s.bindingEngine.reindexPath(path);
-        set({ selectedId: command.id, selectedPath: path });
-        if (s.renderer) {
-          s.renderer.selectedIds.clear();
-          s.renderer.selectedChildPath = path;
-          s.renderer.render();
-        }
-      } else if (command.batch) {
-        for (const c of command.batch) s.bindingEngine.reindexShape(c.id);
-        set({ selectedId: null, selectedPath: null });
-        if (s.renderer) {
-          s.renderer.selectedIds.clear();
-          s.renderer.selectedChildPath = null;
-          s.renderer.render();
-        }
-      } else {
-        s.bindingEngine.reindexShape(command.id);
-        const exists = !!s.scene.get(command.id);
-        set({
-          selectedId: exists ? command.id : null,
-          selectedPath: exists ? [command.id] : null,
-        });
-        if (s.renderer) {
-          s.renderer.selectedIds.clear();
-          s.renderer.selectedChildPath = null;
-          if (exists) s.renderer.selectedIds.add(command.id);
-          s.renderer.render();
-        }
-      }
-      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
-      s.bumpShapeRevision();
-      s.bumpHistoryRevision();
+      applyUndoRedoSelection(sceneEditor.undo());
     },
     redo: () => {
-      const s = get();
-      pendingEdit = null;
-      const command = activeHistory.redo(s.scene);
-      if (!command) return;
-      if (command.reorder) {
-        s.renderer?.render();
-      } else if (command.path && command.path.length > 0) {
-        const path = [...command.path, command.id];
-        s.bindingEngine.reindexPath(path);
-        set({ selectedId: command.id, selectedPath: path });
-        if (s.renderer) {
-          s.renderer.selectedIds.clear();
-          s.renderer.selectedChildPath = path;
-          s.renderer.render();
-        }
-      } else if (command.batch) {
-        for (const c of command.batch) s.bindingEngine.reindexShape(c.id);
-        set({ selectedId: null, selectedPath: null });
-        if (s.renderer) {
-          s.renderer.selectedIds.clear();
-          s.renderer.selectedChildPath = null;
-          s.renderer.render();
-        }
-      } else {
-        s.bindingEngine.reindexShape(command.id);
-        const exists = !!s.scene.get(command.id);
-        set({
-          selectedId: exists ? command.id : null,
-          selectedPath: exists ? [command.id] : null,
-        });
-        if (s.renderer) {
-          s.renderer.selectedIds.clear();
-          s.renderer.selectedChildPath = null;
-          if (exists) s.renderer.selectedIds.add(command.id);
-          s.renderer.render();
-        }
-      }
-      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
-      s.bumpShapeRevision();
-      s.bumpHistoryRevision();
+      applyUndoRedoSelection(sceneEditor.redo());
     },
     renderScene: () => {
       get().renderer?.render();
@@ -1154,6 +925,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
         } else if (d.shapes) {
           s.scene.clear();
           for (const sp of d.shapes) s.scene.add(createShape(sp.type, sp));
+          // 整体替换场景：绑定索引必须整体重建（此前缺失）
+          s.bindingEngine.rebuildIndex();
           resetHistory(s.activePageId);
           activateViewport(true);
           s.renderer?.render();
@@ -1179,14 +952,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
             selectedId: null,
             selectedPath: null,
           });
-        let h = historyByPage.get(pageId);
-        if (!h) {
-          h = new CommandHistory();
-          historyByPage.set(pageId, h);
-        }
-        activeHistory = h;
-        pendingEdit = null;
-        set({ history: h, historyRevision: 0 });
+        sceneEditor.activatePage(pageId);
+        set({ historyRevision: 0 });
         activateViewport(false);
         if (m) syncOutOfBounds(s.scene, m.width, m.height);
         s.bindingEngine.rebuildIndex();
@@ -1201,10 +968,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       s.projectManager.activePageId = meta.id;
       s.scene.clear();
       for (const sh of ns.getAll()) s.scene.add(sh);
-      const h = new CommandHistory();
-      historyByPage.set(meta.id, h);
-      activeHistory = h;
-      pendingEdit = null;
+      sceneEditor.activatePage(meta.id);
       set({
         activePageId: meta.id,
         pageTitle: meta.title,
@@ -1213,7 +977,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
         pageBackground: meta.background,
         selectedId: null,
         selectedPath: null,
-        history: h,
         historyRevision: 0,
         pageViews: {
           ...s.pageViews,
@@ -1227,8 +990,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     deletePage: (pageId) => {
       const s = get();
       if (s.projectManager.getPages().length <= 1) return;
-      historyByPage.delete(pageId);
-      pendingEdit = null;
+      sceneEditor.deletePageHistory(pageId);
       set((st) => {
         const pageViews = { ...st.pageViews };
         delete pageViews[pageId];
@@ -1288,7 +1050,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
           });
         }
       }
-      if (commands.length > 0) pushBatchCommand(commands);
+      if (commands.length > 0) sceneEditor.applyBatch(commands);
       meta.width = newW;
       meta.height = newH;
       meta.updatedAt = new Date().toISOString();
@@ -1297,7 +1059,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
       syncOutOfBounds(s.scene, newW, newH);
       s.renderer?.setPage(newW, newH, meta.background ?? "#FFFFFF");
       s.renderer?.render();
-      s.bumpShapeRevision();
       flushAutosave();
     },
     setPageBackground: (pageId, background) => {
@@ -1339,12 +1100,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
           index: s.scene.getAll().indexOf(shape),
         });
       }
-      pushBatchCommand(commands);
+      sceneEditor.applyBatch(commands);
       s.selectShapes(result.shapes.map((sh) => sh.id));
       syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
-      s.renderer?.render();
       s.projectManager.dirty = true;
-      flushAutosave();
       return result;
     },
     importSvgFile: (file) => {
@@ -1478,17 +1237,17 @@ export const useEditorStore = create<EditorState>((set, get) => {
       if (!item) return;
       const sh = libraryItemToShape(item, x, y);
       s.scene.add(sh);
-      pushCommand({
-        id: sh.id,
-        before: null,
-        after: sh.toJSON(),
-        index: s.scene.getAll().indexOf(sh),
-      });
+      // 库项可能携带绑定：applyBatch 会重建其绑定索引
+      sceneEditor.applyBatch([
+        {
+          id: sh.id,
+          before: null,
+          after: sh.toJSON(),
+          index: s.scene.getAll().indexOf(sh),
+        },
+      ]);
       s.selectShape(sh.id);
-      syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
-      s.renderer?.render();
       s.projectManager.dirty = true;
-      flushAutosave();
     },
     resyncFromLibrary: (itemId, shapeId) => {
       const s = get();
@@ -1505,17 +1264,12 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const sh = libraryItemToShape(item, center.x, center.y);
       s.scene.remove(shapeId);
       s.scene.insertAt(sh, index);
-      pushBatchCommand([
+      sceneEditor.applyBatch([
         { id: shapeId, before, after: null, index },
         { id: sh.id, before: null, after: sh.toJSON(), index },
       ]);
-      s.bindingEngine.reindexShape(shapeId);
-      s.bindingEngine.reindexShape(sh.id);
       s.selectShape(sh.id);
       syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
-      s.renderer?.render();
-      s.bumpShapeRevision();
-      flushAutosave();
     },
     addLibraryGroup: (name) => {
       const s = get();
@@ -1621,17 +1375,17 @@ export const useEditorStore = create<EditorState>((set, get) => {
           pageHeight: s.pageHeight,
         });
         s.scene.add(shape);
-        pushCommand({
-          id: shape.id,
-          before: null,
-          after: shape.toJSON(),
-          index: s.scene.getAll().indexOf(shape),
-        });
+        sceneEditor.applyBatch([
+          {
+            id: shape.id,
+            before: null,
+            after: shape.toJSON(),
+            index: s.scene.getAll().indexOf(shape),
+          },
+        ]);
         s.selectShape(shape.id);
         syncOutOfBounds(s.scene, s.pageWidth, s.pageHeight);
-        s.renderer?.render();
         s.projectManager.dirty = true;
-        flushAutosave();
       } catch (e) {
         alert("图片导入失败：" + (e instanceof Error ? e.message : String(e)));
       }

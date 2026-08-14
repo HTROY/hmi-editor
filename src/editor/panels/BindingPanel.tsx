@@ -29,14 +29,8 @@ const NUMERIC_PROPS = new Set([
 ]);
 
 export function BindingPanel() {
-  const {
-    scene,
-    selectedId,
-    selectedPath,
-    varManager,
-    bindingEngine,
-    updateShapeAt,
-  } = useEditorStore();
+  const { scene, selectedId, selectedPath, varManager, updateShapeAt } =
+    useEditorStore();
   // 订阅 shape 修改版本号：updateShape 原地修改 shape 后触发重渲染
   useEditorStore((s) => s.shapeRevision);
   const shape = selectedPath
@@ -91,7 +85,6 @@ export function BindingPanel() {
     };
     const bindings = [...(shape?.bindings ?? []), newBinding];
     updateShapeAt(path, { bindings });
-    bindingEngine?.reindexPath(path);
     setEditingBindingIdx(bindings.length - 1);
   };
 
@@ -99,7 +92,6 @@ export function BindingPanel() {
     if (!path) return;
     const bindings = shape?.bindings.filter((_, i) => i !== idx) ?? [];
     updateShapeAt(path, { bindings });
-    bindingEngine?.reindexPath(path);
     if (editingBindingIdx === idx) setEditingBindingIdx(null);
   };
 
@@ -108,7 +100,6 @@ export function BindingPanel() {
     const bindings = [...shape.bindings];
     bindings[idx] = { ...bindings[idx], ...upd };
     updateShapeAt(path, { bindings });
-    bindingEngine?.reindexPath(path);
   };
 
   const updateMapping = (idx: number, upd: Partial<ValueMapping>) => {
@@ -119,7 +110,6 @@ export function BindingPanel() {
       mapping: { ...bindings[idx].mapping, ...upd } as ValueMapping,
     };
     updateShapeAt(path, { bindings });
-    bindingEngine?.reindexPath(path);
   };
 
   // 获取当前选中变量的定义

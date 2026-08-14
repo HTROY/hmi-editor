@@ -121,10 +121,8 @@ function BindTerminal({ prop, path }: { prop: string; path: ShapePath }) {
         : [...shape.bindings, newBinding];
       if (path.length > 1) {
         s.updateShapeAt(path, { bindings });
-        s.bindingEngine?.reindexPath(path);
       } else {
         s.updateShape(path[0], { bindings });
-        s.bindingEngine?.reindexShape(path[0]);
       }
     }
     setOpen(false);

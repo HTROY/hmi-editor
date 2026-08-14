@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   ShapeId,
   ShapeType,
   ShapeProps,
@@ -139,6 +139,15 @@ export abstract class ShapeBase {
     Object.assign(this, props);
     // 旧工程动画缺少 id/params/bind 时补默认值
     this.animations = normalizeAnimations(this.animations);
+  }
+
+  /**
+   * 批量应用属性（图元编辑事务的统一写入入口）。
+   * 默认整体赋值；需要派生状态/校验的子类可重写
+   * （如 MetroBreaker 把 breakerStatus 转为 setStatus 并联动颜色）。
+   */
+  applyProps(props: Partial<ShapeProps>): void {
+    Object.assign(this, props);
   }
 
   /** 等比缩放几何属性（子类扩展点） */

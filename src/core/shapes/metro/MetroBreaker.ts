@@ -1,4 +1,4 @@
-﻿import { ShapeBase } from "../ShapeBase";
+import { ShapeBase } from "../ShapeBase";
 import type { ShapeProps, Point } from "../../types";
 
 // ============================================================
@@ -57,6 +57,13 @@ export class MetroBreaker extends ShapeBase {
     this.breakerStatus = status;
     const colors = MetroBreaker.STATUS_COLORS[status];
     if (colors) this.fill = colors.fill;
+  }
+
+  /** breakerStatus 走 setStatus（联动状态色），其余属性整体赋值 */
+  applyProps(props: Partial<MetroBreakerProps>): void {
+    const { breakerStatus, ...rest } = props;
+    if (breakerStatus !== undefined) this.setStatus(breakerStatus);
+    Object.assign(this, rest);
   }
 
   render(ctx: CanvasRenderingContext2D): void {
