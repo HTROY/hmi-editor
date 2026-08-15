@@ -1,7 +1,7 @@
 use crate::manager::PointManager;
 use crate::redundancy::state::{
-    decide_initial_state, required_stable_beats, should_promote_unhealthy, NodeState,
-    RedundancyState,
+    decide_initial_state, is_peer_stale, should_attempt_failback,
+    should_promote_on_heartbeat_loss, should_promote_unhealthy, NodeState, RedundancyState,
 };
 use crate::types::{PointValue, WsDataMessage};
 use hmi_io_config::{NodeRole, RedundancyConfig};
@@ -185,8 +185,7 @@ impl RedundancyEngine {
             NodeState::Active => {
                 // 对端（Standby）会主动心跳我们；只在状态页面显示对端是否在线
                 let last_seen = self.state.get_status().peer.last_seen_ms;
-                let stale_after = (self.config.heartbeat_interval_ms * 3).max(3_000);
-                if now_ms().saturating_sub(last_seen) > stale_after {
+                if is_peer_stale(last_seen, now_ms(), self.config.heartbeat_interval_ms) {
                     self.state.mark_peer_stale();
                 }
             }
@@ -196,21 +195,21 @@ impl RedundancyEngine {
                     Some(hb) => {
                         let rtt = start.elapsed().as_millis() as u64;
                         self.state.record_heartbeat_ok(rtt, hb.clone());
-                        if self.config.role == NodeRole::Primary && hb.state == "active" {
-                            let beats = required_stable_beats(
-                                self.config.failback_delay_ms,
-                                self.config.heartbeat_interval_ms,
-                            );
-                            if self.state.stable_heartbeats() >= beats {
-                                if self.probe_local_data().await {
-                                    self.claim_and_promote().await;
-                                } else {
-                                    self.state.record_event(
-                                        "error",
-                                        "failback skipped: local data not ready",
-                                    );
-                                    self.state.reset_stable_heartbeats();
-                                }
+                        if should_attempt_failback(
+                            self.config.role,
+                            hb.state == "active",
+                            self.state.stable_heartbeats(),
+                            self.config.failback_delay_ms,
+                            self.config.heartbeat_interval_ms,
+                        ) {
+                            if self.probe_local_data().await {
+                                self.claim_and_promote().await;
+                            } else {
+                                self.state.record_event(
+                                    "error",
+                                    "failback skipped: local data not ready",
+                                );
+                                self.state.reset_stable_heartbeats();
                             }
                         } else if !hb.data_healthy {
                             // 节点级采集健康触发：对端整机取不到数据
@@ -230,11 +229,17 @@ impl RedundancyEngine {
                     }
                     None => {
                         self.state.record_heartbeat_failure();
+                        // 达阈值才走第二通道 TCP 探测（对端 HTTP 故障期间不每拍探测）
                         let failures = self.state.heartbeat_failures();
-                        if failures >= self.config.failover_threshold.max(1)
-                            && !self.probe_peer_tcp().await
-                        {
-                            self.promote();
+                        if failures >= self.config.failover_threshold.max(1) {
+                            let peer_tcp_reachable = self.probe_peer_tcp().await;
+                            if should_promote_on_heartbeat_loss(
+                                failures,
+                                self.config.failover_threshold,
+                                peer_tcp_reachable,
+                            ) {
+                                self.promote();
+                            }
                         }
                     }
                 }

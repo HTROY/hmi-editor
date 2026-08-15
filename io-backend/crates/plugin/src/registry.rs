@@ -12,6 +12,10 @@ use tokio::sync::{mpsc, oneshot};
 
 use super::host::PluginHost;
 use super::interface::PluginInstance;
+use super::supervisor::{
+    evaluate_group, should_probe_primary, should_reconnect, GroupHealth, MemberRef,
+    SupervisionDecision,
+};
 use hmi_io_config::{AppConfig, PluginInstance as PluginInstanceConfig};
 use hmi_io_monitor::collector::MonitorCollector;
 use hmi_io_point::manager::PointManager;
@@ -63,13 +67,6 @@ pub struct InstanceMemberStatus {
 }
 
 #[derive(Debug, Clone)]
-struct MemberRef {
-    name: String,
-    role: String,
-    priority: u32,
-}
-
-#[derive(Debug, Clone)]
 struct GroupStateInner {
     group: String,
     members: Vec<MemberRef>,
@@ -79,11 +76,6 @@ struct GroupStateInner {
     last_switch_ms: u64,
     last_switch_reason: String,
     switch_count: u64,
-}
-
-fn next_member(members: &[MemberRef], active: &str) -> Option<String> {
-    let idx = members.iter().position(|m| m.name == active)?;
-    Some(members[(idx + 1) % members.len()].name.clone())
 }
 
 // ── PluginRegistry ─────────────────────────────────────────
@@ -307,32 +299,37 @@ impl PluginRegistry {
         let cooldown = settings.instance_switch_cooldown_ms;
         let fresh_window = scan_interval_ms.max(100) * 3;
 
-        // 1) 活跃成员健康检查与切换
+        // 1) 活跃成员健康检查与切换（决策逻辑在 supervisor::evaluate_group）
         let mut switch_ops: Vec<(String, String, String)> = Vec::new();
         {
             let mut groups = self.groups.lock().unwrap();
             for g in groups.values_mut() {
-                let active = g.active.clone();
-                let healthy = statuses
-                    .get(active.as_str())
-                    .map(|s| {
-                        s.connection_state == 2
-                            && snap.server_uptime_ms.saturating_sub(s.last_scan_time_ms)
-                                < fresh_window
-                    })
-                    .unwrap_or(false);
-                if healthy {
-                    g.failures = 0;
-                    continue;
-                }
-                g.failures += 1;
-                if g.failures < threshold || now.saturating_sub(g.last_switch_ms) < cooldown {
-                    continue;
-                }
-                if let Some(next) = next_member(&g.members, &active) {
-                    if next != active {
-                        switch_ops.push((g.group.clone(), next, "active instance unhealthy".into()));
+                let health = {
+                    let active = g.active.clone();
+                    let healthy = statuses
+                        .get(active.as_str())
+                        .map(|s| {
+                            s.connection_state == 2
+                                && snap.server_uptime_ms.saturating_sub(s.last_scan_time_ms)
+                                    < fresh_window
+                        })
+                        .unwrap_or(false);
+                    GroupHealth {
+                        active,
+                        failures: g.failures,
+                        last_switch_ms: g.last_switch_ms,
+                        active_healthy: healthy,
+                        members: g.members.clone(),
                     }
+                };
+                match evaluate_group(&health, now, threshold, cooldown) {
+                    SupervisionDecision::Healthy => g.failures = 0,
+                    SupervisionDecision::KeepCounting => g.failures += 1,
+                    SupervisionDecision::Switch { next } => switch_ops.push((
+                        g.group.clone(),
+                        next,
+                        "active instance unhealthy".into(),
+                    )),
                 }
             }
         }
@@ -341,9 +338,8 @@ impl PluginRegistry {
                 .await;
         }
 
-        // 2) 回切探测
+        // 2) 回切探测（周期判定在 supervisor::should_probe_primary）
         if settings.instance_failback_enabled {
-            let failback_interval = settings.instance_failback_delay_ms.max(scan_interval_ms.max(100));
             let mut probe_ops: Vec<(String, String)> = Vec::new();
             {
                 let mut groups = self.groups.lock().unwrap();
@@ -353,7 +349,11 @@ impl PluginRegistry {
                     };
                     if g.active != primary {
                         g.probe_ticks += 1;
-                        if (g.probe_ticks as u64) * scan_interval_ms.max(100) >= failback_interval {
+                        if should_probe_primary(
+                            g.probe_ticks,
+                            scan_interval_ms,
+                            settings.instance_failback_delay_ms,
+                        ) {
                             g.probe_ticks = 0;
                             probe_ops.push((g.group.clone(), primary));
                         }
@@ -747,7 +747,8 @@ async fn run_plugin_actor(
                         log::warn!("[{}] scan_points: {}", name, code);
                         let status = plugin.get_status().await.unwrap_or(0);
                         monitor.set_connection_state(&name, status as i32);
-                        if status != 2 && last_reconnect.elapsed() >= RECONNECT_MIN_INTERVAL {
+                        if should_reconnect(code, status, last_reconnect.elapsed(), RECONNECT_MIN_INTERVAL)
+                        {
                             last_reconnect = std::time::Instant::now();
                             log::info!("[{}] link lost, attempting reconnect...", name);
                             match plugin.connect().await {
@@ -873,18 +874,6 @@ mod tests {
         let groups = HashMap::new();
         assert_eq!(resolve_write_target(&cfg, &groups, "mb1:P2"), None);
         assert_eq!(resolve_write_target(&cfg, &groups, "P1"), None);
-    }
-
-    #[test]
-    fn next_member_follows_order_and_wraps() {
-        let members = vec![
-            MemberRef { name: "p".into(), role: "primary".into(), priority: 0 },
-            MemberRef { name: "b1".into(), role: "backup".into(), priority: 1 },
-            MemberRef { name: "b2".into(), role: "backup".into(), priority: 2 },
-        ];
-        assert_eq!(next_member(&members, "p"), Some("b1".to_string()));
-        assert_eq!(next_member(&members, "b1"), Some("b2".to_string()));
-        assert_eq!(next_member(&members, "b2"), Some("p".to_string()));
     }
 
     #[test]

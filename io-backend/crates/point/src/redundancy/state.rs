@@ -47,6 +47,34 @@ pub fn should_promote_unhealthy(unhealthy_reports: u32, threshold: u32, cooldown
     cooldown_ok && unhealthy_reports >= threshold.max(1)
 }
 
+/// 心跳丢失升主的决策：失败次数达阈值且对端 WS 端口 TCP 探测不可达。
+/// （TCP 探测的开销判定由引擎侧控制：未达阈值不探测。）
+pub fn should_promote_on_heartbeat_loss(
+    failures: u32,
+    threshold: u32,
+    peer_tcp_reachable: bool,
+) -> bool {
+    failures >= threshold.max(1) && !peer_tcp_reachable
+}
+
+/// 回切时机决策：主节点、对端活跃、稳定心跳数达回切周期。
+pub fn should_attempt_failback(
+    role: NodeRole,
+    peer_active: bool,
+    stable_beats: u32,
+    failback_delay_ms: u64,
+    heartbeat_interval_ms: u64,
+) -> bool {
+    role == NodeRole::Primary
+        && peer_active
+        && stable_beats >= required_stable_beats(failback_delay_ms, heartbeat_interval_ms)
+}
+
+/// 对端心跳陈旧判定：超过 3 个心跳周期（至少 3s）未收到心跳。
+pub fn is_peer_stale(last_seen_ms: u64, now_ms: u64, heartbeat_interval_ms: u64) -> bool {
+    now_ms.saturating_sub(last_seen_ms) > (heartbeat_interval_ms * 3).max(3_000)
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct PeerStatus {
     pub reachable: bool,
@@ -481,6 +509,41 @@ mod tests {
         assert!(!should_promote_unhealthy(2, 3, true));
         assert!(should_promote_unhealthy(3, 3, true));
         assert!(!should_promote_unhealthy(3, 3, false));
+    }
+
+    #[test]
+    fn heartbeat_loss_promotion_requires_threshold_and_tcp_down() {
+        assert!(!should_promote_on_heartbeat_loss(2, 3, false));
+        assert!(should_promote_on_heartbeat_loss(3, 3, false));
+        // 对端 TCP 可达（第二通道存活）不升主
+        assert!(!should_promote_on_heartbeat_loss(3, 3, true));
+        // 阈值为 0 时按 1 处理
+        assert!(!should_promote_on_heartbeat_loss(0, 0, false));
+        assert!(should_promote_on_heartbeat_loss(1, 0, false));
+    }
+
+    #[test]
+    fn failback_requires_primary_role_peer_active_and_stable_beats() {
+        // 主节点、对端活跃、稳定心跳 30 拍（30s/1s）→ 回切
+        assert!(should_attempt_failback(NodeRole::Primary, true, 30, 30_000, 1_000));
+        // 备节点不主动回切
+        assert!(!should_attempt_failback(NodeRole::Backup, true, 30, 30_000, 1_000));
+        // 对端非活跃不回切
+        assert!(!should_attempt_failback(NodeRole::Primary, false, 30, 30_000, 1_000));
+        // 稳定心跳不足不回切
+        assert!(!should_attempt_failback(NodeRole::Primary, true, 29, 30_000, 1_000));
+        // 回切周期向上取整：10s 延迟 / 3s 心跳 → 4 拍
+        assert!(should_attempt_failback(NodeRole::Primary, true, 4, 10_000, 3_000));
+        assert!(!should_attempt_failback(NodeRole::Primary, true, 3, 10_000, 3_000));
+    }
+
+    #[test]
+    fn peer_stale_after_three_heartbeat_periods() {
+        assert!(!is_peer_stale(0, 2_999, 1_000));
+        assert!(is_peer_stale(0, 3_001, 1_000));
+        // 周期过短时下限 3s
+        assert!(!is_peer_stale(0, 2_999, 100));
+        assert!(is_peer_stale(0, 3_001, 100));
     }
 
     #[test]
