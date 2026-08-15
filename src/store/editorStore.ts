@@ -1,271 +1,47 @@
 import { create } from "zustand";
 import {
-  SceneGraph,
-  Renderer,
-  SceneEditor,
-  PageController,
-  LibraryController,
-  Selection,
-  ShapeBase,
-  CommandHistory,
-  Viewport,
-  sanitizeResolution,
-  computeScaleFactor,
   isOverRasterWarningSize,
   isRasterFile,
   rasterDataUrlToImageShape,
-  sanitizePageBackground,
-  DEFAULT_CONNECTION_CONFIG,
-  loadConnectionConfig,
-  saveConnectionConfig,
-  resolveShape,
-} from "../core";
-import type { ShapePath } from "../core";
-import type {
-  ShapeProps,
-  ResizeHandle,
-  ResizeOptions,
-  ProjectData,
-  ConnectionConfig,
-  UndoRedoResult,
-} from "../core";
-import { generateId } from "../core/shapes";
-import { libraryItemToShape } from "../core/shapes/library";
-import type { LibraryItem } from "../core/shapes/library";
-import { isBuiltinSectionKey, mergeCollapsed } from "../core/shapes/libraryGroups";
-import type { LibraryGroup } from "../core/shapes/libraryGroups";
-import { importSvg } from "../core/svg";
-import type { SvgImportResult } from "../core/svg";
-import { VariableManager } from "../core/variables";
-import { BindingEngine, AnimationEngine } from "../core/bindings";
-import { DataBridge, WebSocketClient } from "../core/io";
-import { ProjectManager } from "../core/project";
-import { AlarmManager } from "../core/alarm";
-import type { AlarmRule } from "../core/alarm/types";
-import { Historian } from "../core/historian";
-import { AuthManager } from "../core/auth";
-import { RemoteAuthClient } from "../core/auth";
-import type { RemoteUser } from "../core/auth";
-import { ScriptEngine } from "../core/script";
-import { ReportEngine } from "../core/report";
-import type { ShapeType } from "../core";
-import { RemoteProjectStore } from "../core/project/remote";
-import type { RemoteProject } from "../core/project/remote";
-import { isConflictError } from "../core/project/remote";
-import {
-  createDraftBackup,
-  createIndexedDbDraftBackupStore,
-} from "../core/project/backup";
-import type { DraftBackup, DraftBackupStore } from "../core/project/backup";
-import type { RemoteProjectLink } from "../core/project";
-import {
-  AutosaveController,
-  DEFAULT_PAGE_VIEW,
+  isAutosaveSnapshot,
   applyAutosaveSnapshot,
   buildAutosaveSnapshot,
+  AutosaveController,
   createIndexedDbAutosaveStore,
-  defaultPageViews,
-  isProjectPackageFile,
-  isAutosaveSnapshot,
-  normalizePageView,
-  unpackProjectPackage,
+  importSvg,
 } from "../core";
-import type { AutosaveSnapshot, PageViewState } from "../core";
+import type { AutosaveSnapshot } from "../core";
+import type { SvgImportResult } from "../core/svg";
+import { createEditorServices } from "./editorServices";
+import type { EditorServices } from "./editorServices";
+import { createSceneSlice } from "./slices/sceneSlice";
+import { createLibrarySlice } from "./slices/librarySlice";
+import { createPageSlice } from "./slices/pageSlice";
+import { createConnectionSlice } from "./slices/connectionSlice";
+import { createAlarmSlice } from "./slices/alarmSlice";
+import { createRemoteSlice } from "./slices/remoteSlice";
+import type { AutosaveHooks } from "./editorStoreTypes";
+import type { EditorState } from "./editorStoreTypes";
 
-// 图元库折叠状态：内置分类只存 localStorage；
-// 图元库折叠状态的 localStorage 读写、合并与变更仪式已收敛到
-// LibraryController（core/project/LibraryController.ts）；store 只做镜像同步。
-
-export type ToolMode = "select" | "rect" | "circle" | "line" | "text";
-export type RemoteDialog = "none" | "auth" | "projects" | "push";
-
-export type PushResult =
-  | { ok: true; created: boolean; version: number; id: string }
-  | { ok: false; reason: "conflict"; projectId: string; error: Error }
-  | { ok: false; reason: "error"; error: Error };
-
-export type LeftPanel =
-  | "library"
-  | "variables"
-  | "connections"
-  | "pages"
-  | "alarm"
-  | "trend"
-  | "auth"
-  | "script"
-  | "report";
-
-interface EditorState {
-  scene: SceneGraph;
-  renderer: Renderer | null;
-  history: CommandHistory;
-  mode: ToolMode;
-  /** 选中状态唯一事实来源（不可变；变更后 selectionRevision 递增触发重渲染） */
-  selection: Selection;
-  selectionRevision: number;
-  clipboard: ShapeBase | null;
-  library: LibraryItem[];
-  libraryGroups: LibraryGroup[];
-  libraryCollapsed: string[];
-  varManager: VariableManager;
-  bindingEngine: BindingEngine;
-  animEngine: AnimationEngine;
-  dataBridge: DataBridge;
-  projectManager: ProjectManager;
-  alarmManager: AlarmManager;
-  historian: Historian;
-  authManager: AuthManager;
-  remoteAuth: RemoteAuthClient;
-  remoteProjects: RemoteProjectStore;
-  draftBackupStore: DraftBackupStore;
-  remoteUser: RemoteUser | null;
-  remoteList: RemoteProject[] | null;
-  backupList: DraftBackup[] | null;
-  remoteLink: RemoteProjectLink | null;
-  syncDialog: RemoteDialog;
-  remoteBusy: boolean;
-  pendingConflict: { projectId: string } | null;
-  scriptEngine: ScriptEngine;
-  reportEngine: ReportEngine;
-  activePageId: string;
-  leftPanel: LeftPanel;
-  simRunning: boolean;
-  previewRunning: boolean;
-  wsConfig: { url: string; backupUrl?: string };
-  connectionConfig: ConnectionConfig;
-  pageViews: Record<string, PageViewState>;
-  pageRevision: number;
-  varRevision: number;
-  shapeRevision: number;
-  libraryRevision: number;
-  historyRevision: number;
-  viewport: Viewport;
-  zoom: number;
-  panX: number;
-  panY: number;
-  viewRevision: number;
-  setRenderer: (r: Renderer) => void;
-  setMode: (m: ToolMode) => void;
-  setLeftPanel: (p: LeftPanel) => void;
-  selectShape: (id: string | null) => void;
-  selectShapes: (ids: string[]) => void;
-  selectShapeAt: (path: ShapePath) => void;
-  updateShapeAt: (
-    path: ShapePath,
-    props: Partial<ShapeProps>,
-    record?: boolean
-  ) => void;
-  groupSelected: () => void;
-  ungroupSelected: () => void;
-  reorderSelected: (toIndex: number) => void;
-  toggleShapeVisible: (path: ShapePath) => void;
-  toggleShapeLocked: (path: ShapePath) => void;
-  renameShape: (path: ShapePath, name: string) => void;
-  addShape: (t: ShapeType, x?: number, y?: number) => void;
-  saveSelectionToLibrary: (
-    name: string,
-    groupId?: string
-  ) => LibraryItem | null;
-  importSvgToLibrary: (file: File, groupId?: string) => void;
-  renameLibraryItem: (id: string, name: string) => void;
-  deleteLibraryItem: (id: string) => void;
-  overwriteLibraryItem: (id: string) => void;
-  placeLibraryItem: (id: string, x?: number, y?: number) => void;
-  resyncFromLibrary: (itemId: string, shapeId: string) => void;
-  addLibraryGroup: (name: string) => boolean;
-  renameLibraryGroup: (id: string, name: string) => boolean;
-  deleteLibraryGroup: (id: string) => void;
-  moveLibraryItemToGroup: (itemId: string, groupId: string | null) => void;
-  moveLibraryGroup: (id: string, targetIndex: number) => void;
-  toggleLibraryCollapsed: (key: string) => void;
-  deleteSelected: () => void;
-  copySelected: () => void;
-  pasteClipboard: () => void;
-  updateShape: (
-    id: string,
-    props: Partial<ShapeProps>,
-    record?: boolean
-  ) => void;
-  beginShapeEdit: (id: string) => void;
-  endShapeEdit: () => void;
-  applyShapeResize: (
-    id: string,
-    handle: ResizeHandle,
-    pointer: { x: number; y: number },
-    options?: ResizeOptions
-  ) => void;
-  undo: () => void;
-  redo: () => void;
-  renderScene: () => void;
-  setZoom: (zoom: number, anchorX?: number, anchorY?: number) => void;
-  zoomBy: (factor: number, anchorX?: number, anchorY?: number) => void;
-  panBy: (dx: number, dy: number) => void;
-  zoomTo: (zoom: number) => void;
-  fitPage: () => void;
-  setPageResolution: (pageId: string, width: number, height: number) => void;
-  scaleShapesToResolution: (width: number, height: number) => void;
-  setPageBackground: (pageId: string, background: string) => void;
-  exportProject: () => void;
-  importProject: (j: string) => void;
-  exportProjectPackage: () => Promise<void>;
-  openProjectPackage: (file: File) => Promise<void>;
-  importSvgText: (svgText: string) => SvgImportResult;
-  importSvgFile: (file: File) => void;
-  importRasterFile: (file: File) => void;
-  toggleSimulation: () => void;
-  togglePreview: () => void;
-  setWsConfig: (c: { url: string; backupUrl?: string }) => void;
-  setConnectionConfig: (c: ConnectionConfig) => void;
-  setPageView: (pageId: string, view: PageViewState) => void;
-  restoreSession: () => Promise<boolean>;
-  flushAutosave: () => void;
-  newProject: () => void;
-  saveProject: () => void;
-  openProject: (f: File) => void;
-  exportScene: () => void;
-  importScene: (j: string) => void;
-  switchPage: (id: string) => void;
-  addPage: () => void;
-  deletePage: (id: string) => void;
-  renamePage: (id: string, t: string) => void;
-  movePage: (id: string, newOrder: number) => void;
-  syncSceneToProject: () => void;
-  acknowledgeAlarm: (id: string) => void;
-  acknowledgeAllAlarms: () => void;
-  saveAlarmRule: (rule: AlarmRule) => Promise<void>;
-  deleteAlarmRule: (id: string) => Promise<void>;
-  bumpVarRevision: () => void;
-  bumpShapeRevision: () => void;
-  bumpHistoryRevision: () => void;
-  initRemoteAuth: () => void;
-  setRemoteDialog: (d: RemoteDialog) => void;
-  loginRemote: (
-    username: string,
-    password: string,
-    baseUrl?: string
-  ) => Promise<RemoteUser>;
-  changeRemotePassword: (
-    oldPassword: string,
-    newPassword: string
-  ) => Promise<void>;
-  logoutRemote: () => void;
-  saveRemoteBaseUrl: (url: string) => void;
-  refreshRemoteList: () => Promise<RemoteProject[]>;
-  openRemoteProject: (id: string, row?: RemoteProject) => Promise<void>;
-  deleteRemoteProject: (id: string) => Promise<void>;
-  syncToBackend: () => Promise<void>;
-  pushProject: (opts: { id: string; version?: number }) => Promise<PushResult>;
-  pushOverwriteRemote: (id: string) => Promise<PushResult>;
-  clearPendingConflict: () => void;
-  listDraftBackups: () => Promise<DraftBackup[]>;
-  restoreDraftBackup: (id: string) => Promise<void>;
-  removeDraftBackup: (id: string) => Promise<void>;
-}
+export type {
+  EditorState,
+  ToolMode,
+  RemoteDialog,
+  PushResult,
+  LeftPanel,
+} from "./editorStoreTypes";
 
 // ============================================================
+// 主 store：只做领域组合与生命周期。
+// 领域状态与动作分布在 slices/ 下的独立文件中：
+//   sceneSlice / librarySlice / pageSlice / connectionSlice /
+//   alarmSlice / remoteSlice
+// 服务实例（SceneEditor/PageController/LibraryController/DataBridge/
+// AlarmManager/...）由 createEditorServices 工厂组装，便于注入测试替身。
+// ============================================================
+
 // 自动保存（IndexedDB）：停止编辑约 1 秒后写入本地快照；
 // 快照只含工程数据与每页视图状态，不含选中项/面板/剪贴板
-// ============================================================
 const autosaveController = new AutosaveController(
   createIndexedDbAutosaveStore()
 );
@@ -288,561 +64,71 @@ function flushAutosave(): void {
   autosaveController.flush(buildAutosaveSnapshotNow);
 }
 
-export const useEditorStore = create<EditorState>((set, get) => {
-  const scene = new SceneGraph();
-  const varManager = new VariableManager();
-  const bindingEngine = new BindingEngine(scene, varManager);
-  // 图元编辑事务：撤销/重做与历史归属（每页一份）都在 SceneEditor 内
-  const sceneEditor = new SceneEditor({
-    scene,
-    bindingEngine,
-    callbacks: {
-      onEditApplied: () =>
-        set((st) => ({ shapeRevision: st.shapeRevision + 1 })),
-      onHistoryApplied: () =>
-        set((st) => ({ historyRevision: st.historyRevision + 1 })),
-      onHistorySwap: (h) => set({ history: h }),
-    },
-  });
-  // 绑定引擎常驻监听变量变化：无论数据来自模拟、io_backend 还是手动测试，
-  // 绑定都立即应用到画布，不需要等到「启动模拟」
-  bindingEngine.start();
-  const animEngine = new AnimationEngine(scene, varManager);
-  const dataBridge = new DataBridge(varManager);
-  dataBridge.setOnVarsRefreshed(() => {
-    setTimeout(() => {
-      const s = get();
-      s.bumpVarRevision();
-    }, 0);
-  });
-  const projectManager = new ProjectManager();
-  // 图元库变更统一入口：库镜像 + 工程写入 + localStorage 折叠 + 持久化收尾
-  const libraryController = new LibraryController({
-    projectManager,
-    onLibraryChanged: (state, persist) =>
-      set((st) => ({
-        library: state.library,
-        libraryGroups: state.libraryGroups,
-        libraryCollapsed: state.libraryCollapsed,
-        libraryRevision: persist
-          ? st.libraryRevision + 1
-          : st.libraryRevision,
-      })),
-    onPersist: () => flushAutosave(),
-  });
-  // 页面加载路径：打开/新建/恢复会话/切页/新增页统一收敛；
-  // 页面元数据只以 projectManager 为事实来源，store 不再镜像
-  const pageController = new PageController({
-    scene,
-    sceneEditor,
-    bindingEngine,
-    projectManager,
-    callbacks: {
-      onPageSwapped: (meta, opts) => {
-        const s = get();
-        const patch: Partial<EditorState> = {
-          activePageId: meta.id,
-          selection: s.selection.clear(),
-          selectionRevision: s.selectionRevision + 1,
-          historyRevision: 0,
-          pageRevision: s.pageRevision + 1,
-        };
-        if (opts.fullProject) {
-          patch.library = s.projectManager.getLibrary();
-          patch.libraryGroups = s.projectManager.getLibraryGroups();
-          patch.libraryCollapsed = mergeCollapsed(
-            s.projectManager.getLibraryUi().collapsed,
-            libraryController.loadCollapsed(),
-            s.projectManager.getLibraryGroups().map((g) => g.id)
-          );
-          patch.libraryRevision = 0;
-          patch.pageViews = opts.views ?? defaultPageViews(s.projectManager);
-        }
-        if (opts.clearRemoteLink) {
-          patch.remoteLink = null;
-          s.projectManager.setRemoteLink(null);
-        }
-        set(patch);
-        if (opts.fullProject)
-          libraryController.saveCollapsed(get().libraryCollapsed);
-      },
-      onViewportActivated: (pageId, vp) =>
-        set((st) => ({
-          viewport: vp,
-          zoom: vp.zoom,
-          panX: vp.panX,
-          panY: vp.panY,
-          viewRevision: st.viewRevision + 1,
-          pageViews: {
-            ...st.pageViews,
-            [pageId]: normalizePageView(vp.toJSON()),
-          },
-        })),
-      getPageView: (pageId) => get().pageViews[pageId],
-      onFlushAutosave: () => flushAutosave(),
-    },
-  });
-  const alarmManager = new AlarmManager(varManager);
-  const historian = new Historian(varManager);
-  const authManager = new AuthManager();
-  const remoteAuth = new RemoteAuthClient();
-  const remoteProjects = new RemoteProjectStore(remoteAuth);
-  const draftBackupStore = createIndexedDbDraftBackupStore();
-  const scriptEngine = new ScriptEngine(varManager);
-  const reportEngine = new ReportEngine(historian);
-  scriptEngine.setAlarmManager(alarmManager);
-  scriptEngine.setScene(scene);
-  const { meta: dp } = projectManager.createPage("主画面");
-  projectManager.activePageId = dp.id;
-  sceneEditor.activatePage(dp.id);
-  const initialViewport = new Viewport();
+const autosaveHooks: AutosaveHooks = { scheduleAutosave, flushAutosave };
 
-  const syncView = (s: EditorState) => {
-    const view = normalizePageView(s.viewport.toJSON());
-    set((st) => ({
-      zoom: view.zoom,
-      panX: view.panX,
-      panY: view.panY,
-      viewRevision: st.viewRevision + 1,
-      pageViews: { ...st.pageViews, [st.activePageId]: view },
-    }));
-    scheduleAutosave();
-  };
+export const useEditorStore = create<EditorState>()((set, get) => {
+  const services: EditorServices = createEditorServices(
+    set,
+    get,
+    autosaveHooks
+  );
 
-  /** 撤销/重做后应用 SceneEditor 返回的选中结果（keepSelection 时不动选中） */
-  const applyUndoRedoSelection = (r: UndoRedoResult | null) => {
-    if (!r) return;
-    const s = get();
-    const next = s.selection.applyUndoRedo(r);
-    if (next === s.selection) return;
-    set({
-      selection: next,
-      selectionRevision: s.selectionRevision + 1,
-    });
-    s.renderer?.render();
-  };
-
-  /** 用工程数据替换当前编辑内容（打开/导入共用；加载路径收敛到 PageController） */
-  const loadProjectData = (data: ProjectData) => {
-    pageController.loadProject(data, {
-      fullProject: true,
-      fit: true,
-      clearRemoteLink: true,
-    });
-  };
+  // 服务工厂的协调器字段（sceneEditor/pageController/...）不属于对外状态，
+  // 只把 EditorState 声明的字段展开进 store。
+  const {
+    sceneEditor: _sceneEditor,
+    pageController: _pageController,
+    libraryController: _libraryController,
+    initialViewport: _initialViewport,
+    loadProjectData: _loadProjectData,
+    ...serviceState
+  } = services;
 
   return {
-    scene,
-    history: sceneEditor.activeHistory!,
-    varManager,
-    bindingEngine,
-    animEngine,
-    dataBridge,
-    projectManager,
-    alarmManager,
-    historian,
-    authManager,
-    remoteAuth,
-    remoteProjects,
-    draftBackupStore,
-    remoteUser: null,
-    remoteList: null,
-    backupList: null,
-    remoteLink: projectManager.remoteLink,
-    syncDialog: "none",
-    remoteBusy: false,
-    pendingConflict: null,
-    scriptEngine,
-    reportEngine,
-    renderer: null,
-    mode: "select",
-    selection: new Selection(),
-    selectionRevision: 0,
-    clipboard: null,
-    library: projectManager.getLibrary(),
-    libraryGroups: [],
-    libraryCollapsed: libraryController
-      .loadCollapsed()
-      .filter((k) => isBuiltinSectionKey(k)),
-    activePageId: dp.id,
-    leftPanel: "library",
-    simRunning: false,
-    previewRunning: false,
-    wsConfig: { url: "ws://localhost:8080/iscs/data" },
-    connectionConfig: loadConnectionConfig() ?? DEFAULT_CONNECTION_CONFIG,
-    pageViews: { [dp.id]: { ...DEFAULT_PAGE_VIEW } },
-    pageRevision: 0,
+    // ---- 服务实例（状态字段，供组件直接访问） ----
+    ...serviceState,
+
+    // ---- 领域 slices ----
+    ...createSceneSlice(set, get, services, autosaveHooks),
+    ...createLibrarySlice(set, get, services),
+    ...createPageSlice(set, get, services, autosaveHooks),
+    ...createConnectionSlice(set, get),
+    ...createAlarmSlice(set, get),
+    ...createRemoteSlice(set, get, services),
+
+    // ---- 生命周期 ----
     varRevision: 0,
-    shapeRevision: 0,
-    libraryRevision: 0,
-    historyRevision: 0,
-    viewport: initialViewport,
-    zoom: 1,
-    panX: 0,
-    panY: 0,
-    viewRevision: 0,
-    setRenderer: (r) => {
-      set({ renderer: r });
-      const s = get();
-      r.setViewport(s.viewport);
-      r.setSelectionSource(() => useEditorStore.getState().selection);
-      const meta = s.projectManager.getPageMeta(s.activePageId);
-      if (meta)
-        r.setPage(meta.width, meta.height, meta.background ?? "#FFFFFF");
-      s.bindingEngine.setRenderer(r);
-      s.animEngine.setRenderer(r);
-      sceneEditor.setRenderer(r);
-      pageController.setRenderer(r);
-      s.fitPage();
-    },
-    setMode: (m) => set({ mode: m }),
-    setLeftPanel: (p) => set({ leftPanel: p }),
-    selectShape: (id) => {
-      const s = get();
-      if (id === null) sceneEditor.cancelShapeEdit();
-      set({
-        selection: s.selection.select(id),
-        selectionRevision: s.selectionRevision + 1,
-      });
-      s.renderer?.render();
-    },
-    selectShapes: (ids) => {
-      const s = get();
-      set({
-        selection: s.selection.selectMany(ids),
-        selectionRevision: s.selectionRevision + 1,
-      });
-      s.renderer?.render();
-    },
-    selectShapeAt: (path) => {
-      const s = get();
-      if (!resolveShape(s.scene, path)) return;
-      set({
-        selection: s.selection.selectAt(path),
-        selectionRevision: s.selectionRevision + 1,
-      });
-      s.renderer?.render();
-    },
-    addShape: (type, x, y) => {
-      sceneEditor.addShape({
-        type,
-        x: x ?? 200,
-        y: y ?? 200,
-      });
-    },
-    deleteSelected: () => {
-      const s = get();
-      // 组内子图元不允许删除（仅在检查器中编辑）
-      if (s.selection.primaryPath && s.selection.primaryPath.length > 1) return;
-      if (s.selection.primaryId) {
-        sceneEditor.deleteShape(s.selection.primaryId);
-        set({
-          selection: s.selection.clear(),
-          selectionRevision: s.selectionRevision + 1,
-        });
-      }
-    },
-    copySelected: () => {
-      const s = get();
-      // 复制/粘贴仅支持顶层图元
-      if (s.selection.primaryPath && s.selection.primaryPath.length > 1) return;
-      if (s.selection.primaryId) {
-        const sh = s.scene.get(s.selection.primaryId);
-        if (sh) set({ clipboard: sh.clone() });
-      }
-    },
-    pasteClipboard: () => {
-      const s = get();
-      if (s.clipboard) {
-        const c = s.clipboard.clone();
-        c.id = generateId();
-        c.x += 20;
-        c.y += 20;
-        const placed = sceneEditor.addShape(c.toJSON() as ShapeProps);
-        set({
-          selection: s.selection.select(placed.id),
-          selectionRevision: s.selectionRevision + 1,
-        });
-        s.renderer?.render();
-      }
-    },
-    updateShape: (id, props, record = true) => {
-      const s = get();
-      sceneEditor.updateShape(id, props, record);
-    },
-    updateShapeAt: (path, props, record = true) => {
-      const s = get();
-      sceneEditor.updateShapeAt(path, props, record);
-    },
-    groupSelected: () => {
-      const s = get();
-      const ids = Array.from(s.selection.multiIds);
-      const group = sceneEditor.group(ids);
-      if (group) {
-        s.selectShape(group.id);
-      }
-    },
-    ungroupSelected: () => {
-      const s = get();
-      const sel = s.selection;
-      if (!sel.primaryId || (sel.primaryPath && sel.primaryPath.length > 1)) {
-        return;
-      }
-      const result = sceneEditor.ungroup(sel.primaryId);
-      if (!result.ok) return;
-      if (result.firstChildId !== null) {
-        s.selectShapeAt([result.firstChildId]);
-      } else {
-        s.selectShape(null);
-      }
-    },
-    reorderSelected: (toIndex) => {
-      const s = get();
-      const path = s.selection.primaryPath;
-      if (!path) return;
-      sceneEditor.reorder(path, toIndex);
-    },
-    toggleShapeVisible: (path) => {
-      const shape = resolveShape(get().scene, path);
-      if (shape) {
-        get().updateShapeAt(path, { visible: !shape.visible });
-      }
-    },
-    toggleShapeLocked: (path) => {
-      const shape = resolveShape(get().scene, path);
-      if (shape) {
-        get().updateShapeAt(path, { locked: !shape.locked });
-      }
-    },
-    renameShape: (path, name) => {
-      if (!name.trim()) return;
-      get().updateShapeAt(path, { name: name.trim() });
-    },
-    beginShapeEdit: (id) => {
-      sceneEditor.beginShapeEdit(id);
-    },
-    endShapeEdit: () => {
-      sceneEditor.endShapeEdit();
-    },
-    applyShapeResize: (id, handle, pointer, options) => {
-      const s = get();
-      sceneEditor.applyShapeResize(id, handle, pointer, options);
-    },
-    undo: () => {
-      applyUndoRedoSelection(sceneEditor.undo());
-    },
-    redo: () => {
-      applyUndoRedoSelection(sceneEditor.redo());
-    },
-    renderScene: () => {
-      get().renderer?.render();
-    },
-    setZoom: (zoom, anchorX, anchorY) => {
-      const s = get();
-      const r = s.renderer;
-      s.viewport.setZoom(
-        zoom,
-        anchorX ?? (r ? r.width / 2 : 0),
-        anchorY ?? (r ? r.height / 2 : 0)
-      );
-      syncView(s);
-      s.renderer?.render();
-    },
-    zoomBy: (factor, anchorX, anchorY) => {
-      const s = get();
-      const r = s.renderer;
-      s.viewport.zoomBy(
-        factor,
-        anchorX ?? (r ? r.width / 2 : 0),
-        anchorY ?? (r ? r.height / 2 : 0)
-      );
-      syncView(s);
-      s.renderer?.render();
-    },
-    panBy: (dx, dy) => {
-      const s = get();
-      s.viewport.panBy(dx, dy);
-      syncView(s);
-      s.renderer?.render();
-    },
-    zoomTo: (zoom) => {
-      const s = get();
-      const r = s.renderer;
-      if (!r) return;
-      const meta = s.projectManager.getPageMeta(s.activePageId);
-      if (!meta) return;
-      s.viewport.zoomToPage(zoom, meta.width, meta.height, r.width, r.height);
-      syncView(s);
-      r.render();
-    },
-    fitPage: () => {
-      const s = get();
-      const r = s.renderer;
-      if (!r) return;
-      const meta = s.projectManager.getPageMeta(s.activePageId);
-      if (!meta) return;
-      s.viewport.fitPage(meta.width, meta.height, r.width, r.height);
-      syncView(s);
-      r.render();
-    },
-    syncSceneToProject: () => {
-      get().projectManager.syncScene(get().activePageId, get().scene);
-    },
-    newProject: () => {
-      pageController.newProject({
-        fullProject: true,
-        fit: true,
-        clearRemoteLink: true,
-      });
-    },
-    saveProject: () => {
-      const s = get();
-      s.syncSceneToProject();
-      flushAutosave();
-      s.projectManager.downloadProject();
-    },
-    openProject: (file) => {
-      const s = get();
-      if (isProjectPackageFile(file)) {
-        void s.openProjectPackage(file);
-        return;
-      }
-      const r = new FileReader();
-      r.onload = () => {
+    restoreSession: async () => {
+      if (hydratePromise) return hydratePromise;
+      hydratePromise = (async () => {
+        const s = get();
         try {
-          loadProjectData(JSON.parse(r.result as string));
+          const snapshot = await autosaveController.load();
+          if (!snapshot || !isAutosaveSnapshot(snapshot)) {
+            autosaveReady = true;
+            return false;
+          }
+          const views = applyAutosaveSnapshot(s.projectManager, snapshot);
+          const f = s.projectManager.activePage;
+          if (!f) {
+            autosaveReady = true;
+            return false;
+          }
+          services.pageController.loadActivePage({ fullProject: true, views });
+          autosaveReady = true;
+          return true;
         } catch {
-          alert("打开失败");
+          autosaveReady = true;
+          return false;
         }
-      };
-      r.readAsText(file);
+      })();
+      return hydratePromise;
     },
-    openProjectPackage: async (file) => {
-      try {
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        loadProjectData(await unpackProjectPackage(bytes));
-      } catch (e) {
-        alert(
-          "打开工程包失败：" + (e instanceof Error ? e.message : String(e))
-        );
-      }
-    },
-    exportScene: () => {
-      const s = get();
-      s.syncSceneToProject();
-      flushAutosave();
-      s.projectManager.downloadProject();
-    },
-    exportProjectPackage: async () => {
-      const s = get();
-      s.syncSceneToProject();
-      flushAutosave();
-      try {
-        await s.projectManager.downloadProjectPackage();
-      } catch (e) {
-        alert(
-          "导出工程包失败：" + (e instanceof Error ? e.message : String(e))
-        );
-      }
-    },
-    importScene: (json) => {
-      const s = get();
-      try {
-        const d = JSON.parse(json);
-        if (d.pages) {
-          loadProjectData(d);
-        } else if (d.shapes) {
-          // 裸图元数组导入：场景替换/历史重置/索引重建/视口适配统一走页面加载路径
-          pageController.importShapes(d.shapes);
-        }
-      } catch {}
-    },
-    switchPage: (pageId) => {
-      pageController.switchPage(pageId);
-    },
-    addPage: () => {
-      pageController.addPage();
-    },
-    deletePage: (pageId) => {
-      const s = get();
-      if (s.projectManager.getPages().length <= 1) return;
-      sceneEditor.deletePageHistory(pageId);
-      set((st) => {
-        const pageViews = { ...st.pageViews };
-        delete pageViews[pageId];
-        return { pageViews };
-      });
-      s.projectManager.deletePage(pageId);
-      const pgs = s.projectManager.getPages();
-      if (pgs.length > 0) s.switchPage(pgs[0].id);
-    },
-    renamePage: (pageId, newTitle) => {
-      const s = get();
-      s.projectManager.renamePage(pageId, newTitle);
-      // 页面元数据以 projectManager 为唯一来源：递增修订号驱动派生选择器刷新
-      set((st) => ({ pageRevision: st.pageRevision + 1 }));
-      flushAutosave();
-    },
-    movePage: (pageId, newOrder) => {
-      const s = get();
-      s.projectManager.movePage(pageId, newOrder);
-      set((st) => ({ pageRevision: st.pageRevision + 1 }));
-    },
-    setPageResolution: (pageId, width, height) => {
-      const s = get();
-      const meta = s.projectManager.getPageMeta(pageId);
-      if (!meta) return;
-      const { width: w, height: h } = sanitizeResolution(width, height);
-      meta.width = w;
-      meta.height = h;
-      meta.updatedAt = new Date().toISOString();
-      s.projectManager.dirty = true;
-      if (pageId === s.activePageId) {
-        set((st) => ({ pageRevision: st.pageRevision + 1 }));
-        s.renderer?.setPage(w, h, meta.background ?? "#FFFFFF");
-        s.renderer?.render();
-      }
-      flushAutosave();
-    },
-    scaleShapesToResolution: (width, height) => {
-      const s = get();
-      const meta = s.projectManager.getPageMeta(s.activePageId);
-      if (!meta) return;
-      const { width: newW, height: newH } = sanitizeResolution(width, height);
-      if (meta.width === newW && meta.height === newH) return;
-      const factor = computeScaleFactor(meta.width, meta.height, newW, newH);
-      sceneEditor.scaleAll(factor);
-      meta.width = newW;
-      meta.height = newH;
-      meta.updatedAt = new Date().toISOString();
-      s.projectManager.dirty = true;
-      set((st) => ({ pageRevision: st.pageRevision + 1 }));
-      s.renderer?.setPage(newW, newH, meta.background ?? "#FFFFFF");
-      s.renderer?.render();
-      flushAutosave();
-    },
-    setPageBackground: (pageId, background) => {
-      const s = get();
-      const color = sanitizePageBackground(background);
-      s.projectManager.setPageBackground(pageId, color);
-      const meta = s.projectManager.getPageMeta(pageId);
-      if (pageId === s.activePageId && meta) {
-        set((st) => ({ pageRevision: st.pageRevision + 1 }));
-        s.renderer?.setPage(meta.width, meta.height, color);
-        s.renderer?.render();
-      }
-      flushAutosave();
-    },
-    exportProject: () => {
-      const s = get();
-      s.syncSceneToProject();
-      flushAutosave();
-      s.projectManager.downloadProject();
-    },
-    importProject: (json) => {
-      get().importScene(json);
-    },
-    importSvgText: (svgText) => {
+    flushAutosave: () => flushAutosave(),
+
+    // ---- 变量与 SVG/光栅导入（跨场景/页面/工程，留在组合层） ----
+    bumpVarRevision: () => set((s) => ({ varRevision: s.varRevision + 1 })),
+    importSvgText: (svgText: string): SvgImportResult => {
       const s = get();
       const meta = s.projectManager.getPageMeta(s.activePageId);
       const result = importSvg(svgText, {
@@ -851,7 +137,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       });
       if (result.shapes.length === 0) return result;
 
-      sceneEditor.addShapes(result.shapes);
+      services.sceneEditor.addShapes(result.shapes);
       s.selectShapes(result.shapes.map((sh) => sh.id));
       s.projectManager.dirty = true;
       return result;
@@ -879,94 +165,6 @@ export const useEditorStore = create<EditorState>((set, get) => {
       reader.onerror = () => alert("SVG 文件读取失败");
       reader.readAsText(file);
     },
-    saveSelectionToLibrary: (name, groupId) => {
-      const s = get();
-      const ids = Array.from(s.selection.multiIds);
-      const shapes = ids
-        .map((id) => s.scene.get(id))
-        .filter((sh): sh is ShapeBase => !!sh);
-      if (shapes.length === 0) return null;
-      return libraryController.addItem(
-        shapes,
-        name.trim() || "未命名图元",
-        groupId
-      );
-    },
-    importSvgToLibrary: (file, groupId) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const s = get();
-          const meta = s.projectManager.getPageMeta(s.activePageId);
-          const result = importSvg(reader.result as string, {
-            pageWidth: meta?.width ?? 0,
-            pageHeight: meta?.height ?? 0,
-          });
-          if (result.shapes.length === 0) {
-            alert("未找到可导入的图元");
-            return;
-          }
-          const baseName = file.name.replace(/\.svg$/i, "") || "SVG 图元";
-          libraryController.addItem(result.shapes, baseName, groupId);
-          const lines: string[] = [...result.warnings];
-          if (result.outOfBounds.length > 0) {
-            lines.push(result.outOfBounds.length + " 个图元超出页面边界");
-          }
-          if (lines.length > 0) alert(lines.join("\n"));
-        } catch (e) {
-          alert(
-            "SVG 导入失败：" + (e instanceof Error ? e.message : String(e))
-          );
-        }
-      };
-      reader.onerror = () => alert("SVG 文件读取失败");
-      reader.readAsText(file);
-    },
-    renameLibraryItem: (id, name) => libraryController.renameItem(id, name),
-    deleteLibraryItem: (id) => libraryController.deleteItem(id),
-    overwriteLibraryItem: (id) => {
-      const s = get();
-      const target = s.library.find((item) => item.id === id);
-      if (!target) return;
-      const ids = Array.from(s.selection.multiIds);
-      const shapes = ids
-        .map((shapeId) => s.scene.get(shapeId))
-        .filter((sh): sh is ShapeBase => !!sh);
-      if (shapes.length === 0) return;
-      libraryController.overwriteItem(id, shapes);
-    },
-    placeLibraryItem: (id, x, y) => {
-      const s = get();
-      const item = s.library.find((i) => i.id === id);
-      if (!item) return;
-      const sh = libraryItemToShape(item, x, y);
-      // 库项可能携带绑定：addShapes 会重建其绑定索引
-      sceneEditor.addShapes([sh]);
-      s.selectShape(sh.id);
-      s.projectManager.dirty = true;
-    },
-    resyncFromLibrary: (itemId, shapeId) => {
-      const s = get();
-      const item = s.library.find((i) => i.id === itemId);
-      const old = s.scene.get(shapeId);
-      if (!item || !old) return;
-      const bbox = old.boundingBox;
-      const center = {
-        x: bbox.x + bbox.width / 2,
-        y: bbox.y + bbox.height / 2,
-      };
-      const sh = libraryItemToShape(item, center.x, center.y);
-      sceneEditor.replaceShape(shapeId, sh);
-      s.selectShape(sh.id);
-    },
-    addLibraryGroup: (name) => libraryController.addGroup(name),
-    renameLibraryGroup: (id, name) => libraryController.renameGroup(id, name),
-    deleteLibraryGroup: (id) => libraryController.deleteGroup(id),
-    moveLibraryItemToGroup: (itemId, groupId) =>
-      libraryController.moveItemToGroup(itemId, groupId),
-    moveLibraryGroup: (id, targetIndex) =>
-      libraryController.moveGroup(id, targetIndex),
-    toggleLibraryCollapsed: (key) => libraryController.toggleCollapsed(key),
     importRasterFile: async (file) => {
       if (!isRasterFile(file)) {
         alert("仅支持 PNG/JPG 图片");
@@ -992,410 +190,12 @@ export const useEditorStore = create<EditorState>((set, get) => {
           pageWidth: meta?.width ?? 0,
           pageHeight: meta?.height ?? 0,
         });
-        sceneEditor.addShapes([shape]);
+        services.sceneEditor.addShapes([shape]);
         s.selectShape(shape.id);
         s.projectManager.dirty = true;
       } catch (e) {
         alert("图片导入失败：" + (e instanceof Error ? e.message : String(e)));
       }
-    },
-    toggleSimulation: () => {
-      const s = get();
-      if (s.simRunning) {
-        s.varManager.stopSimulation();
-        if (!s.previewRunning) s.animEngine.stop();
-        s.dataBridge.stop();
-        s.alarmManager.stop();
-        s.historian.stop();
-        s.scriptEngine.stop();
-        set({ simRunning: false });
-      } else {
-        s.alarmManager.setMode(
-          s.dataBridge.active === "simulation" ? "local" : "remote"
-        );
-        if (s.dataBridge.active !== "simulation") {
-          s.alarmManager.setRemote(
-            s.dataBridge.wsClient,
-            s.dataBridge.getApiBaseUrl()
-          );
-        }
-        if (s.varManager.count === 0) {
-          s.varManager.defineMany([
-            {
-              id: "STA1_211_ACB_STATUS",
-              name: "211断路器状态",
-              type: "DI",
-              address: "104.1.1.243.0",
-              defaultValue: 0,
-              unit: "",
-              description: "",
-              group: "供电",
-              min: 0,
-              max: 1,
-            },
-            {
-              id: "STA1_211_IA",
-              name: "A相电流",
-              type: "AI",
-              address: "104.1.1.243.2",
-              defaultValue: 0,
-              unit: "A",
-              description: "",
-              group: "供电",
-              min: 0,
-              max: 2000,
-            },
-            {
-              id: "STA1_BUS_VOLTAGE",
-              name: "母线电压",
-              type: "AI",
-              address: "104.1.1.244.0",
-              defaultValue: 400,
-              unit: "V",
-              description: "",
-              group: "供电",
-              min: 0,
-              max: 500,
-            },
-            {
-              id: "STA1_FAN_1_STATUS",
-              name: "风机状态",
-              type: "DI",
-              address: "104.2.1.10.0",
-              defaultValue: 0,
-              unit: "",
-              description: "",
-              group: "BAS",
-              min: 0,
-              max: 1,
-            },
-            {
-              id: "STA1_FAN_1_SPEED",
-              name: "风机转速",
-              type: "AI",
-              address: "104.2.1.10.1",
-              defaultValue: 0,
-              unit: "rpm",
-              description: "",
-              group: "BAS",
-              min: 0,
-              max: 3000,
-            },
-            {
-              id: "STA1_TEMP_ZONE1",
-              name: "站厅温度",
-              type: "AI",
-              address: "104.2.1.20.0",
-              defaultValue: 25,
-              unit: "℃",
-              description: "",
-              group: "BAS",
-              min: 0,
-              max: 50,
-            },
-          ]);
-          if (s.dataBridge.active === "simulation") {
-            s.alarmManager.loadPresets();
-          }
-          s.scriptEngine.loadPresets();
-          s.historian.setVariables([
-            "STA1_211_IA",
-            "STA1_BUS_VOLTAGE",
-            "STA1_FAN_1_SPEED",
-            "STA1_TEMP_ZONE1",
-          ]);
-        }
-        if (!s.previewRunning) s.animEngine.start();
-        s.alarmManager.start();
-        s.scriptEngine.start();
-        if (s.dataBridge.active === "simulation")
-          s.varManager.startSimulation(800);
-        s.historian.start();
-        set({ simRunning: true });
-      }
-    },
-    togglePreview: () => {
-      const s = get();
-      if (s.previewRunning) {
-        if (!s.simRunning) s.animEngine.stop();
-        set({ previewRunning: false });
-      } else {
-        if (!s.simRunning && !s.animEngine.isRunning) s.animEngine.start();
-        set({ previewRunning: true });
-      }
-    },
-    setWsConfig: (c) => {
-      set({ wsConfig: c });
-      const urls = [c.url, ...(c.backupUrl ? [c.backupUrl] : [])];
-      get().dataBridge.wsClient.updateConfig({ urls });
-    },
-    setConnectionConfig: (c) => {
-      set({ connectionConfig: c });
-      saveConnectionConfig(c);
-    },
-    setPageView: (pageId, view) => {
-      set((st) => ({
-        pageViews: {
-          ...st.pageViews,
-          [pageId]: normalizePageView(view),
-        },
-      }));
-      scheduleAutosave();
-      if (pageId === get().activePageId)
-        pageController.activateViewport(pageId, false);
-    },
-    restoreSession: async () => {
-      if (hydratePromise) return hydratePromise;
-      hydratePromise = (async () => {
-        const s = get();
-        try {
-          const snapshot = await autosaveController.load();
-          if (!snapshot || !isAutosaveSnapshot(snapshot)) {
-            autosaveReady = true;
-            return false;
-          }
-          const views = applyAutosaveSnapshot(s.projectManager, snapshot);
-          const f = s.projectManager.activePage;
-          if (!f) {
-            autosaveReady = true;
-            return false;
-          }
-          pageController.loadActivePage({ fullProject: true, views });
-          autosaveReady = true;
-          return true;
-        } catch {
-          autosaveReady = true;
-          return false;
-        }
-      })();
-      return hydratePromise;
-    },
-    flushAutosave: () => flushAutosave(),
-    acknowledgeAlarm: (id) => {
-      get().alarmManager.acknowledge(
-        id,
-        get().authManager.user?.username ?? "operator"
-      );
-    },
-    acknowledgeAllAlarms: () => {
-      get().alarmManager.acknowledgeAll(
-        get().authManager.user?.username ?? "operator"
-      );
-    },
-    saveAlarmRule: async (rule) => {
-      await get().alarmManager.saveRule(rule);
-    },
-    deleteAlarmRule: async (id) => {
-      await get().alarmManager.deleteRule(id);
-    },
-    bumpVarRevision: () => set((s) => ({ varRevision: s.varRevision + 1 })),
-    bumpShapeRevision: () =>
-      set((s) => ({ shapeRevision: s.shapeRevision + 1 })),
-    bumpHistoryRevision: () =>
-      set((s) => ({ historyRevision: s.historyRevision + 1 })),
-    initRemoteAuth: () => {
-      const s = get();
-      s.remoteAuth.restore();
-      s.remoteAuth.onChange(() => {
-        const u = get().remoteAuth.user;
-        set((st) => ({
-          remoteUser: u,
-          remoteList: u ? st.remoteList : null,
-          syncDialog: u ? st.syncDialog : "none",
-        }));
-      });
-      set({ remoteUser: s.remoteAuth.user });
-    },
-    setRemoteDialog: (d) =>
-      set({
-        syncDialog: d,
-        pendingConflict: d === "push" ? get().pendingConflict : null,
-      }),
-    loginRemote: async (username, password, baseUrl) => {
-      const u = await get().remoteAuth.login(username, password, baseUrl);
-      set({ remoteUser: u });
-      return u;
-    },
-    changeRemotePassword: async (oldPassword, newPassword) => {
-      await get().remoteAuth.changePassword(oldPassword, newPassword);
-    },
-    logoutRemote: () => {
-      get().remoteAuth.logout();
-      set({ syncDialog: "none", pendingConflict: null });
-    },
-    saveRemoteBaseUrl: (url) => {
-      get().remoteAuth.setBaseUrl(url);
-    },
-    refreshRemoteList: async () => {
-      const list = await get().remoteProjects.list();
-      set({ remoteList: list });
-      return list;
-    },
-    openRemoteProject: async (id, row) => {
-      const s = get();
-      s.syncSceneToProject();
-      s.flushAutosave();
-      await s.draftBackupStore.save(
-        createDraftBackup(
-          s.projectManager.meta.name,
-          s.projectManager.exportProject(),
-          s.activePageId,
-          s.pageViews
-        )
-      );
-      const bytes = await s.remoteProjects.get(id);
-      const data = await unpackProjectPackage(bytes);
-      loadProjectData(data);
-      const link: RemoteProjectLink = {
-        id,
-        name: row?.name || data.meta.name || id,
-        version: row?.version ?? 0,
-        linkedAt: new Date().toISOString(),
-      };
-      s.projectManager.setRemoteLink(link);
-      set({
-        remoteLink: link,
-        remoteList: s.remoteList,
-        syncDialog: "none",
-      });
-    },
-    deleteRemoteProject: async (id) => {
-      const s = get();
-      await s.remoteProjects.remove(id);
-      const list = await s.remoteProjects.list();
-      if (s.projectManager.remoteLink?.id === id) {
-        s.projectManager.setRemoteLink(null);
-        set({ remoteLink: null });
-      }
-      set({ remoteList: list });
-    },
-    syncToBackend: async () => {
-      const s = get();
-      if (!s.remoteAuth.isLoggedIn) {
-        set({ syncDialog: "auth" });
-        return;
-      }
-      const link = s.projectManager.remoteLink;
-      if (!link) {
-        // 尚未关联远端工程：先让用户选择目标（新建或已有）
-        set({ syncDialog: "push" });
-        return;
-      }
-      const result = await s.pushProject({
-        id: link.id,
-        version: link.version,
-      });
-      if (result.ok) {
-        set({ syncDialog: "none", pendingConflict: null });
-        alert(
-          `已同步到后端：${result.id} (v${result.version}${
-            result.created ? "，新建" : ""
-          })`
-        );
-      } else if (result.reason === "conflict") {
-        set({ syncDialog: "push" });
-      } else {
-        alert(
-          "同步失败：" +
-            (result.error instanceof Error
-              ? result.error.message
-              : String(result.error))
-        );
-      }
-    },
-    pushProject: async ({ id, version }) => {
-      const s = get();
-      s.syncSceneToProject();
-      s.flushAutosave();
-      set({ remoteBusy: true });
-      try {
-        const bytes = await s.projectManager.toPackageBytes();
-        const out = await s.remoteProjects.put(id, bytes, version);
-        const link: RemoteProjectLink = {
-          id,
-          name: s.projectManager.meta.name,
-          version: out.version,
-          linkedAt: new Date().toISOString(),
-        };
-        s.projectManager.setRemoteLink(link);
-        set({ remoteLink: link });
-        return {
-          ok: true as const,
-          created: out.created,
-          version: out.version,
-          id,
-        };
-      } catch (e) {
-        if (isConflictError(e)) {
-          set({ pendingConflict: { projectId: id } });
-          return {
-            ok: false as const,
-            reason: "conflict" as const,
-            projectId: id,
-            error: e,
-          };
-        }
-        return {
-          ok: false as const,
-          reason: "error" as const,
-          error: e instanceof Error ? e : new Error(String(e)),
-        };
-      } finally {
-        set({ remoteBusy: false });
-      }
-    },
-    pushOverwriteRemote: async (id) => {
-      const s = get();
-      let rows = s.remoteList;
-      if (!rows) {
-        try {
-          rows = await s.remoteProjects.list();
-        } catch {
-          rows = [];
-        }
-      }
-      const row = rows.find((r) => r.id === id);
-      const result = await s.pushProject({
-        id,
-        version: row?.version,
-      });
-      if (result.ok) {
-        set({ pendingConflict: null, syncDialog: "none" });
-        alert(`已覆盖远端：${result.id} (v${result.version})`);
-      }
-      return result;
-    },
-    clearPendingConflict: () => set({ pendingConflict: null }),
-    listDraftBackups: async () => {
-      const list = await get().draftBackupStore.list();
-      set({ backupList: list });
-      return list;
-    },
-    restoreDraftBackup: async (id) => {
-      const s = get();
-      const backup = await s.draftBackupStore.load(id);
-      if (!backup) return;
-      // 先备份当前工程，避免恢复操作造成新的丢失
-      s.syncSceneToProject();
-      await s.draftBackupStore.save(
-        createDraftBackup(
-          s.projectManager.meta.name,
-          s.projectManager.exportProject(),
-          s.activePageId,
-          s.pageViews
-        )
-      );
-      loadProjectData(backup.project);
-      set({ pageViews: backup.views });
-      if (backup.activePageId !== get().activePageId) {
-        get().switchPage(backup.activePageId);
-      }
-      s.projectManager.setRemoteLink(null);
-      set({ remoteLink: null, syncDialog: "none" });
-    },
-    removeDraftBackup: async (id) => {
-      await get().draftBackupStore.remove(id);
-      await get().listDraftBackups();
     },
   };
 });
