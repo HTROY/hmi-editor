@@ -48,6 +48,11 @@ impl wasmtime::component::HasData for HostState {
 
 impl events::Host for HostState {}
 
+/// 插件上报点 → 原始实例键（`{实例}:{变量}`）。
+///
+/// 宿主只负责实例名前缀，不感知冗余组：组内实例的逻辑键（`{组}:{变量}`）
+/// 由 PointManager 经 `GroupRouting`（hmi_io_point::identity）统一翻译，
+/// 逻辑键规则只存在于点位身份模块。
 fn outgoing_point(
     plugin_name: &str,
     variable_id: &str,

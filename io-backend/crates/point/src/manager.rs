@@ -1,5 +1,6 @@
 use hmi_io_config::{AppConfig, PointMapping};
-use crate::types::{point_key, PointValue};
+use crate::identity::{logical_key, GroupRouting};
+use crate::types::PointValue;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -11,45 +12,30 @@ pub(crate) struct CachedPoint {
 pub struct PointManager {
     points: HashMap<String, CachedPoint>,
     active: bool,
-    instance_to_logical: HashMap<String, String>,
-    active_group_instance: HashMap<String, String>,
+    /// 点位身份路由：实例键 → 逻辑键 + 组活跃发布者（接管时更新）
+    routing: GroupRouting,
 }
 
 impl PointManager {
     pub fn from_config(config: &AppConfig) -> Self {
         let mut points = HashMap::new();
-        let mut instance_to_logical = HashMap::new();
-        let mut active_group_instance = HashMap::new();
         for inst in &config.plugins.instances {
-            let group = inst.redundancy_group.trim();
-            let logical_prefix = if group.is_empty() {
-                inst.name.clone()
-            } else {
-                group.to_string()
-            };
             for pt in &inst.points {
-                let logical_key = point_key(&logical_prefix, &pt.id);
+                let logical = logical_key(&inst.redundancy_group, &inst.name, &pt.id);
                 points.insert(
-                    logical_key.clone(),
+                    logical,
                     CachedPoint {
                         mapping: pt.clone(),
                         last_value: None,
                     },
                 );
-                if !group.is_empty() {
-                    instance_to_logical.insert(point_key(&inst.name, &pt.id), logical_key);
-                }
-            }
-            if !group.is_empty() && inst.redundancy_role == "primary" {
-                active_group_instance.insert(group.to_string(), inst.name.clone());
             }
         }
         log::info!("PointManager: {} points configured", points.len());
         Self {
             points,
             active: true,
-            instance_to_logical,
-            active_group_instance,
+            routing: GroupRouting::from_config(config),
         }
     }
 
@@ -73,29 +59,16 @@ impl PointManager {
 
     /// Registry 实例级切换后同步组的活跃成员。
     pub fn set_active_instance(&mut self, group: &str, instance: &str) {
-        self.active_group_instance
-            .insert(group.to_string(), instance.to_string());
+        self.routing.set_active_instance(group, instance);
     }
 
     pub fn update(&mut self, raw: PointValue) -> Option<PointValue> {
         let id = raw.id.clone();
-        // 组点：解析逻辑键并做活跃成员门控
-        let logical_id = self
-            .instance_to_logical
-            .get(&id)
-            .cloned()
-            .unwrap_or_else(|| id.clone());
-        if let Some(logical) = self.instance_to_logical.get(&id) {
-            if let Some((group, _)) = logical.split_once(':') {
-                if let Some(active_inst) = self.active_group_instance.get(group) {
-                    if let Some((inst_name, _)) = id.split_once(':') {
-                        if inst_name != active_inst {
-                            return None; // 非活跃成员数据丢弃
-                        }
-                    }
-                }
-            }
+        // 组点：非活跃成员数据丢弃（身份门控）
+        if !self.routing.is_published(&id) {
+            return None;
         }
+        let logical_id = self.routing.logical_id(&id);
         let Some(cached) = self.points.get_mut(&logical_id) else {
             return Some(raw);
         };

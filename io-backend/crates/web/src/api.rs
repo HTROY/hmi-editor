@@ -15,7 +15,7 @@ use hmi_io_point::redundancy::{
     SyncBody,
 };
 use hmi_io_point::types::WsConfigChangeMessage;
-use hmi_io_point::point_key;
+use hmi_io_point::logical_key;
 use axum::{
     extract::{Extension, Multipart, Path, Query, State},
     http::StatusCode,
@@ -242,11 +242,8 @@ impl From<PointRow> for PointView {
 }
 
 fn hmi_id_for_point(p: &PointRow) -> String {
-    if p.redundancy_group.is_empty() {
-        point_key(&p.plugin_name, &p.variable_id)
-    } else {
-        point_key(&p.redundancy_group, &p.variable_id)
-    }
+    // 逻辑键推导统一走点位身份规则（组内以组名为前缀）
+    logical_key(&p.redundancy_group, &p.plugin_name, &p.variable_id)
 }
 
 pub async fn list_points(

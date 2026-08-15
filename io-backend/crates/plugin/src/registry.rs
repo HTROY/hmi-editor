@@ -15,7 +15,7 @@ use super::interface::PluginInstance;
 use hmi_io_config::{AppConfig, PluginInstance as PluginInstanceConfig};
 use hmi_io_monitor::collector::MonitorCollector;
 use hmi_io_point::manager::PointManager;
-use hmi_io_point::{point_key, types::PointValue};
+use hmi_io_point::{logical_key, types::PointValue};
 use serde::Serialize;
 
 /// Minimum time between automatic reconnect attempts after a link loss.
@@ -703,11 +703,8 @@ fn resolve_write_target(
 ) -> Option<(String, String)> {
     config.plugins.instances.iter().find_map(|inst| {
         inst.points.iter().find_map(|pt| {
-            let logical = if inst.redundancy_group.is_empty() {
-                point_key(&inst.name, &pt.id)
-            } else {
-                point_key(&inst.redundancy_group, &pt.id)
-            };
+            // 逻辑键推导统一走点位身份规则（组内以组名为前缀）
+            let logical = logical_key(&inst.redundancy_group, &inst.name, &pt.id);
             if logical != point_name {
                 return None;
             }
