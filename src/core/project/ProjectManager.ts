@@ -1,10 +1,12 @@
-﻿import { SceneGraph } from "../scene/SceneGraph";
+import { SceneGraph } from "../scene/SceneGraph";
 import { createShape, ShapeBase } from "../shapes";
 import type { LibraryItem } from "../shapes/library";
 import type { LibraryGroup, LibraryUi } from "../shapes/libraryGroups";
 import type { PageMeta, ProjectMeta, ProjectData, RecentFile } from "./types";
 import { PROJECT_SCHEMA_VERSION, upgradeProjectData } from "./upgrade";
 import { packProjectPackage, unpackProjectPackage } from "./package";
+import { NOOP_STORAGE, noopDownload, systemClock } from "../platform/defaults";
+import type { ClockPort, DownloadPort, StoragePort } from "../platform/ports";
 
 export interface RemoteProjectLink {
   id: string;
@@ -16,6 +18,13 @@ export interface RemoteProjectLink {
 const REMOTE_LINK_STORAGE_KEY = "hmi_remote_link";
 
 let nextPageSeq = 0;
+
+/** ProjectManager 平台端口：存储 / 下载 / 时钟（浏览器实现在 editor/platform） */
+export interface ProjectManagerPorts {
+  storage?: StoragePort;
+  download?: DownloadPort;
+  clock?: ClockPort;
+}
 
 // ============================================================
 // ProjectManager — 工程管理器
@@ -57,7 +66,17 @@ export class ProjectManager {
   private _dirty = false;
   private dirtyListeners: Set<(dirty: boolean) => void> = new Set();
 
-  constructor() {
+  // 注入的平台端口（核心层不直接触碰 DOM / localStorage）
+  private readonly storage: StoragePort;
+  private readonly download: DownloadPort;
+  private readonly clock: ClockPort;
+
+  constructor(ports: ProjectManagerPorts = {}) {
+    this.storage =
+      ports.storage ??
+      (typeof localStorage !== "undefined" ? localStorage : NOOP_STORAGE);
+    this.download = ports.download ?? noopDownload;
+    this.clock = ports.clock ?? systemClock;
     this.meta = this.createDefaultMeta();
     this.loadRecentFiles();
     this.loadRemoteLink();
@@ -101,8 +120,11 @@ export class ProjectManager {
   /** 创建新页面 */
   createPage(title?: string): { meta: PageMeta; scene: SceneGraph } {
     const id =
-      "page_" + Date.now().toString(36) + "_" + (++nextPageSeq).toString(36);
-    const now = new Date().toISOString();
+      "page_" +
+      this.clock.now().toString(36) +
+      "_" +
+      (++nextPageSeq).toString(36);
+    const now = this.clock.isoNow();
     const maxOrder = Math.max(
       0,
       ...Array.from(this.pageMetas.values()).map((p) => p.order)
@@ -144,7 +166,7 @@ export class ProjectManager {
     const meta = this.pageMetas.get(pageId);
     if (meta) {
       meta.title = newTitle;
-      meta.updatedAt = new Date().toISOString();
+      meta.updatedAt = this.clock.isoNow();
       this.dirty = true;
     }
   }
@@ -154,7 +176,7 @@ export class ProjectManager {
     const meta = this.pageMetas.get(pageId);
     if (meta) {
       meta.background = background;
-      meta.updatedAt = new Date().toISOString();
+      meta.updatedAt = this.clock.isoNow();
       this.dirty = true;
     }
   }
@@ -238,7 +260,7 @@ export class ProjectManager {
 
     return {
       schemaVersion: PROJECT_SCHEMA_VERSION,
-      meta: { ...this.meta, updatedAt: new Date().toISOString() },
+      meta: { ...this.meta, updatedAt: this.clock.isoNow() },
       pages,
       library: this.library.map((item) => ({ ...item })),
       libraryGroups: this.libraryGroups.map((g) => ({ ...g })),
@@ -317,13 +339,11 @@ export class ProjectManager {
   /** 下载 .hmi.zip 工程包 */
   async downloadProjectPackage(): Promise<void> {
     const bytes = await this.toPackageBytes();
-    const blob = new Blob([bytes], { type: "application/zip" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = (this.meta.name || "未命名工程") + ".hmi.zip";
-    a.click();
-    URL.revokeObjectURL(url);
+    this.download.download(
+      (this.meta.name || "未命名工程") + ".hmi.zip",
+      bytes,
+      "application/zip"
+    );
     this.dirty = false;
   }
 
@@ -346,7 +366,7 @@ export class ProjectManager {
 
   private loadRemoteLink(): void {
     try {
-      const raw = localStorage.getItem(REMOTE_LINK_STORAGE_KEY);
+      const raw = this.storage.getItem(REMOTE_LINK_STORAGE_KEY);
       if (!raw) return;
       const parsed: unknown = JSON.parse(raw);
       if (
@@ -366,9 +386,9 @@ export class ProjectManager {
     this.remoteLink = link;
     try {
       if (!link) {
-        localStorage.removeItem(REMOTE_LINK_STORAGE_KEY);
+        this.storage.removeItem(REMOTE_LINK_STORAGE_KEY);
       } else {
-        localStorage.setItem(REMOTE_LINK_STORAGE_KEY, JSON.stringify(link));
+        this.storage.setItem(REMOTE_LINK_STORAGE_KEY, JSON.stringify(link));
       }
     } catch {
       /* ignore */
@@ -379,7 +399,7 @@ export class ProjectManager {
 
   private loadRecentFiles(): void {
     try {
-      const stored = localStorage.getItem("hmi_recent_files");
+      const stored = this.storage.getItem("hmi_recent_files");
       if (stored) this.recentFiles = JSON.parse(stored);
     } catch {
       /* ignore */
@@ -388,7 +408,7 @@ export class ProjectManager {
 
   private saveRecentFiles(): void {
     try {
-      localStorage.setItem(
+      this.storage.setItem(
         "hmi_recent_files",
         JSON.stringify(this.recentFiles.slice(0, 10))
       );
@@ -402,20 +422,18 @@ export class ProjectManager {
     this.recentFiles.unshift({
       path: filePath,
       name: this.meta.name,
-      openedAt: new Date().toISOString(),
+      openedAt: this.clock.isoNow(),
     });
     this.saveRecentFiles();
   }
 
   /** 获取与新工程文件关联的下载链接 */
   downloadProject(): void {
-    const blob = this.toBlob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = (this.meta.name || "未命名工程") + ".hmi.json";
-    a.click();
-    URL.revokeObjectURL(url);
+    this.download.download(
+      (this.meta.name || "未命名工程") + ".hmi.json",
+      this.toBlob(),
+      "application/json"
+    );
     this.dirty = false;
   }
 
@@ -429,8 +447,8 @@ export class ProjectManager {
       author: "",
       stationName: "",
       lineName: "",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: this.clock.isoNow(),
+      updatedAt: this.clock.isoNow(),
     };
   }
 

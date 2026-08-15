@@ -18,6 +18,14 @@ use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
 
+use super::api::alarms;
+use super::api::config;
+use super::api::excel;
+use super::api::monitor;
+use super::api::plugins;
+use super::api::points;
+use super::api::redundancy;
+
 pub async fn run_web_server(
     repo: Arc<Repo>,
     monitor: Arc<MonitorCollector>,
@@ -51,95 +59,89 @@ pub async fn run_web_server(
         // Plugin CRUD
         .route(
             "/api/plugins",
-            get(super::api::list_plugins).post(super::api::create_plugin),
+            get(plugins::list_plugins).post(plugins::create_plugin),
         )
         .route(
             "/api/plugins/{id}",
-            get(super::api::get_plugin)
-                .put(super::api::update_plugin)
-                .delete(super::api::delete_plugin),
+            get(plugins::get_plugin)
+                .put(plugins::update_plugin)
+                .delete(plugins::delete_plugin),
         )
         // Point CRUD
         .route(
             "/api/points",
-            get(super::api::list_points).post(super::api::create_point),
+            get(points::list_points).post(points::create_point),
         )
         .route(
             "/api/points/{id}",
-            put(super::api::update_point).delete(super::api::delete_point),
+            put(points::update_point).delete(points::delete_point),
         )
         // Excel import/export
-        .route(
-            "/api/plugins/{plugin_id}/import",
-            post(super::api::import_excel),
-        )
-        .route(
-            "/api/plugins/{plugin_id}/export",
-            get(super::api::export_excel),
-        )
+        .route("/api/plugins/{plugin_id}/import", post(excel::import_excel))
+        .route("/api/plugins/{plugin_id}/export", get(excel::export_excel))
         // Config export
-        .route("/api/config/export", get(super::api::export_config))
+        .route("/api/config/export", get(config::export_config))
         // Redundancy API
         .route(
             "/api/redundancy/config",
-            get(super::api::get_redundancy_config).put(super::api::update_redundancy_config),
+            get(redundancy::get_redundancy_config).put(redundancy::update_redundancy_config),
         )
         .route(
             "/api/redundancy/config/push",
-            post(super::api::apply_config_push),
+            post(redundancy::apply_config_push),
         )
         .route(
             "/api/redundancy/heartbeat",
-            get(super::api::redundancy_heartbeat),
+            get(redundancy::redundancy_heartbeat),
         )
-        .route("/api/redundancy/sync", post(super::api::redundancy_sync))
+        .route("/api/redundancy/sync", post(redundancy::redundancy_sync))
         .route(
             "/api/redundancy/snapshot",
-            get(super::api::redundancy_snapshot),
+            get(redundancy::redundancy_snapshot),
         )
-        .route("/api/redundancy/claim", post(super::api::redundancy_claim))
-        .route("/api/redundancy/status", get(super::api::redundancy_status))
+        .route("/api/redundancy/claim", post(redundancy::redundancy_claim))
+        .route("/api/redundancy/status", get(redundancy::redundancy_status))
         .route(
             "/api/redundancy/instance-groups",
-            get(super::api::redundancy_instance_groups),
+            get(redundancy::redundancy_instance_groups),
         )
         // Monitor API
-        .route("/api/monitor/overview", get(super::api::monitor_overview))
+        .route("/api/monitor/overview", get(monitor::monitor_overview))
         .route(
             "/api/monitor/plugins/{name}/status",
-            get(super::api::monitor_plugin_status),
+            get(monitor::monitor_plugin_status),
         )
         .route(
             "/api/monitor/plugins/{name}/points",
-            get(super::api::monitor_plugin_points),
+            get(monitor::monitor_plugin_points),
         )
         .route(
             "/api/monitor/plugins/{name}/packets",
-            get(super::api::monitor_plugin_packets),
+            get(monitor::monitor_plugin_packets),
         )
-        .route("/api/monitor/history", get(super::api::monitor_history))
+        .route("/api/monitor/history", get(monitor::monitor_history))
         // Alarm & SOE API
         .route(
             "/api/alarm/rules",
-            get(super::api::list_alarm_rules).post(super::api::upsert_alarm_rule),
+            get(alarms::list_alarm_rules).post(alarms::upsert_alarm_rule),
         )
         .route(
             "/api/alarm/rules/{id}",
-            axum::routing::put(super::api::update_alarm_rule).delete(super::api::delete_alarm_rule),
+            axum::routing::put(alarms::update_alarm_rule).delete(alarms::delete_alarm_rule),
         )
-        .route("/api/alarm/active", get(super::api::alarm_active))
-        .route("/api/alarm/history", get(super::api::alarm_history))
+        .route("/api/alarm/active", get(alarms::alarm_active))
+        .route("/api/alarm/history", get(alarms::alarm_history))
         .route(
             "/api/alarm/occurrences/{id}/events",
-            get(super::api::alarm_occurrence_events),
+            get(alarms::alarm_occurrence_events),
         )
-        .route("/api/alarm/ack", post(super::api::alarm_ack))
-        .route("/api/alarm/ack-all", post(super::api::alarm_ack_all))
+        .route("/api/alarm/ack", post(alarms::alarm_ack))
+        .route("/api/alarm/ack-all", post(alarms::alarm_ack_all))
         .route(
             "/api/alarm/config",
-            get(super::api::get_alarm_config).put(super::api::put_alarm_config),
+            get(alarms::get_alarm_config).put(alarms::put_alarm_config),
         )
-        .route("/api/soe", get(super::api::soe_query))
+        .route("/api/soe", get(alarms::soe_query))
         .merge(auth_routes(auth.clone()))
         .merge(project_routes(project_store, auth))
         // Static files (SPA fallback to index.html)

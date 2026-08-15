@@ -1,16 +1,25 @@
-﻿import { Historian } from "../historian/Historian";
+import { Historian } from "../historian/Historian";
+import { noopDownload } from "../platform/defaults";
+import type { DownloadPort } from "../platform/ports";
 import type { ReportConfig, ReportData, ReportRow } from "./types";
 
 // ============================================================
 // ReportEngine — 报表生成引擎
 // ============================================================
 
+export interface ReportEnginePorts {
+  /** 下载端口（浏览器实现见 editor/platform；未注入时跳过下载并告警） */
+  download?: DownloadPort;
+}
+
 export class ReportEngine {
   private configs: Map<string, ReportConfig> = new Map();
   private historian: Historian;
+  private readonly downloadPort: DownloadPort;
 
-  constructor(historian: Historian) {
+  constructor(historian: Historian, ports: ReportEnginePorts = {}) {
     this.historian = historian;
+    this.downloadPort = ports.download ?? noopDownload;
   }
 
   define(cfg: ReportConfig): void {
@@ -106,18 +115,17 @@ export class ReportEngine {
   download(data: ReportData, format: "csv" | "html"): void {
     const content = format === "csv" ? this.toCSV(data) : this.toHTML(data);
     const mime = format === "csv" ? "text/csv" : "text/html";
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download =
+    const filename =
       data.config.name +
       "_" +
       new Date().toISOString().slice(0, 10) +
       "." +
       format;
-    a.click();
-    URL.revokeObjectURL(url);
+    this.downloadPort.download(
+      filename,
+      new Blob([content], { type: mime }),
+      mime
+    );
   }
 
   loadPresets(): void {

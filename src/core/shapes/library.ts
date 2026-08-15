@@ -2,6 +2,8 @@ import type { BoundingBox, ShapeProps } from "../types";
 import { createShape } from "./factory";
 import { generateId, ShapeBase } from "./ShapeBase";
 import { capabilityOf } from "./capability";
+import { unavailableCanvasFactory } from "../platform/defaults";
+import type { CanvasFactory } from "../platform/ports";
 
 // ============================================================
 // library.ts — 图元库（自定义图元）核心逻辑
@@ -157,14 +159,17 @@ export function libraryItemToShape(
   return createShape(props.type, props);
 }
 
-/** 离屏渲染图元缩略图（库面板与拖拽预览共用） */
+/**
+ * 离屏渲染图元缩略图（库面板与拖拽预览共用）。
+ * 画布由注入的 CanvasFactory 创建（浏览器实现见 editor/platform），
+ * 核心层不直接创建 DOM 元素。
+ */
 export function renderShapeThumbnail(
   shape: ShapeProps,
-  size = 96
+  size = 96,
+  canvasFactory: CanvasFactory = unavailableCanvasFactory
 ): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
+  const canvas = canvasFactory.createCanvas(size, size);
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
   const bounds = getShapeBounds(shape);

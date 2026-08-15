@@ -21,6 +21,10 @@ import { ReportEngine } from "../core/report";
 import { RemoteProjectStore } from "../core/project/remote";
 import { createIndexedDbDraftBackupStore } from "../core/project/backup";
 import type { DraftBackupStore } from "../core/project/backup";
+import {
+  browserDownload,
+  browserStorage,
+} from "../editor/platform/browserPorts";
 import type {
   EditorState,
   StoreGet,
@@ -87,7 +91,11 @@ export function createEditorServices(
       s.bumpVarRevision();
     }, 0);
   });
-  const projectManager = new ProjectManager();
+  // 平台端口注入：core 层不直接触碰 DOM/localStorage（见 F08）
+  const projectManager = new ProjectManager({
+    storage: browserStorage,
+    download: browserDownload,
+  });
   // 图元库变更统一入口：库镜像 + 工程写入 + localStorage 折叠 + 持久化收尾
   const libraryController = new LibraryController({
     projectManager,
@@ -159,7 +167,9 @@ export function createEditorServices(
   const remoteProjects = new RemoteProjectStore(remoteAuth);
   const draftBackupStore = createIndexedDbDraftBackupStore();
   const scriptEngine = new ScriptEngine(varManager);
-  const reportEngine = new ReportEngine(historian);
+  const reportEngine = new ReportEngine(historian, {
+    download: browserDownload,
+  });
   scriptEngine.setAlarmManager(alarmManager);
   scriptEngine.setScene(scene);
   const { meta: dp } = projectManager.createPage("主画面");

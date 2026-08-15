@@ -1,5 +1,6 @@
-﻿export * from "./types";
+export * from "./types";
 export * from "./shapes";
+export * from "./platform";
 export * from "./settings";
 export * from "./scene";
 export * from "./inspector";

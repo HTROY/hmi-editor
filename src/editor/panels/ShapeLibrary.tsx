@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import { createShape } from "../../core/shapes";
 import { renderShapeThumbnail } from "../../core/shapes/library";
+import { browserCanvasFactory } from "../platform/browserPorts";
 import { UNGROUPED_KEY } from "../../core/shapes/libraryGroups";
 import type { LibraryItem } from "../../core/shapes/library";
 import type { LibraryGroup } from "../../core/shapes/libraryGroups";
@@ -71,7 +72,7 @@ function Thumb({
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
-    const rendered = renderShapeThumbnail(shape, size);
+    const rendered = renderShapeThumbnail(shape, size, browserCanvasFactory);
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, size, size);
@@ -103,7 +104,7 @@ function CustomCard({
     // copy：拖到画布放置；move：拖到分组标题改变归属
     e.dataTransfer.effectAllowed = "copyMove";
     try {
-      const canvas = renderShapeThumbnail(item.shape, 96);
+      const canvas = renderShapeThumbnail(item.shape, 96, browserCanvasFactory);
       e.dataTransfer.setDragImage(canvas, 48, 48);
     } catch {
       /* 缩略图渲染失败不影响拖拽 */
@@ -390,7 +391,11 @@ export function ShapeLibrary() {
     );
     e.dataTransfer.effectAllowed = "copy";
     try {
-      const canvas = renderShapeThumbnail(builtinThumbProps(item.type), 96);
+      const canvas = renderShapeThumbnail(
+        builtinThumbProps(item.type),
+        96,
+        browserCanvasFactory
+      );
       e.dataTransfer.setDragImage(canvas, 48, 48);
     } catch {
       /* 忽略 */

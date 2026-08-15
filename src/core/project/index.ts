@@ -1,6 +1,6 @@
 export * from "./types";
 export { ProjectManager } from "./ProjectManager";
-export type { RemoteProjectLink } from "./ProjectManager";
+export type { ProjectManagerPorts, RemoteProjectLink } from "./ProjectManager";
 export { PageController } from "./PageController";
 export type {
   PageControllerCallbacks,
