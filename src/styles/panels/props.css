@@ -1,0 +1,454 @@
+/* ============================================================
+   属性面板
+   ============================================================ */
+.prop-group {
+  margin-bottom: var(--space-2);
+}
+.prop-group label {
+  display: block;
+  font-size: 11px;
+  color: var(--ink2);
+  margin-bottom: 3px;
+}
+.prop-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line0);
+}
+.prop-label {
+  font-size: 11.5px;
+  color: var(--ink2);
+  width: 56px;
+  flex-shrink: 0;
+}
+.prop-value {
+  flex: 1;
+  font-size: 12px;
+  color: var(--ink0);
+  font-family: var(--font-mono);
+}
+.prop-input {
+  flex: 1;
+  height: 26px;
+  padding: 2px 6px;
+  border: 1px solid var(--line1);
+  border-radius: var(--radius-sm);
+  background: var(--bg0);
+  color: var(--ink0);
+  font-size: 12px;
+  outline: none;
+}
+.prop-input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 2px var(--cyan-dim);
+}
+.prop-text-input {
+  height: 30px;
+}
+.prop-color-swatch {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.prop-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* ============================================================
+   属性/绑定面板 — 调度台账 + 接线表（方向 A）
+   分区码 GEO/STY/SEM/IO；绑定行 = 信号路径；属性行带绑定端子
+   ============================================================ */
+
+/* ---- 分区标题 ---- */
+.prop-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line1);
+  font-size: 11px;
+  color: var(--ink2);
+}
+.prop-section-code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--cyan);
+  background: var(--cyan-dim);
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+.prop-section-title {
+  letter-spacing: 0.8px;
+}
+
+/* ---- 图元身份行 ---- */
+.prop-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 2px;
+}
+.prop-type-chip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--cyan);
+  border: 1px solid var(--cyan-border);
+  background: var(--cyan-dim);
+  border-radius: 2px;
+  padding: 2px 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.prop-name-input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---- 两列数值网格 ---- */
+.prop-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+}
+.prop-cell {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.prop-cell-label {
+  font-size: 10.5px;
+  color: var(--ink2);
+  flex-shrink: 0;
+}
+.prop-cell input[type="number"] {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 2px 5px;
+  border: 1px solid var(--line1);
+  border-radius: var(--radius-sm);
+  background: var(--bg0);
+  color: var(--ink0);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+}
+.prop-cell input[type="number"]:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 2px var(--cyan-dim);
+}
+.prop-cell-unit {
+  font-size: 10px;
+  color: var(--ink3);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+/* ---- 属性行 ---- */
+.prop-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line0);
+}
+.prop-row > input[type="color"] {
+  width: 28px;
+  height: 26px;
+  padding: 1px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-sm);
+  background: var(--bg0);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.prop-row > input[type="text"],
+.prop-row > input:not([type]),
+.prop-row > select,
+.prop-row > input[type="number"] {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 2px 6px;
+  border: 1px solid var(--line1);
+  border-radius: var(--radius-sm);
+  background: var(--bg0);
+  color: var(--ink0);
+  font-size: 12px;
+  outline: none;
+}
+.prop-row > input:focus,
+.prop-row > select:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 2px var(--cyan-dim);
+}
+.prop-row > input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+.prop-row-stack {
+  align-items: flex-start;
+  flex-direction: column;
+  padding-top: 4px;
+}
+.prop-textarea {
+  width: 100%;
+  padding: 5px 7px;
+  border: 1px solid var(--line1);
+  border-radius: var(--radius-sm);
+  background: var(--bg0);
+  color: var(--ink0);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  outline: none;
+  resize: vertical;
+}
+.prop-textarea:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 2px var(--cyan-dim);
+}
+.prop-textarea-src {
+  width: 100%;
+  height: 26px;
+  padding: 2px 6px;
+  border: 1px solid var(--line1);
+  border-radius: var(--radius-sm);
+  background: var(--bg0);
+  color: var(--ink0);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  outline: none;
+}
+.prop-color-text {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px !important;
+}
+.prop-range-input {
+  max-width: 84px;
+}
+.prop-check-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 30px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line0);
+}
+.prop-check-row .prop-check {
+  margin-left: 0;
+}
+
+/* ---- 绑定端子（快速绑定入口） ---- */
+.prop-terminal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.prop-terminal-dot {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid var(--line3);
+  background: transparent;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.prop-terminal:hover .prop-terminal-dot {
+  border-color: var(--cyan);
+  box-shadow: 0 0 6px var(--cyan-border);
+}
+.prop-terminal.bound .prop-terminal-dot {
+  background: var(--cyan);
+  border-color: var(--cyan);
+  box-shadow: 0 0 6px var(--cyan-border);
+}
+.quick-bind-select {
+  flex: 1;
+  min-width: 0;
+  max-width: 180px;
+  height: 26px;
+  padding: 2px 5px;
+  border: 1px solid var(--cyan-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg0);
+  color: var(--ink0);
+  font-size: 11.5px;
+  outline: none;
+}
+
+/* ---- 空状态 / 多选状态 ---- */
+.prop-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 12px;
+  border: 1px dashed var(--line2);
+  border-radius: var(--radius-md);
+  margin-top: 12px;
+}
+.prop-empty-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--ink3);
+  background: transparent;
+  flex-shrink: 0;
+}
+.prop-empty-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink1);
+}
+.prop-empty-desc {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ink3);
+  line-height: 1.5;
+}
+.prop-multi-header {
+  margin: 10px 0 4px;
+  padding: 6px 9px;
+  background: var(--amber-dim);
+  border-left: 2px solid var(--amber);
+  color: var(--amber);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* ---- 绑定接线行 ---- */
+.binding-wire {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.binding-wire-track {
+  position: relative;
+  flex: 1;
+  min-width: 22px;
+  height: 1px;
+  background: var(--line2);
+  margin: 0 2px;
+  transition: background 0.12s ease;
+}
+.binding-wire-arrow {
+  position: absolute;
+  right: -1px;
+  top: -2px;
+  border-left: 5px solid var(--line2);
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  transition: border-left-color 0.12s ease;
+}
+.binding-wire:hover .binding-wire-track {
+  background: var(--cyan);
+}
+.binding-wire:hover .binding-wire-arrow {
+  border-left-color: var(--cyan);
+}
+.binding-prop-chip {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--cyan);
+  background: var(--cyan-dim);
+  border: 1px solid var(--cyan-border);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.binding-wire-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.binding-wire-status.ok {
+  background: var(--ok);
+  box-shadow: 0 0 5px var(--glow-ok);
+}
+.binding-wire-status.warn {
+  background: var(--amber);
+  box-shadow: 0 0 5px var(--glow-amber);
+}
+.binding-wire-status.bad {
+  background: var(--alarm);
+  box-shadow: 0 0 5px var(--glow-alarm);
+}
+
+/* ---- 属性面板 IO 摘要行 ---- */
+.binding-mini-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 7px;
+  margin-bottom: 4px;
+  background: var(--bg0);
+  border: 1px solid var(--line0);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+.binding-mini-row:hover {
+  border-color: var(--cyan-border);
+  background: var(--bg2);
+}
+.binding-mini-var {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.binding-mini-arrow {
+  color: var(--ink3);
+  font-size: 11px;
+}
+.binding-mini-prop {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--cyan);
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prop-terminal-dot,
+  .lib-card-actions,
+  .binding-wire-track {
+    transition: none;
+  }
+}

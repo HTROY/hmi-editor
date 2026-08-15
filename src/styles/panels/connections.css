@@ -1,0 +1,79 @@
+/* ============================================================
+   连接面板
+   ============================================================ */
+.conn-section {
+  margin-bottom: var(--space-4);
+}
+.conn-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink2);
+  margin-bottom: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.conn-section-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line0);
+}
+.conn-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.conn-source-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 10px;
+  background: var(--bg0);
+  border: 1px solid var(--line0);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.14s;
+  margin: 0;
+}
+.conn-source-item:hover {
+  background: var(--bg2);
+  border-color: var(--line1);
+}
+.conn-source-item.active {
+  border-color: var(--cyan-border);
+  background: var(--cyan-dim);
+}
+.conn-source-item input {
+  margin-top: 2px;
+}
+.conn-source-info {
+  flex: 1;
+  min-width: 0;
+}
+.conn-source-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink0);
+}
+.conn-source-desc {
+  font-size: 11px;
+  color: var(--ink2);
+  margin-top: 1px;
+  line-height: 1.45;
+}
+.conn-card {
+  background: var(--bg0);
+  border: 1px solid var(--line0);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.conn-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: var(--space-3) 0;
+}
+

@@ -1,0 +1,185 @@
+/* ============================================================
+   HMI 组态编辑器 — OCC 调度台视觉系统
+   轨道交通运营控制中心（OCC）风格：
+   · 石墨深蓝多层表面，发丝级分隔线，无浮夸阴影
+   · 青色 = 数据/选中，琥珀 = 运行/注意，红绿 = 故障/正常
+   · 画布取景框 + 底部实时状态条作为标志性元素
+   ============================================================ */
+
+:root {
+  /* ---- 表面层级 ---- */
+  --bg0: #070d14; /* 最深处：画布 / 输入框 */
+  --bg1: #0c1520; /* 面板表面 */
+  --bg2: #101c29; /* 抬升表面：工具条 / 面板头 */
+  --bg3: #16283a; /* 悬停 / 分段选中 */
+  --bg4: #1b3146; /* 按下 */
+
+  /* ---- 文字 ---- */
+  --ink0: #eef5fb; /* 主文字 */
+  --ink1: #b4c6d9; /* 次级文字 */
+  --ink2: #7d91a8; /* 弱化文字 */
+  --ink3: #54677c; /* 最弱：代码标签 */
+
+  /* ---- 信号色 ---- */
+  --cyan: #2fd4f4; /* 数据 / 选中 */
+  --cyan-hi: #6be4fa;
+  --cyan-dim: rgba(47, 212, 244, 0.12);
+  --cyan-solid: #2fd4f4; /* 实心主按钮 */
+  --cyan-solid-hi: #6be4fa;
+  --cyan-border: rgba(47, 212, 244, 0.45);
+  --on-solid: #04222c; /* 实心按钮上的文字 */
+  --amber: #f6b84b; /* 运行 / 预警 */
+  --amber-dim: rgba(246, 184, 75, 0.12);
+  --ok: #3edc98;
+  --ok-dim: rgba(62, 220, 152, 0.12);
+  --alarm: #ff5e5e;
+  --alarm-hi: #ff7b7b;
+  --alarm-dim: rgba(255, 94, 94, 0.13);
+  --info: #6fa8ff;
+  --info-dim: rgba(111, 168, 255, 0.13);
+  --purple: #b892ff;
+  --purple-dim: rgba(184, 146, 255, 0.14);
+
+  /* ---- 发丝线 ---- */
+  --line0: rgba(140, 175, 210, 0.06);
+  --line1: rgba(140, 175, 210, 0.13);
+  --line2: rgba(140, 175, 210, 0.24);
+  --line3: rgba(140, 175, 210, 0.38);
+
+  /* ---- 圆角（结构件尽量方，仅芯片微圆角）---- */
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+
+  /* ---- 字体 ---- */
+  --font-ui:
+    "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI",
+    "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono:
+    "Cascadia Mono", "Cascadia Code", "JetBrains Mono", "SFMono-Regular",
+    "Consolas", "Courier New", monospace;
+  --font-cn: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+
+  /* ---- 尺寸 ---- */
+  --toolbar-h: 46px;
+  --statusbar-h: 30px;
+  --sidebar-w: 208px;
+  --panel-w: 324px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+
+  /* ---- 兼容旧变量（组件内联样式仍引用） ---- */
+  --bg-app: var(--bg0);
+  --bg-surface: var(--bg1);
+  --bg-elevated: var(--bg2);
+  --bg-overlay: var(--bg3);
+  --bg-primary: var(--bg1);
+  --bg-hover: var(--bg3);
+  --text-primary: var(--ink0);
+  --text-secondary: var(--ink1);
+  --text-muted: var(--ink2);
+  --text-inverse: var(--on-solid);
+  --accent: var(--cyan);
+  --accent-hover: var(--cyan-hi);
+  --accent-muted: var(--cyan-dim);
+  --border: var(--line1);
+  --border-subtle: var(--line0);
+  --border-default: var(--line1);
+  --border-strong: var(--line2);
+  --border-accent: var(--cyan-border);
+  --state-ok: var(--ok);
+  --state-ok-bg: var(--ok-dim);
+  --state-warn: var(--amber);
+  --state-warn-bg: var(--amber-dim);
+  --state-alarm: var(--alarm);
+  --state-alarm-bg: var(--alarm-dim);
+  --state-info: var(--info);
+  --state-info-bg: var(--info-dim);
+  --state-off: var(--ink3);
+  --state-off-bg: rgba(100, 116, 139, 0.12);
+  --success: var(--ok);
+  --warning: var(--amber);
+  --danger: var(--alarm);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.55);
+
+  /* ---- 主题相关（暗色默认，浅色在下方覆盖） ---- */
+  --hover-wash: rgba(255, 255, 255, 0.03);
+  --selection: rgba(47, 212, 244, 0.28);
+  --grid-dot: rgba(139, 175, 211, 0.14);
+  --scroll-thumb: rgba(140, 175, 210, 0.2);
+  --scroll-thumb-hover: rgba(140, 175, 210, 0.34);
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237d91a8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  --code-bg: #060b11;
+  --code-ink: #cfe3f2;
+  --on-severity: #ffffff;
+  --glow-ok: rgba(62, 220, 152, 0.6);
+  --glow-amber: rgba(246, 184, 75, 0.6);
+  --glow-alarm: rgba(255, 94, 94, 0.6);
+}
+
+/* ============================================================
+   浅色主题 — 白班调度台（日间控制室）
+   同一套 OCC 设计语言，仅替换表面/文字/信号色的明度对比
+   ============================================================ */
+:root[data-theme="light"] {
+  --bg0: #f2f6fa;
+  --bg1: #ffffff;
+  --bg2: #edf2f7;
+  --bg3: #e2e9f1;
+  --bg4: #d3dde8;
+
+  --ink0: #0f2231;
+  --ink1: #3c5368;
+  --ink2: #64798d;
+  --ink3: #8ba0b3;
+
+  --cyan: #0b7a99;
+  --cyan-hi: #0c8ba9;
+  --cyan-dim: rgba(11, 122, 153, 0.1);
+  --cyan-solid: #0e7490;
+  --cyan-solid-hi: #0b6078;
+  --cyan-border: rgba(11, 122, 153, 0.5);
+  --on-solid: #ffffff;
+
+  --amber: #b45309;
+  --amber-dim: rgba(180, 83, 9, 0.1);
+  --ok: #0a8055;
+  --ok-dim: rgba(10, 128, 85, 0.1);
+  --alarm: #dc2626;
+  --alarm-hi: #b91c1c;
+  --alarm-dim: rgba(220, 38, 38, 0.1);
+  --info: #2563eb;
+  --info-dim: rgba(37, 99, 235, 0.1);
+  --purple: #7c3aed;
+  --purple-dim: rgba(124, 58, 237, 0.1);
+
+  --line0: rgba(15, 45, 75, 0.08);
+  --line1: rgba(15, 45, 75, 0.14);
+  --line2: rgba(15, 45, 75, 0.25);
+  --line3: rgba(15, 45, 75, 0.4);
+
+  --hover-wash: rgba(15, 45, 75, 0.05);
+  --selection: rgba(11, 122, 153, 0.2);
+  --grid-dot: rgba(30, 70, 105, 0.18);
+  --scroll-thumb: rgba(40, 70, 100, 0.22);
+  --scroll-thumb-hover: rgba(40, 70, 100, 0.38);
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238ba0b3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  --code-bg: #0b1520;
+  --code-ink: #cfe3f2;
+  --on-severity: #ffffff;
+  --glow-ok: rgba(10, 128, 85, 0.45);
+  --glow-amber: rgba(180, 83, 9, 0.4);
+  --glow-alarm: rgba(220, 38, 38, 0.4);
+
+  --shadow-sm: 0 1px 2px rgba(15, 45, 75, 0.12);
+  --shadow-md: 0 4px 14px rgba(15, 45, 75, 0.14);
+  --shadow-lg: 0 10px 30px rgba(15, 45, 75, 0.2);
+}
+

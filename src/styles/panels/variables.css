@@ -1,0 +1,213 @@
+/* ============================================================
+   点表面板
+   ============================================================ */
+.variable-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+.variable-toolbar .binding-filter {
+  flex: 1;
+  min-width: 0;
+}
+
+.binding-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+.binding-filter {
+  flex: 1;
+  height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--line1);
+  border-radius: var(--radius-sm);
+  background: var(--bg0);
+  color: var(--ink0);
+  font-size: 12px;
+  outline: none;
+  transition:
+    border-color 0.13s,
+    box-shadow 0.13s;
+}
+.binding-filter:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 2px var(--cyan-dim);
+}
+.binding-filter::placeholder {
+  color: var(--ink3);
+}
+
+.variable-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line1);
+  border-radius: var(--radius-sm);
+  background: var(--bg2);
+  color: var(--ink1);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.variable-action-btn:hover {
+  background: var(--bg3);
+  color: var(--ink0);
+  border-color: var(--line2);
+}
+.variable-action-btn.primary {
+  background: var(--cyan-solid);
+  color: var(--on-solid);
+  border-color: var(--cyan-solid);
+  font-weight: 600;
+}
+.variable-action-btn.primary:hover {
+  background: var(--cyan-solid-hi);
+}
+
+.variable-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: calc(100vh - 300px);
+  overflow-y: auto;
+}
+.variable-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 9px 10px;
+  background: var(--bg0);
+  border: 1px solid var(--line0);
+  border-radius: var(--radius-md);
+  transition: all 0.14s;
+  cursor: default;
+}
+.variable-item:hover {
+  background: var(--bg2);
+  border-color: var(--line1);
+}
+
+.variable-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.variable-item-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.var-type-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.6;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+.var-type-badge.di {
+  background: var(--info-dim);
+  color: var(--info);
+}
+.var-type-badge.do {
+  background: var(--purple-dim);
+  color: var(--purple);
+}
+.var-type-badge.ai {
+  background: var(--ok-dim);
+  color: var(--ok);
+}
+.var-type-badge.ao {
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+
+.variable-id-text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink1);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.variable-name {
+  font-size: 13px;
+  color: var(--ink0);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+}
+.variable-desc {
+  font-size: 11px;
+  color: var(--ink3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.variable-item-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+.variable-value-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+.variable-value {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink0);
+  min-width: 52px;
+  text-align: right;
+}
+.variable-unit {
+  font-size: 10px;
+  color: var(--ink3);
+}
+.variable-quality-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.variable-quality-dot.good {
+  background: var(--ok);
+  box-shadow: 0 0 5px var(--glow-ok);
+}
+.variable-quality-dot.bad {
+  background: var(--alarm);
+  box-shadow: 0 0 5px var(--glow-alarm);
+}
+.variable-quality-dot.uncertain {
+  background: var(--amber);
+}
+
+.variable-actions {
+  display: flex;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.binding-form-actions {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+}
+

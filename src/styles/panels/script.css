@@ -1,0 +1,121 @@
+/* ============================================================
+   脚本面板
+   ============================================================ */
+.script-item {
+  background: var(--bg0);
+  border: 1px solid var(--line0);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  margin-bottom: 6px;
+}
+.script-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.script-info {
+  flex: 1;
+  min-width: 0;
+}
+.script-name {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink0);
+}
+.script-meta {
+  font-size: 10.5px;
+  color: var(--ink2);
+  margin-top: 1px;
+  font-family: var(--font-mono);
+}
+.script-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.script-error {
+  font-size: 11px;
+  color: var(--alarm);
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: rgba(255, 94, 94, 0.08);
+  border: 1px solid rgba(255, 94, 94, 0.25);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+}
+.script-time {
+  font-size: 10.5px;
+  color: var(--ink3);
+  margin-top: 3px;
+  font-family: var(--font-mono);
+}
+.script-editor {
+  margin-top: 8px;
+}
+.script-textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line1);
+  border-radius: var(--radius-md);
+  background: var(--code-bg);
+  color: var(--code-ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  resize: vertical;
+  outline: none;
+}
+.script-textarea:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 2px var(--cyan-dim);
+}
+.script-editor-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* ============================================================
+   报表面板
+   ============================================================ */
+.report-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.report-status {
+  font-size: 12px;
+  color: var(--ok);
+  padding: 6px 0;
+  font-family: var(--font-mono);
+}
+.report-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.report-config-item {
+  padding: 9px 10px;
+  background: var(--bg0);
+  border: 1px solid var(--line0);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.14s;
+}
+.report-config-item:hover {
+  background: var(--bg2);
+  border-color: var(--line1);
+}
+.report-cfg-name {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink0);
+}
+.report-cfg-desc {
+  font-size: 11px;
+  color: var(--ink2);
+  margin-top: 1px;
+}
+

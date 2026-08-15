@@ -15,7 +15,27 @@ import { StatusBar } from "./editor/StatusBar";
 import { SyncDialogs } from "./editor/dialogs/SyncDialogs";
 import { Icon, type IconName } from "./editor/icons";
 import { useEditorStore, type LeftPanel } from "./store/editorStore";
-import "./App.css";
+// 样式按域拆分（tokens → base → 布局 → 面板），导入顺序即层叠顺序，勿随意调整
+import "./styles/tokens.css";
+import "./styles/base.css";
+import "./styles/layout.css";
+import "./styles/toolbar.css";
+import "./styles/panels/sidebar.css";
+import "./styles/canvas.css";
+import "./styles/panels/right-panel.css";
+import "./styles/statusbar.css";
+import "./styles/controls.css";
+import "./styles/panels/variables.css";
+import "./styles/panels/binding.css";
+import "./styles/panels/connections.css";
+import "./styles/panels/alarm.css";
+import "./styles/panels/auth.css";
+import "./styles/panels/trend.css";
+import "./styles/panels/pages.css";
+import "./styles/panels/script.css";
+import "./styles/utilities.css";
+import "./styles/dialogs.css";
+import "./styles/panels/props.css";
 import "./editor/inspector/inspector.css";
 
 const LEFT_TABS: { key: LeftPanel; label: string; icon: IconName }[] = [

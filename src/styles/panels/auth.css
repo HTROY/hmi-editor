@@ -1,0 +1,98 @@
+/* ============================================================
+   权限面板
+   ============================================================ */
+.auth-panel .alarm-tabs {
+  flex-shrink: 0;
+}
+.auth-login-label {
+  font-size: 12px;
+  color: var(--ink2);
+  margin-bottom: 8px;
+}
+.auth-user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.auth-user-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg0);
+  border: 1px solid var(--line0);
+  cursor: pointer;
+  transition: all 0.14s;
+  margin: 0;
+}
+.auth-user-item:hover {
+  border-color: var(--line1);
+  background: var(--bg2);
+}
+.auth-user-item.active {
+  border-color: var(--cyan-border);
+  background: var(--cyan-dim);
+}
+.auth-user-info {
+  flex: 1;
+}
+.auth-user-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink0);
+}
+.auth-user-role {
+  font-size: 11px;
+  color: var(--ink2);
+}
+.auth-user-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: var(--bg0);
+  border: 1px solid var(--line1);
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+}
+.auth-user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--cyan-solid);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--on-solid);
+  flex-shrink: 0;
+}
+.auth-user-detail {
+  min-width: 0;
+}
+.auth-user-detail-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink0);
+}
+.auth-user-detail-role {
+  font-size: 11px;
+  color: var(--cyan);
+  margin-top: 1px;
+}
+.auth-user-detail-time {
+  font-size: 10.5px;
+  color: var(--ink3);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+.auth-success-msg {
+  font-size: 12px;
+  color: var(--ok);
+  text-align: center;
+  margin-top: 8px;
+}
+

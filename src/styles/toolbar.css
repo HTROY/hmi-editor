@@ -1,0 +1,150 @@
+/* ============================================================
+   顶部命令栏
+   ============================================================ */
+.toolbar {
+  height: var(--toolbar-h);
+  min-height: var(--toolbar-h);
+  background: linear-gradient(180deg, var(--bg2), var(--bg1));
+  border-bottom: 1px solid var(--line1);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  gap: 2px;
+  flex-shrink: 0;
+  z-index: 20;
+  -webkit-app-region: drag;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--line1);
+  margin: 0 7px;
+  flex-shrink: 0;
+}
+
+.tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink1);
+  cursor: pointer;
+  font-size: 12.5px;
+  white-space: nowrap;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    box-shadow 0.12s ease;
+  -webkit-app-region: no-drag;
+  line-height: 1;
+}
+.tool-btn:hover {
+  background: var(--bg3);
+  color: var(--ink0);
+}
+.tool-btn:active {
+  background: var(--bg4);
+}
+.tool-btn.active {
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  box-shadow: inset 0 -2px 0 var(--cyan);
+}
+.tool-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.tool-icon {
+  display: block;
+  flex-shrink: 0;
+}
+.tool-label {
+  line-height: 1;
+}
+
+.tool-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.tool-dot.warn {
+  background: var(--amber);
+  box-shadow: 0 0 5px var(--glow-amber);
+}
+.tool-dot.ok {
+  background: var(--ok);
+  box-shadow: 0 0 5px var(--glow-ok);
+}
+.tool-dot.err {
+  background: var(--alarm);
+  box-shadow: 0 0 5px var(--glow-alarm);
+}
+
+.toolbar-project-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 12px 0 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink0);
+  cursor: pointer;
+  background: var(--bg1);
+  border: 1px solid var(--line0);
+  border-left: 2px solid var(--cyan);
+  border-radius: var(--radius-sm);
+  max-width: 260px;
+  transition: border-color 0.15s;
+  -webkit-app-region: no-drag;
+}
+.toolbar-project-name:hover {
+  border-color: var(--line2);
+}
+.toolbar-project-name > span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.toolbar-project-icon {
+  display: flex;
+  color: var(--cyan);
+  flex-shrink: 0;
+}
+.toolbar-dirty {
+  color: var(--amber);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+/* ============================================================
+   视图缩放控件
+   ============================================================ */
+.zoom-glyph {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+}
+.zoom-value {
+  min-width: 58px;
+  justify-content: center;
+  font-family: var(--font-mono);
+  color: var(--ink0);
+}
+

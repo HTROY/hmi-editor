@@ -1,0 +1,72 @@
+/* ============================================================
+   页面管理
+   ============================================================ */
+.page-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.page-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.14s;
+  border: 1px solid transparent;
+}
+.page-item:hover {
+  background: var(--bg2);
+  border-color: var(--line0);
+}
+.page-item.active {
+  background: var(--cyan-dim);
+  border-color: var(--cyan-border);
+}
+.page-item-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--bg0);
+  border: 1px solid var(--line0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink2);
+  flex-shrink: 0;
+}
+.page-item-icon.active {
+  color: var(--cyan);
+  border-color: var(--cyan-border);
+  background: var(--bg1);
+}
+.page-item-info {
+  flex: 1;
+  min-width: 0;
+}
+.page-item-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-item-meta {
+  font-size: 10.5px;
+  color: var(--ink3);
+  font-family: var(--font-mono);
+  margin-top: 1px;
+}
+.page-rename-input {
+  height: 26px;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+.page-item-actions {
+  display: flex;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
