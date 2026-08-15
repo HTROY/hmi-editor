@@ -1,4 +1,4 @@
-﻿import { DataSource } from "./DataSource";
+import { DataSource } from "./DataSource";
 import type { WebSocketConfig, DataPoint } from "./types";
 
 // ============================================================
@@ -16,6 +16,32 @@ export type AlarmMessageHandler = (msg: {
   type: string;
   data?: any;
 }) => void;
+
+// ------------------------------------------------------------
+// 客户端 → 后端 WS 协议（与服务端 ClientCommand 一一对应，扁平结构）
+// 后端期望 `{command, variableId, value}` / `{command, variableIds}`，
+// 不要再用 `{command, value:{...}}` 嵌套包络。
+// ------------------------------------------------------------
+
+export interface ControlMessage {
+  command: "control";
+  variableId: string;
+  value: number | boolean;
+}
+
+export interface SubscribeMessage {
+  command: "subscribe";
+  variableIds: string[];
+}
+
+export interface HeartbeatMessage {
+  command: "heartbeat";
+}
+
+export type ClientMessage =
+  | ControlMessage
+  | SubscribeMessage
+  | HeartbeatMessage;
 
 export class WebSocketClient extends DataSource {
   declare config: WebSocketConfig;
@@ -134,29 +160,27 @@ export class WebSocketClient extends DataSource {
     this.emitStatus("disconnected");
   }
 
-  send(command: string, value?: any): void {
+  /** 发送一条扁平协议消息 `{command, ...payload}`（后端约定的结构） */
+  send(command: string, payload?: Record<string, unknown>): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       this.emitError(new Error("WebSocket 未连接"));
       return;
     }
-    const msg = JSON.stringify({ command, value, timestamp: Date.now() });
+    const msg = JSON.stringify({ command, ...payload });
     this.ws.send(msg);
   }
 
-  /** 订阅变量 */
+  /** 订阅单个变量（等价于订阅列表） */
   subscribeVariable(variableId: string): void {
-    this.send("subscribe", { variableId });
+    this.subscribeVariables([variableId]);
   }
 
-  /** 批量订阅变量列表 */
+  /** 批量订阅变量列表；空数组表示取消过滤、接收全部点 */
   subscribeVariables(variableIds: string[]): void {
-    const msg = JSON.stringify({ command: "subscribe", variableIds });
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(msg);
-    }
+    this.send("subscribe", { variableIds });
   }
 
-  /** 控制命令 */
+  /** 控制命令：value 支持 number 与 boolean（AO/DO） */
   sendControl(variableId: string, value: number | boolean): void {
     this.send("control", { variableId, value });
   }

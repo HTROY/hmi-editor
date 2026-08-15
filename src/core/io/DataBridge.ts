@@ -1,4 +1,4 @@
-﻿import { VariableManager } from "../variables/VariableManager";
+import { VariableManager } from "../variables/VariableManager";
 import type { VariableType } from "../variables/types";
 import { DataSource } from "./DataSource";
 import { WebSocketClient } from "./WebSocketClient";
@@ -108,7 +108,12 @@ export class DataBridge {
     if (source?.isConnected) {
       // 将内部变量 ID 转换回后端点位标识
       const backendId = this.varIdToPointId.get(variableId) ?? variableId;
-      source.send(backendId, value);
+      if (source instanceof WebSocketClient) {
+        // 走 WS 扁平控制协议，避免把点位 ID 当命令发送
+        source.sendControl(backendId, value);
+      } else {
+        source.send(backendId, value);
+      }
     }
     // 无论如何，直接更新变量值
     this.variableManager.setValue(variableId, value);
