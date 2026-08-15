@@ -176,3 +176,83 @@ describe("editorStore 绑定索引一致性", () => {
     expect(indexOf().get("LIB_VAR")?.length).toBe(1);
   });
 });
+
+describe("editorStore 选中状态（Selection 唯一事实来源）", () => {
+  it("selectShape 更新选中并递增 selectionRevision", () => {
+    const s = useEditorStore.getState();
+    s.newProject();
+    s.addShape("rect", 0, 0);
+    const id = s.scene.getAll()[0].id;
+    const before = useEditorStore.getState().selectionRevision;
+    useEditorStore.getState().selectShape(id);
+    const sel = useEditorStore.getState().selection;
+    expect(sel.primaryId).toBe(id);
+    expect(sel.primaryPath).toEqual([id]);
+    expect(sel.multiIds).toEqual([id]);
+    expect(useEditorStore.getState().selectionRevision).toBe(before + 1);
+    useEditorStore.getState().selectShape(null);
+    expect(useEditorStore.getState().selection.isEmpty()).toBe(true);
+  });
+
+  it("selectShapes 多选：主选中为首个，集合保留顺序", () => {
+    const s = useEditorStore.getState();
+    s.newProject();
+    s.addShape("rect", 0, 0);
+    s.addShape("circle", 100, 100);
+    const ids = s.scene.getAll().map((sh) => sh.id);
+    useEditorStore.getState().selectShapes(ids);
+    const sel = useEditorStore.getState().selection;
+    expect(sel.primaryId).toBe(ids[0]);
+    expect(sel.multiIds).toEqual(ids);
+  });
+
+  it("selectShapeAt 组内子图元只读高亮，不进多选集合", () => {
+    const s = useEditorStore.getState();
+    s.newProject();
+    s.addShape("group", 0, 0);
+    const group = s.scene.getAll()[0] as unknown as {
+      id: string;
+      children: { id: string }[];
+    };
+    const childId = group.children[0].id;
+    useEditorStore.getState().selectShapeAt([group.id, childId]);
+    const sel = useEditorStore.getState().selection;
+    expect(sel.primaryId).toBe(childId);
+    expect(sel.childPath).toEqual([group.id, childId]);
+    expect(sel.multiIds).toEqual([]);
+  });
+
+  it("deleteSelected 清空选中，undo 后选中恢复到被删图元", () => {
+    const s = useEditorStore.getState();
+    s.newProject();
+    s.addShape("rect", 0, 0);
+    const id = s.scene.getAll()[0].id;
+    s.selectShape(id);
+    s.deleteSelected();
+    expect(useEditorStore.getState().selection.isEmpty()).toBe(true);
+    useEditorStore.getState().undo();
+    const sel = useEditorStore.getState().selection;
+    expect(sel.primaryId).toBe(id);
+    expect(sel.primaryPath).toEqual([id]);
+    expect(sel.multiIds).toEqual([id]);
+  });
+
+  it("pasteClipboard 后新图元成为选中（重新生成 ID）", () => {
+    const s = useEditorStore.getState();
+    s.newProject();
+    const clip = createShape("rect", {
+      id: "clip_sel_" + Date.now(),
+      x: 0,
+      y: 0,
+    });
+    useEditorStore.setState({ clipboard: clip });
+    const before = s.scene.getAll().length;
+    useEditorStore.getState().pasteClipboard();
+    const sel = useEditorStore.getState().selection;
+    expect(useEditorStore.getState().scene.getAll().length).toBe(before + 1);
+    // 粘贴生成新 ID 并成为选中
+    expect(sel.primaryId).toBeTruthy();
+    expect(sel.primaryId).not.toBe(clip.id);
+    expect(useEditorStore.getState().scene.get(sel.primaryId!)).toBeDefined();
+  });
+});

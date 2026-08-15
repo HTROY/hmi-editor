@@ -45,8 +45,7 @@ export function ShapeTree() {
   const sceneVersion = useEditorStore((s) => s.scene.version);
   const shapeRevision = useEditorStore((s) => s.shapeRevision);
   const activePageId = useEditorStore((s) => s.activePageId);
-  const selectedPath = useEditorStore((s) => s.selectedPath);
-  const selectedIds = useEditorStore((s) => s.renderer?.selectedIds);
+  const selection = useEditorStore((s) => s.selection);
   const selectShapeAt = useEditorStore((s) => s.selectShapeAt);
   const toggleShapeVisible = useEditorStore((s) => s.toggleShapeVisible);
   const toggleShapeLocked = useEditorStore((s) => s.toggleShapeLocked);
@@ -107,8 +106,8 @@ export function ShapeTree() {
   };
 
   const isSelected = (node: ShapeTreeNode) =>
-    join(node.path) === join(selectedPath ?? []) ||
-    (node.path.length === 1 && selectedIds?.has(node.shape.id) === true);
+    join(node.path) === join(selection.primaryPath ?? []) ||
+    (node.path.length === 1 && selection.contains(node.shape.id));
 
   const commitRename = () => {
     if (editing) {

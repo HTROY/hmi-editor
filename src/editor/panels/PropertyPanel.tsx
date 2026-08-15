@@ -18,7 +18,7 @@ import {
 } from "../../core/shapes/metro";
 import { getBindingStatus } from "../../core/bindings";
 import type { Binding } from "../../core/types";
-import { resolveShape, type ShapePath } from "../../core";
+import { getSelectedShape, resolveShape, type ShapePath } from "../../core";
 
 // ============================================================
 // PropertyPanel — 图元属性面板（调度台账 + 接线表）
@@ -169,30 +169,15 @@ function BindTerminal({ prop, path }: { prop: string; path: ShapePath }) {
 export function PropertyPanel({
   onOpenBindings,
 }: { onOpenBindings?: () => void } = {}) {
-  const {
-    scene,
-    selectedId,
-    selectedPath,
-    updateShape,
-    updateShapeAt,
-    varManager,
-  } = useEditorStore();
-  // 选中集合跟随 renderer（多选框选）；selectedId 变化即触发重渲染
-  const renderer = useEditorStore((s) => s.renderer);
-  const selectedIds = renderer?.selectedIds
-    ? Array.from(renderer.selectedIds)
-    : selectedId
-      ? [selectedId]
-      : [];
-  const shape = selectedPath
-    ? resolveShape(scene, selectedPath)
-    : selectedId
-      ? scene.get(selectedId)
-      : null;
+  const { scene, selection, updateShape, updateShapeAt, varManager } =
+    useEditorStore();
+  // 多选集合与主选中都来自 Selection（不可变实例，引用变化即重渲染）
+  const selectedIds = selection.multiIds;
+  const shape = getSelectedShape(scene, selection);
 
   const setProp = (key: string, value: any) => {
-    if (selectedPath) updateShapeAt(selectedPath, { [key]: value });
-    else if (selectedId) updateShape(selectedId, { [key]: value });
+    if (selection.primaryPath) updateShapeAt(selection.primaryPath, { [key]: value });
+    else if (selection.primaryId) updateShape(selection.primaryId, { [key]: value });
   };
 
   if (!shape) {
@@ -322,7 +307,7 @@ export function PropertyPanel({
   const isBusBar = shape instanceof MetroBusBar;
   const isTransformer = shape instanceof MetroTransformer;
   const terminal = (prop: string) => (
-    <BindTerminal prop={prop} path={selectedPath ?? [shape.id]} />
+    <BindTerminal prop={prop} path={selection.primaryPath ?? [shape.id]} />
   );
 
   return (

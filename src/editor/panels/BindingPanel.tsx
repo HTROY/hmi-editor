@@ -3,7 +3,7 @@ import { useEditorStore } from "../../store/editorStore";
 import { getBindingStatus } from "../../core/bindings";
 import type { Binding, ValueMapping } from "../../core/types";
 import type { VariableDef } from "../../core/variables/types";
-import { resolveShape } from "../../core";
+import { getSelectedShape } from "../../core";
 import { MappingEditor } from "./MappingEditor";
 
 // ============================================================
@@ -29,16 +29,13 @@ const NUMERIC_PROPS = new Set([
 ]);
 
 export function BindingPanel() {
-  const { scene, selectedId, selectedPath, varManager, updateShapeAt } =
-    useEditorStore();
+  const { scene, selection, varManager, updateShapeAt } = useEditorStore();
   // 订阅 shape 修改版本号：updateShape 原地修改 shape 后触发重渲染
   useEditorStore((s) => s.shapeRevision);
-  const shape = selectedPath
-    ? resolveShape(scene, selectedPath)
-    : selectedId
-      ? scene.get(selectedId)
-      : null;
-  const path = selectedPath ?? (selectedId ? [selectedId] : null);
+  const shape = getSelectedShape(scene, selection);
+  const path =
+    selection.primaryPath ??
+    (selection.primaryId ? [selection.primaryId] : null);
 
   // 订阅变量值变化，让「手动测试」区域的值实时刷新
   const [, forceUpdate] = useState(0);

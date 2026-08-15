@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import type { AnimationDef, AnimationParams } from "../../core/types";
-import { resolveShape } from "../../core";
+import { getSelectedShape } from "../../core";
 import {
   ANIMATION_TYPES,
   defaultAnimationParams,
@@ -187,15 +187,12 @@ function ParamEditor({
 }
 
 export function AnimationPanel() {
-  const { scene, selectedId, selectedPath, varManager, updateShapeAt } =
-    useEditorStore();
+  const { scene, selection, varManager, updateShapeAt } = useEditorStore();
   useEditorStore((s) => s.shapeRevision);
-  const shape = selectedPath
-    ? resolveShape(scene, selectedPath)
-    : selectedId
-      ? scene.get(selectedId)
-      : null;
-  const path = selectedPath ?? (selectedId ? [selectedId] : null);
+  const shape = getSelectedShape(scene, selection);
+  const path =
+    selection.primaryPath ??
+    (selection.primaryId ? [selection.primaryId] : null);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
 
   if (!shape) {

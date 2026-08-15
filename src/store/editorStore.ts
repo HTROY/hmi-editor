@@ -4,6 +4,7 @@ import {
   Renderer,
   SceneEditor,
   PageController,
+  Selection,
   createShape,
   ShapeBase,
   Serializer,
@@ -161,8 +162,9 @@ interface EditorState {
   renderer: Renderer | null;
   history: CommandHistory;
   mode: ToolMode;
-  selectedId: string | null;
-  selectedPath: ShapePath | null;
+  /** 选中状态唯一事实来源（不可变；变更后 selectionRevision 递增触发重渲染） */
+  selection: Selection;
+  selectionRevision: number;
   clipboard: ShapeBase | null;
   library: LibraryItem[];
   libraryGroups: LibraryGroup[];
@@ -380,8 +382,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
         const s = get();
         const patch: Partial<EditorState> = {
           activePageId: meta.id,
-          selectedId: null,
-          selectedPath: null,
+          selection: s.selection.clear(),
+          selectionRevision: s.selectionRevision + 1,
           historyRevision: 0,
           pageRevision: s.pageRevision + 1,
         };
@@ -447,26 +449,17 @@ export const useEditorStore = create<EditorState>((set, get) => {
     scheduleAutosave();
   };
 
-  /** 撤销/重做后应用 SceneEditor 返回的选中结果（与旧实现逐分支对齐） */
+  /** 撤销/重做后应用 SceneEditor 返回的选中结果（keepSelection 时不动选中） */
   const applyUndoRedoSelection = (r: UndoRedoResult | null) => {
     if (!r) return;
     const s = get();
-    if (r.keepSelection) return;
+    const next = s.selection.applyUndoRedo(r);
+    if (next === s.selection) return;
     set({
-      selectedId: r.selected?.id ?? null,
-      selectedPath: r.selected?.path ?? null,
+      selection: next,
+      selectionRevision: s.selectionRevision + 1,
     });
-    if (s.renderer) {
-      s.renderer.selectedIds.clear();
-      s.renderer.selectedChildPath = r.selected
-        ? r.selected.isChild
-          ? r.selected.path
-          : null
-        : null;
-      if (r.selected && !r.selected.isChild)
-        s.renderer.selectedIds.add(r.selected.id);
-      s.renderer.render();
-    }
+    s.renderer?.render();
   };
 
   const resetHistory = (pageId: string) => {
@@ -508,8 +501,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
     reportEngine,
     renderer: null,
     mode: "select",
-    selectedId: null,
-    selectedPath: null,
+    selection: new Selection(),
+    selectionRevision: 0,
     clipboard: null,
     library: projectManager.getLibrary(),
     libraryGroups: [],
@@ -537,6 +530,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       set({ renderer: r });
       const s = get();
       r.setViewport(s.viewport);
+      r.setSelectionSource(() => useEditorStore.getState().selection);
       const meta = s.projectManager.getPageMeta(s.activePageId);
       if (meta)
         r.setPage(meta.width, meta.height, meta.background ?? "#FFFFFF");
@@ -551,38 +545,28 @@ export const useEditorStore = create<EditorState>((set, get) => {
     selectShape: (id) => {
       const s = get();
       if (id === null) sceneEditor.cancelShapeEdit();
-      set({ selectedId: id, selectedPath: id ? [id] : null });
-      if (s.renderer) {
-        s.renderer.selectedIds.clear();
-        s.renderer.selectedChildPath = null;
-        if (id) s.renderer.selectedIds.add(id);
-        s.renderer.render();
-      }
+      set({
+        selection: s.selection.select(id),
+        selectionRevision: s.selectionRevision + 1,
+      });
+      s.renderer?.render();
     },
     selectShapes: (ids) => {
       const s = get();
       set({
-        selectedId: ids[0] ?? null,
-        selectedPath: ids[0] ? [ids[0]] : null,
+        selection: s.selection.selectMany(ids),
+        selectionRevision: s.selectionRevision + 1,
       });
-      if (s.renderer) {
-        s.renderer.selectedIds = new Set(ids);
-        s.renderer.selectedChildPath = null;
-        s.renderer.render();
-      }
+      s.renderer?.render();
     },
     selectShapeAt: (path) => {
       const s = get();
-      const shape = resolveShape(s.scene, path);
-      if (!shape) return;
-      const isChild = path.length > 1;
-      set({ selectedId: shape.id, selectedPath: path });
-      if (s.renderer) {
-        s.renderer.selectedIds.clear();
-        s.renderer.selectedChildPath = isChild ? path : null;
-        if (!isChild) s.renderer.selectedIds.add(shape.id);
-        s.renderer.render();
-      }
+      if (!resolveShape(s.scene, path)) return;
+      set({
+        selection: s.selection.selectAt(path),
+        selectionRevision: s.selectionRevision + 1,
+      });
+      s.renderer?.render();
     },
     addShape: (type, x, y) => {
       const s = get();
@@ -645,22 +629,21 @@ export const useEditorStore = create<EditorState>((set, get) => {
     deleteSelected: () => {
       const s = get();
       // 组内子图元不允许删除（仅在检查器中编辑）
-      if (s.selectedPath && s.selectedPath.length > 1) return;
-      if (s.selectedId) {
-        sceneEditor.deleteShape(s.selectedId);
-        set({ selectedId: null, selectedPath: null });
-        if (s.renderer) {
-          s.renderer.selectedIds.clear();
-          s.renderer.selectedChildPath = null;
-        }
+      if (s.selection.primaryPath && s.selection.primaryPath.length > 1) return;
+      if (s.selection.primaryId) {
+        sceneEditor.deleteShape(s.selection.primaryId);
+        set({
+          selection: s.selection.clear(),
+          selectionRevision: s.selectionRevision + 1,
+        });
       }
     },
     copySelected: () => {
       const s = get();
       // 复制/粘贴仅支持顶层图元
-      if (s.selectedPath && s.selectedPath.length > 1) return;
-      if (s.selectedId) {
-        const sh = s.scene.get(s.selectedId);
+      if (s.selection.primaryPath && s.selection.primaryPath.length > 1) return;
+      if (s.selection.primaryId) {
+        const sh = s.scene.get(s.selection.primaryId);
         if (sh) set({ clipboard: sh.clone() });
       }
     },
@@ -672,7 +655,11 @@ export const useEditorStore = create<EditorState>((set, get) => {
         c.x += 20;
         c.y += 20;
         const placed = sceneEditor.addShape(c.toJSON() as ShapeProps);
-        set({ selectedId: placed.id, selectedPath: [placed.id] });
+        set({
+          selection: s.selection.select(placed.id),
+          selectionRevision: s.selectionRevision + 1,
+        });
+        s.renderer?.render();
       }
     },
     updateShape: (id, props, record = true) => {
@@ -685,9 +672,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     groupSelected: () => {
       const s = get();
-      const ids = s.renderer?.selectedIds
-        ? Array.from(s.renderer.selectedIds)
-        : [];
+      const ids = Array.from(s.selection.multiIds);
       const group = sceneEditor.group(ids);
       if (group) {
         s.selectShape(group.id);
@@ -695,10 +680,11 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     ungroupSelected: () => {
       const s = get();
-      if (!s.selectedId || (s.selectedPath && s.selectedPath.length > 1)) {
+      const sel = s.selection;
+      if (!sel.primaryId || (sel.primaryPath && sel.primaryPath.length > 1)) {
         return;
       }
-      const result = sceneEditor.ungroup(s.selectedId);
+      const result = sceneEditor.ungroup(sel.primaryId);
       if (!result.ok) return;
       if (result.firstChildId !== null) {
         s.selectShapeAt([result.firstChildId]);
@@ -708,8 +694,9 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     reorderSelected: (toIndex) => {
       const s = get();
-      if (!s.selectedPath) return;
-      sceneEditor.reorder(s.selectedPath, toIndex);
+      const path = s.selection.primaryPath;
+      if (!path) return;
+      sceneEditor.reorder(path, toIndex);
     },
     toggleShapeVisible: (path) => {
       const shape = resolveShape(get().scene, path);
@@ -1020,9 +1007,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
     saveSelectionToLibrary: (name, groupId) => {
       const s = get();
-      const ids = s.renderer?.selectedIds
-        ? Array.from(s.renderer.selectedIds)
-        : [];
+      const ids = Array.from(s.selection.multiIds);
       const shapes = ids
         .map((id) => s.scene.get(id))
         .filter((sh): sh is ShapeBase => !!sh);
@@ -1098,9 +1083,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const s = get();
       const target = s.library.find((item) => item.id === id);
       if (!target) return;
-      const ids = s.renderer?.selectedIds
-        ? Array.from(s.renderer.selectedIds)
-        : [];
+      const ids = Array.from(s.selection.multiIds);
       const shapes = ids
         .map((shapeId) => s.scene.get(shapeId))
         .filter((sh): sh is ShapeBase => !!sh);

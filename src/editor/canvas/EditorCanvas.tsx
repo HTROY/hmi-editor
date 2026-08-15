@@ -61,7 +61,7 @@ export function EditorCanvas() {
     scene,
     setRenderer,
     mode,
-    selectedId,
+    selection,
     selectShape,
     addShape,
     updateShape,
@@ -173,7 +173,9 @@ export function EditorCanvas() {
         const world = store.viewport.screenToWorld(pos.x, pos.y);
         const animState = store.animEngine.getState();
         // 先命中已选中图元的手柄（旋转图元按屏幕轴对齐外接框）
-        const selected = selectedId ? scene.get(selectedId) : null;
+        const selected = selection.primaryId
+          ? scene.get(selection.primaryId)
+          : null;
         if (selected && !selected.locked) {
           const handle = hitTestResizeHandle(
             selected,
@@ -224,7 +226,7 @@ export function EditorCanvas() {
     [
       mode,
       scene,
-      selectedId,
+      selection,
       selectShape,
       addShape,
       beginShapeEdit,
@@ -240,13 +242,13 @@ export function EditorCanvas() {
       const pos = getCanvasPos(e.clientX, e.clientY);
 
       // 手柄拖拽调整大小
-      if (isResizing.current && resizeHandleRef.current && selectedId) {
+      if (isResizing.current && resizeHandleRef.current && selection.primaryId) {
         const world = store.viewport.screenToWorld(pos.x, pos.y);
-        const selected = scene.get(selectedId);
+        const selected = scene.get(selection.primaryId);
         // 栅格图元默认等比锁，按住 Shift 临时解锁；其余图元 Shift 等比
         const proportional =
           selected?.type === "image" ? !e.shiftKey : e.shiftKey;
-        applyShapeResize(selectedId, resizeHandleRef.current, world, {
+        applyShapeResize(selection.primaryId, resizeHandleRef.current, world, {
           proportional,
           snap: !e.altKey,
         });
@@ -266,8 +268,10 @@ export function EditorCanvas() {
       }
 
       // 未拖拽时悬停手柄显示对应光标
-      if (!isDragging.current || !selectedId) {
-        const selected = selectedId ? scene.get(selectedId) : null;
+      if (!isDragging.current || !selection.primaryId) {
+        const selected = selection.primaryId
+          ? scene.get(selection.primaryId)
+          : null;
         const nextHover =
           mode === "select" && selected && !selected.locked
             ? hitTestResizeHandle(
@@ -287,7 +291,7 @@ export function EditorCanvas() {
       );
       const world = store.viewport.screenToWorld(pos.x, pos.y);
       updateShape(
-        selectedId,
+        selection.primaryId,
         {
           x: shapeStartPos.current.x + (world.x - startWorld.x),
           y: shapeStartPos.current.y + (world.y - startWorld.y),
@@ -296,7 +300,7 @@ export function EditorCanvas() {
       );
     },
     [
-      selectedId,
+      selection,
       updateShape,
       applyShapeResize,
       getCanvasPos,
@@ -421,7 +425,10 @@ export function EditorCanvas() {
         store.redo();
       }
       if (e.key === "Delete" || e.key === "Backspace") {
-        if (store.selectedId && document.activeElement?.tagName !== "INPUT") {
+        if (
+          store.selection.primaryId &&
+          document.activeElement?.tagName !== "INPUT"
+        ) {
           store.deleteSelected();
         }
       }

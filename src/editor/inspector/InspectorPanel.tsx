@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useEditorStore } from "../../store/editorStore";
-import { resolveShape } from "../../core";
+import { getSelectedShape } from "../../core";
 import { ShapeTree } from "./ShapeTree";
 import { PropertyPanel } from "../panels/PropertyPanel";
 import { BindingPanel } from "../panels/BindingPanel";
@@ -17,9 +17,7 @@ const SECTIONS: { key: SectionKey; label: string; icon: IconName }[] = [
 
 export function InspectorPanel() {
   const scene = useEditorStore((s) => s.scene);
-  const selectedId = useEditorStore((s) => s.selectedId);
-  const selectedPath = useEditorStore((s) => s.selectedPath);
-  const selectedIds = useEditorStore((s) => s.renderer?.selectedIds);
+  const selection = useEditorStore((s) => s.selection);
 
   const [treeHeight, setTreeHeight] = useState(220);
   const [sections, setSections] = useState<Record<SectionKey, boolean>>({
@@ -54,12 +52,8 @@ export function InspectorPanel() {
     document.body.classList.add("resizing-v");
   };
 
-  const shape = selectedPath
-    ? resolveShape(scene, selectedPath)
-    : selectedId
-      ? scene.get(selectedId)
-      : null;
-  const multiCount = selectedIds ? selectedIds.size : 0;
+  const shape = getSelectedShape(scene, selection);
+  const multiCount = selection.count;
 
   const toggleSection = (key: SectionKey) => {
     setSections((prev) => ({ ...prev, [key]: !prev[key] }));

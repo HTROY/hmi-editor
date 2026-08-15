@@ -1,6 +1,7 @@
 export { SceneGraph } from "./SceneGraph";
 export { Renderer } from "./Renderer";
 export { SceneEditor } from "./SceneEditor";
+export { Selection, getSelectedShape } from "./Selection";
 export type {
   SceneEditorSelection,
   UndoRedoResult,

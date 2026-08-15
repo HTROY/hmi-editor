@@ -104,7 +104,7 @@ function CustomCard({
 }) {
   const placeLibraryItem = useEditorStore((s) => s.placeLibraryItem);
   const setMode = useEditorStore((s) => s.setMode);
-  const selectedId = useEditorStore((s) => s.selectedId);
+  const selection = useEditorStore((s) => s.selection);
   const [hover, setHover] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(item.name);
@@ -142,8 +142,7 @@ function CustomCard({
   };
 
   const overwrite = () => {
-    const renderer = useEditorStore.getState().renderer;
-    const count = renderer?.selectedIds?.size ?? 0;
+    const count = useEditorStore.getState().selection.count;
     if (count === 0) {
       alert("请先在画布上选中一个或多个图元");
       return;
@@ -154,7 +153,7 @@ function CustomCard({
   };
 
   const resync = () => {
-    if (!selectedId) {
+    if (!selection.primaryId) {
       alert("请先在画布上选中一个图元");
       return;
     }
@@ -163,7 +162,7 @@ function CustomCard({
         `用库项「${item.name}」替换画布上选中的图元？实例上的改动将丢失。`
       )
     ) {
-      useEditorStore.getState().resyncFromLibrary(item.id, selectedId);
+      useEditorStore.getState().resyncFromLibrary(item.id, selection.primaryId);
     }
   };
 
@@ -329,8 +328,7 @@ export function ShapeLibrary() {
   const library = useEditorStore((s) => s.library);
   const libraryGroups = useEditorStore((s) => s.libraryGroups);
   const libraryCollapsed = useEditorStore((s) => s.libraryCollapsed);
-  const selectedId = useEditorStore((s) => s.selectedId);
-  const renderer = useEditorStore((s) => s.renderer);
+  const selection = useEditorStore((s) => s.selection);
   const toggleLibraryCollapsed = useEditorStore(
     (s) => s.toggleLibraryCollapsed
   );
@@ -351,11 +349,7 @@ export function ShapeLibrary() {
   const [cardDropKey, setCardDropKey] = useState<string | null>(null);
   const svgInputRef = useRef<HTMLInputElement>(null);
 
-  const selectedIds = renderer?.selectedIds
-    ? Array.from(renderer.selectedIds)
-    : selectedId
-      ? [selectedId]
-      : [];
+  const selectedIds = selection.multiIds;
   const q = query.trim().toLowerCase();
   const searching = q.length > 0;
   const filteredBuiltin = shapeItems.filter(

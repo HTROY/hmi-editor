@@ -7,6 +7,7 @@ import { getAnimatedAABB, getRotatedAABB } from "./resize";
 import type { AnimationFrameState } from "../bindings/animation";
 import { getShapeWorldAABB } from "../inspector/groupOps";
 import type { BoundingBox } from "../types";
+import type { Selection } from "./Selection";
 
 // ============================================================
 // Renderer — Canvas 渲染器
@@ -22,10 +23,9 @@ export class Renderer {
   private pageHeight = 1080;
   private pageBackground = "#FFFFFF";
 
-  // 选中的图元 ID 集合
-  selectedIds: Set<string> = new Set();
-  /** 树中选中的子图元路径（只读高亮，无手柄） */
-  selectedChildPath: string[] | null = null;
+  // 选中状态来源：store 注入的取值函数（每次 render 读取当前 Selection）。
+  // Renderer 不持有可变选中字段，避免与 store 双写漂移。
+  private selectionSource: (() => Selection) | null = null;
   private attachedImages = new WeakSet<ImageShape>();
   private animationState: Map<string, AnimationFrameState> = new Map();
 
@@ -41,6 +41,11 @@ export class Renderer {
 
   get height(): number {
     return this.canvas.height;
+  }
+
+  /** 绑定选中状态来源（store 注入：始终返回当前 Selection 实例） */
+  setSelectionSource(source: (() => Selection) | null): void {
+    this.selectionSource = source;
   }
 
   /** 绑定当前页面的视图变换（缩放/平移） */
@@ -87,15 +92,16 @@ export class Renderer {
     }
 
     // 绘制选中状态（包围框 + 手柄），屏幕尺寸保持恒定
+    const selection = this.selectionSource ? this.selectionSource() : null;
     for (const shape of shapes) {
-      if (this.selectedIds.has(shape.id)) {
+      if (selection && selection.contains(shape.id)) {
         this.drawSelection(shape, zoom);
       }
     }
 
     // 树选中的子图元：只读高亮框（不参与画布拖拽/缩放）
-    if (this.selectedChildPath) {
-      const bb = getShapeWorldAABB(this.scene, this.selectedChildPath);
+    if (selection?.childPath) {
+      const bb = getShapeWorldAABB(this.scene, selection.childPath);
       if (bb) this.drawChildSelection(bb, zoom);
     }
 

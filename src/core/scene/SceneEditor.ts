@@ -13,7 +13,7 @@ import type { Point, ShapeProps, ShapeType } from "../types";
 export interface SceneEditorSelection {
   id: string;
   path: ShapePath;
-  /** 组内子图元：画布只画只读高亮（selectedChildPath），不加入多选集合 */
+  /** 组内子图元：画布只画只读高亮（Selection.childPath），不加入多选集合 */
   isChild: boolean;
 }
 

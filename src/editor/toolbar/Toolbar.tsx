@@ -32,9 +32,7 @@ export function Toolbar() {
     projectManager,
     setLeftPanel,
     scene,
-    selectedId,
-    selectedPath,
-    renderer,
+    selection,
     groupSelected,
     ungroupSelected,
     remoteUser,
@@ -67,20 +65,21 @@ export function Toolbar() {
     return () => window.removeEventListener("keydown", onKey);
   }, [groupSelected, ungroupSelected]);
 
-  const selectedShape = selectedId ? scene.get(selectedId) : null;
-  const childSelected = !!selectedPath && selectedPath.length > 1;
-  const selectedShapes = renderer?.selectedIds
-    ? Array.from(renderer.selectedIds)
-        .map((id) => scene.get(id))
-        .filter((sh): sh is NonNullable<typeof sh> => !!sh)
-    : [];
+  const selectedShape = selection.primaryId
+    ? scene.get(selection.primaryId)
+    : null;
+  const childSelected =
+    !!selection.primaryPath && selection.primaryPath.length > 1;
+  const selectedShapes = selection.multiIds
+    .map((id) => scene.get(id))
+    .filter((sh): sh is NonNullable<typeof sh> => !!sh);
   const canGroup =
     selectedShapes.length >= 2 && selectedShapes.every((sh) => !sh.locked);
   const canUngroup =
     !!selectedShape &&
     selectedShape instanceof GroupShape &&
     !selectedShape.locked &&
-    (!selectedPath || selectedPath.length === 1);
+    (!selection.primaryPath || selection.primaryPath.length === 1);
 
   return (
     <div className="toolbar">
