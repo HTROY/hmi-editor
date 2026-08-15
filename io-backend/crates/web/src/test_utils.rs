@@ -41,9 +41,9 @@ pub struct StoreFixture {
     pub _dir: TempDir,
 }
 
-pub fn store() -> StoreFixture {
+pub async fn store() -> StoreFixture {
     let dir = TempDir::new("api");
-    let repo = Arc::new(Repo::new(":memory:").unwrap());
+    let repo = Arc::new(Repo::new(":memory:").await.unwrap());
     let store = ProjectStore::new(repo.clone(), dir.path()).unwrap();
     StoreFixture {
         store,

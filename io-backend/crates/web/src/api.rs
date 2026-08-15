@@ -1,33 +1,39 @@
 //! REST API handlers for plugin/point management
 
-use hmi_io_config::RedundancyConfig;
-use hmi_io_alarm::engine::AlarmEngine;
-use hmi_io_alarm::types::{AlarmOccurrence, AlarmRule, AlarmStreamEvent};
-use hmi_io_db::repo::{
-    AlarmRuleRow, ConfigSnapshot, PluginRow, PointRow, Repo, SnapshotAlarmRule, SnapshotPoint,
-    SnapshotPlugin,
-};
-use hmi_io_monitor::collector::MonitorCollector;
-use hmi_io_monitor::types::*;
-use hmi_io_point::manager::PointManager;
-use hmi_io_point::redundancy::{
-    ClaimBody, ClaimResult, ConfigPushBody, HeartbeatInfo, RedundancyEngine, RedundancyStatus,
-    SyncBody,
-};
-use hmi_io_point::types::WsConfigChangeMessage;
-use hmi_io_point::logical_key;
 use axum::{
     extract::{Extension, Multipart, Path, Query, State},
     http::StatusCode,
     response::Json,
 };
 use calamine::Reader;
+use hmi_io_alarm::engine::AlarmEngine;
+use hmi_io_alarm::types::{AlarmOccurrence, AlarmRule, AlarmStreamEvent};
+use hmi_io_config::RedundancyConfig;
+use hmi_io_db::repo::{
+    AlarmRuleRow, ConfigSnapshot, PluginRow, PointRow, Repo, SnapshotAlarmRule, SnapshotPlugin,
+    SnapshotPoint,
+};
+use hmi_io_monitor::collector::MonitorCollector;
+use hmi_io_monitor::types::*;
+use hmi_io_point::logical_key;
+use hmi_io_point::manager::PointManager;
+use hmi_io_point::redundancy::{
+    ClaimBody, ClaimResult, ConfigPushBody, HeartbeatInfo, RedundancyEngine, RedundancyStatus,
+    SyncBody,
+};
+use hmi_io_point::types::WsConfigChangeMessage;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 pub type AppState = Arc<Repo>;
+
+/// Log a repository error and map it to a 500 response.
+pub fn api_error(e: anyhow::Error) -> StatusCode {
+    log::error!("{}", e);
+    StatusCode::INTERNAL_SERVER_ERROR
+}
 
 #[derive(Deserialize)]
 pub struct PluginQuery {
@@ -38,23 +44,17 @@ pub struct PluginQuery {
 pub async fn list_plugins(
     State(repo): State<AppState>,
 ) -> Result<Json<Vec<PluginRow>>, StatusCode> {
-    repo.list_plugins().map(Json).map_err(|e| {
-        log::error!("{}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })
+    let rows = repo.list_plugins().await.map_err(api_error)?;
+    Ok(Json(rows))
 }
 
 pub async fn get_plugin(
     State(repo): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<PluginRow>, StatusCode> {
-    match repo.get_plugin(id) {
-        Ok(Some(p)) => Ok(Json(p)),
-        Ok(None) => Err(StatusCode::NOT_FOUND),
-        Err(e) => {
-            log::error!("{}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
+    match repo.get_plugin(id).await.map_err(api_error)? {
+        Some(p) => Ok(Json(p)),
+        None => Err(StatusCode::NOT_FOUND),
     }
 }
 
@@ -77,15 +77,12 @@ fn default_enabled() -> bool {
     true
 }
 
-fn validate_group_edit(
+async fn validate_group_edit(
     repo: &Repo,
     candidate: &UpsertPlugin,
     edit_id: Option<i64>,
 ) -> Result<(), StatusCode> {
-    let mut plugins = repo.list_plugins().map_err(|e| {
-        log::error!("{}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let mut plugins = repo.list_plugins().await.map_err(api_error)?;
     if let Some(id) = edit_id {
         plugins.retain(|p| p.id != id);
     }
@@ -99,34 +96,33 @@ fn validate_group_edit(
         redundancy_role: candidate.redundancy_role.clone(),
         priority: candidate.priority,
     });
-    let instances: Vec<hmi_io_config::PluginInstance> = plugins
-        .into_iter()
-        .map(|p| {
-            let points = repo
-                .list_points(Some(p.id))
-                .unwrap_or_default()
-                .into_iter()
-                .map(|pt| hmi_io_config::PointMapping {
-                    id: pt.variable_id,
-                    address: pt.address,
-                    data_type: pt.data_type,
-                    byte_order: pt.byte_order,
-                    scale: pt.scale,
-                    offset: pt.offset_val,
-                    var_type: pt.var_type,
-                })
-                .collect();
-            hmi_io_config::PluginInstance {
-                name: p.name,
-                wasm_file: p.wasm_file,
-                config: serde_json::from_str(&p.config_json).unwrap_or(serde_json::json!({})),
-                points,
-                redundancy_group: p.redundancy_group,
-                redundancy_role: p.redundancy_role,
-                priority: p.priority,
-            }
-        })
-        .collect();
+    let mut instances: Vec<hmi_io_config::PluginInstance> = Vec::new();
+    for p in plugins {
+        let points = repo
+            .list_points(Some(p.id))
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|pt| hmi_io_config::PointMapping {
+                id: pt.variable_id,
+                address: pt.address,
+                data_type: pt.data_type,
+                byte_order: pt.byte_order,
+                scale: pt.scale,
+                offset: pt.offset_val,
+                var_type: pt.var_type,
+            })
+            .collect();
+        instances.push(hmi_io_config::PluginInstance {
+            name: p.name,
+            wasm_file: p.wasm_file,
+            config: serde_json::from_str(&p.config_json).unwrap_or(serde_json::json!({})),
+            points,
+            redundancy_group: p.redundancy_group,
+            redundancy_role: p.redundancy_role,
+            priority: p.priority,
+        });
+    }
     let mut cfg = hmi_io_config::AppConfig::default_config();
     cfg.plugins.instances = instances;
     cfg.validate().map_err(|e| {
@@ -140,7 +136,7 @@ pub async fn create_plugin(
     Extension(engine): Extension<Arc<RedundancyEngine>>,
     Json(p): Json<UpsertPlugin>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    validate_group_edit(&repo, &p, None)?;
+    validate_group_edit(&repo, &p, None).await?;
     let id = repo
         .insert_plugin_full(
             &p.name,
@@ -150,11 +146,9 @@ pub async fn create_plugin(
             &p.redundancy_role,
             p.priority,
         )
-        .map_err(|e| {
-            log::error!("{}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-    bump_version_and_push(&repo, &engine).await;
+        .await
+        .map_err(api_error)?;
+    bump_version_and_push(repo.clone(), engine.clone()).await;
     Ok(Json(serde_json::json!({"id": id})))
 }
 
@@ -164,7 +158,7 @@ pub async fn update_plugin(
     Path(id): Path<i64>,
     Json(p): Json<UpsertPlugin>,
 ) -> Result<StatusCode, StatusCode> {
-    validate_group_edit(&repo, &p, Some(id))?;
+    validate_group_edit(&repo, &p, Some(id)).await?;
     repo.update_plugin_full(
         id,
         &p.name,
@@ -175,12 +169,9 @@ pub async fn update_plugin(
         p.priority,
         p.enabled,
     )
-        .map(|_| StatusCode::OK)
-        .map_err(|e| {
-            log::error!("{}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-    bump_version_and_push(&repo, &engine).await;
+    .await
+    .map_err(api_error)?;
+    bump_version_and_push(repo.clone(), engine.clone()).await;
     Ok(StatusCode::OK)
 }
 
@@ -189,15 +180,12 @@ pub async fn delete_plugin(
     Extension(engine): Extension<Arc<RedundancyEngine>>,
     Path(id): Path<i64>,
 ) -> StatusCode {
-    match repo.delete_plugin(id) {
+    match repo.delete_plugin(id).await {
         Ok(()) => {
-            bump_version_and_push(&repo, &engine).await;
+            bump_version_and_push(repo.clone(), engine.clone()).await;
             StatusCode::OK
         }
-        Err(e) => {
-            log::error!("{}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
+        Err(e) => api_error(e),
     }
 }
 
@@ -251,12 +239,9 @@ pub async fn list_points(
     Extension(point_manager): Extension<Arc<Mutex<PointManager>>>,
     Query(q): Query<PluginQuery>,
 ) -> Result<Json<Vec<PointView>>, StatusCode> {
-    let all_points = repo.list_points(q.plugin_id).map_err(|e| {
-        log::error!("{}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-    let total_in_db = all_points.len();
     let include_backup = q.include_backup.unwrap_or(false);
+    let all_points = repo.list_points(q.plugin_id).await.map_err(api_error)?;
+    let total_in_db = all_points.len();
     // 以 PointManager 为准：只返回实际在管理范围内的点位
     let pm = point_manager.lock().unwrap();
     let filtered: Vec<PointView> = all_points
@@ -337,13 +322,11 @@ pub async fn create_point(
             &p.var_type,
             &p.description,
         )
+        .await
         .map(|id| Json(serde_json::json!({"id": id})))
-        .map_err(|e| {
-            log::error!("{}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        .map_err(api_error)?;
     send_config_change(&broadcast_tx, "create", &var_id, plugin_id);
-    bump_version_and_push(&repo, &engine).await;
+    bump_version_and_push(repo.clone(), engine.clone()).await;
     Ok(result)
 }
 
@@ -367,13 +350,11 @@ pub async fn update_point(
         &p.var_type,
         &p.description,
     )
+    .await
     .map(|_| StatusCode::OK)
-    .map_err(|e| {
-        log::error!("{}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    .map_err(api_error)?;
     send_config_change(&broadcast_tx, "update", &var_id, plugin_id);
-    bump_version_and_push(&repo, &engine).await;
+    bump_version_and_push(repo.clone(), engine.clone()).await;
     Ok(StatusCode::OK)
 }
 
@@ -384,22 +365,16 @@ pub async fn delete_point(
     Path(id): Path<i64>,
 ) -> Result<StatusCode, StatusCode> {
     // Get point info before deletion for the notification
-    let point_info = repo.get_point(id).map_err(|e| {
-        log::error!("{}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let point_info = repo.get_point(id).await.map_err(api_error)?;
     let (plugin_id, var_id) = match &point_info {
         Some(p) => (p.plugin_id, p.variable_id.clone()),
         None => (0, String::new()),
     };
-    repo.delete_point(id).map_err(|e| {
-        log::error!("{}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    repo.delete_point(id).await.map_err(api_error)?;
     if !var_id.is_empty() {
         send_config_change(&broadcast_tx, "delete", &var_id, plugin_id);
     }
-    bump_version_and_push(&repo, &engine).await;
+    bump_version_and_push(repo.clone(), engine.clone()).await;
     Ok(StatusCode::OK)
 }
 
@@ -417,9 +392,9 @@ pub async fn import_excel(
                 log::error!("Excel: {}", e);
                 StatusCode::BAD_REQUEST
             })?;
+            let mut imported: usize = 0;
             if let Some(Ok(range)) = workbook.worksheet_range_at(0) {
                 let rows = range.rows();
-                let mut imported: usize = 0;
                 for (i, row) in rows.enumerate() {
                     if i == 0 {
                         continue;
@@ -462,17 +437,20 @@ pub async fn import_excel(
                     } else {
                         String::new()
                     };
-                    if let Err(e) = repo.insert_point(
-                        plugin_id, &var_id, &addr, &dtype, &border, scale, off, &vtype, &desc,
-                    ) {
+                    if let Err(e) = repo
+                        .insert_point(
+                            plugin_id, &var_id, &addr, &dtype, &border, scale, off, &vtype, &desc,
+                        )
+                        .await
+                    {
                         log::error!("import row {}: {}", i, e);
                     } else {
                         imported += 1;
                     }
                 }
-                bump_version_and_push(&repo, &engine).await;
-                return Ok(Json(serde_json::json!({"imported": imported})));
             }
+            bump_version_and_push(repo.clone(), engine.clone()).await;
+            return Ok(Json(serde_json::json!({"imported": imported})));
         }
     }
     Err(StatusCode::BAD_REQUEST)
@@ -482,10 +460,7 @@ pub async fn export_excel(
     State(repo): State<AppState>,
     Path(plugin_id): Path<i64>,
 ) -> Result<(StatusCode, [(String, String); 2], Vec<u8>), StatusCode> {
-    let points = repo.list_points(Some(plugin_id)).map_err(|e| {
-        log::error!("{}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let points = repo.list_points(Some(plugin_id)).await.map_err(api_error)?;
     let mut wb = rust_xlsxwriter::Workbook::new();
     let sheet = wb.add_worksheet();
     let headers: [&str; 8] = [
@@ -558,12 +533,10 @@ pub struct PointExport {
 }
 
 pub async fn export_config(State(repo): State<AppState>) -> Result<Json<ConfigExport>, StatusCode> {
-    let pws = repo.list_plugins_with_points().map_err(|e| {
-        log::error!("{}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let pws = repo.list_plugins_with_points().await.map_err(api_error)?;
     let scan_ms: u64 = repo
         .get_config("scan_interval_ms")
+        .await
         .unwrap_or_else(|| "500".into())
         .parse()
         .unwrap_or(500);
@@ -602,36 +575,44 @@ pub async fn export_config(State(repo): State<AppState>) -> Result<Json<ConfigEx
 // Redundancy API
 // ============================================================
 
-fn build_config_snapshot(repo: &Repo) -> ConfigSnapshot {
+async fn build_config_snapshot(repo: &Repo) -> ConfigSnapshot {
     let scan_ms: u64 = repo
         .get_config("scan_interval_ms")
+        .await
         .and_then(|v| v.parse().ok())
         .unwrap_or(500);
     let batch_ms: u64 = repo
         .get_config("batch_interval_ms")
+        .await
         .and_then(|v| v.parse().ok())
         .unwrap_or(100);
     let plugin_dir = repo
         .get_config("plugin_dir")
+        .await
         .unwrap_or_else(|| "./plugins".into());
     let version = repo
         .get_config("config_version")
+        .await
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
     let redundancy = repo
         .get_config("redundancy_config")
+        .await
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or(serde_json::json!({}));
     let alarm_retention_days: u32 = repo
         .get_config("alarm_retention_days")
+        .await
         .and_then(|v| v.parse().ok())
         .unwrap_or(90);
     let soe_retention_days: u32 = repo
         .get_config("soe_retention_days")
+        .await
         .and_then(|v| v.parse().ok())
         .unwrap_or(30);
     let alarm_rules: Vec<SnapshotAlarmRule> = repo
         .list_alarm_rules()
+        .await
         .unwrap_or_default()
         .into_iter()
         .map(|r| SnapshotAlarmRule {
@@ -650,6 +631,7 @@ fn build_config_snapshot(repo: &Repo) -> ConfigSnapshot {
         .collect();
     let plugins = repo
         .list_plugins_with_points()
+        .await
         .unwrap_or_default()
         .into_iter()
         .map(|pw| SnapshotPlugin {
@@ -690,18 +672,18 @@ fn build_config_snapshot(repo: &Repo) -> ConfigSnapshot {
 }
 
 /// 本地配置变更后：递增版本并向对端推送（仅 Active 节点）。
-async fn bump_version_and_push(repo: &Repo, engine: &RedundancyEngine) {
+/// Repo 方法异步化（tokio-rusqlite 专用 DB 线程），不占异步 worker。
+async fn bump_version_and_push(repo: Arc<Repo>, engine: Arc<RedundancyEngine>) {
     if !engine.is_active() {
         return;
     }
-    let v = repo
-        .get_config("config_version")
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(0)
-        + 1;
-    let _ = repo.set_config("config_version", &v.to_string());
+    let v = match repo.get_config("config_version").await {
+        Some(s) => s.parse::<u64>().unwrap_or(0),
+        None => 0,
+    } + 1;
+    let _ = repo.set_config("config_version", &v.to_string()).await;
     engine.set_config_version(v);
-    let snap = build_config_snapshot(repo);
+    let snap = build_config_snapshot(&repo).await;
     let json = serde_json::to_value(&snap).unwrap_or(serde_json::json!({}));
     engine.push_config(json).await;
 }
@@ -711,6 +693,7 @@ pub async fn get_redundancy_config(
 ) -> Result<Json<RedundancyConfig>, StatusCode> {
     let cfg: RedundancyConfig = repo
         .get_config("redundancy_config")
+        .await
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default();
     Ok(Json(cfg))
@@ -731,11 +714,9 @@ pub async fn update_redundancy_config(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     repo.set_config("redundancy_config", &json)
-        .map_err(|e| {
-            log::error!("{}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-    bump_version_and_push(&repo, &engine).await;
+        .await
+        .map_err(api_error)?;
+    bump_version_and_push(repo.clone(), engine.clone()).await;
     Ok(StatusCode::OK)
 }
 
@@ -750,10 +731,13 @@ pub async fn redundancy_sync(
     Extension(engine): Extension<Arc<RedundancyEngine>>,
     Json(body): Json<SyncBody>,
 ) -> Result<StatusCode, StatusCode> {
-    engine.handle_sync(&body).map(|_| StatusCode::OK).map_err(|e| {
-        log::warn!("redundancy sync rejected: {}", e);
-        StatusCode::CONFLICT
-    })
+    engine
+        .handle_sync(&body)
+        .map(|_| StatusCode::OK)
+        .map_err(|e| {
+            log::warn!("redundancy sync rejected: {}", e);
+            StatusCode::CONFLICT
+        })
 }
 
 pub async fn redundancy_snapshot(
@@ -772,20 +756,23 @@ pub async fn apply_config_push(
         log::error!("bad config push: {}", e);
         StatusCode::BAD_REQUEST
     })?;
+    let snap_version = snap.config_version;
     let local: u64 = repo
         .get_config("config_version")
+        .await
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
     if snap.config_version < local {
         return Ok(StatusCode::OK); // 旧版本，忽略
     }
-    repo.apply_config_snapshot(&snap).map_err(|e| {
+    repo.apply_config_snapshot(&snap).await.map_err(|e| {
         log::error!("apply config snapshot failed: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     // Reload alarm rules into the in-memory engine (diff-based recovery).
     let rules: Vec<AlarmRule> = repo
         .list_alarm_rules()
+        .await
         .map_err(|e| {
             log::error!("load alarm rules after config push failed: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
@@ -794,10 +781,10 @@ pub async fn apply_config_push(
         .map(AlarmRule::from)
         .collect();
     alarm_engine.replace_rules(rules);
-    engine.set_config_version(snap.config_version);
+    engine.set_config_version(snap_version);
     engine
         .state()
-        .record_event("config_synced", format!("applied config v{}", snap.config_version));
+        .record_event("config_synced", format!("applied config v{}", snap_version));
     Ok(StatusCode::OK)
 }
 
@@ -893,16 +880,13 @@ fn rule_from_upsert(body: AlarmRuleUpsert, path_id: Option<String>) -> AlarmRule
 }
 
 async fn save_alarm_rule(
-    repo: &Repo,
-    alarm_engine: &AlarmEngine,
-    engine: &RedundancyEngine,
+    repo: Arc<Repo>,
+    alarm_engine: Arc<AlarmEngine>,
+    engine: Arc<RedundancyEngine>,
     rule: AlarmRule,
 ) -> Result<Json<AlarmRule>, StatusCode> {
     let row: AlarmRuleRow = (&rule).into();
-    repo.insert_alarm_rule(&row).map_err(|e| {
-        log::error!("{}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    repo.insert_alarm_rule(&row).await.map_err(api_error)?;
     alarm_engine.set_rule(rule.clone());
     bump_version_and_push(repo, engine).await;
     Ok(Json(rule))
@@ -915,7 +899,7 @@ pub async fn upsert_alarm_rule(
     Json(body): Json<AlarmRuleUpsert>,
 ) -> Result<Json<AlarmRule>, StatusCode> {
     let rule = rule_from_upsert(body, None);
-    save_alarm_rule(&repo, &alarm_engine, &engine, rule).await
+    save_alarm_rule(repo, alarm_engine, engine, rule).await
 }
 
 pub async fn update_alarm_rule(
@@ -926,7 +910,7 @@ pub async fn update_alarm_rule(
     Json(body): Json<AlarmRuleUpsert>,
 ) -> Result<Json<AlarmRule>, StatusCode> {
     let rule = rule_from_upsert(body, Some(id));
-    save_alarm_rule(&repo, &alarm_engine, &engine, rule).await
+    save_alarm_rule(repo, alarm_engine, engine, rule).await
 }
 
 pub async fn delete_alarm_rule(
@@ -936,11 +920,8 @@ pub async fn delete_alarm_rule(
     Path(id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
     alarm_engine.remove_rule(&id);
-    repo.delete_alarm_rule(&id).map_err(|e| {
-        log::error!("{}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-    bump_version_and_push(&repo, &engine).await;
+    repo.delete_alarm_rule(&id).await.map_err(api_error)?;
+    bump_version_and_push(repo.clone(), engine.clone()).await;
     Ok(StatusCode::OK)
 }
 
@@ -977,10 +958,8 @@ pub async fn alarm_history(
             q.page.unwrap_or(1),
             q.page_size.unwrap_or(50),
         )
-        .map_err(|e| {
-            log::error!("{}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        .await
+        .map_err(api_error)?;
     let items: Vec<AlarmOccurrence> = rows.into_iter().map(AlarmOccurrence::from).collect();
     Ok(Json(serde_json::json!({ "total": total, "items": items })))
 }
@@ -991,10 +970,8 @@ pub async fn alarm_occurrence_events(
 ) -> Result<Json<Vec<AlarmStreamEvent>>, StatusCode> {
     let items: Vec<AlarmStreamEvent> = repo
         .query_occurrence_stream_events(&id)
-        .map_err(|e| {
-            log::error!("{}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
+        .await
+        .map_err(api_error)?
         .into_iter()
         .map(AlarmStreamEvent::from)
         .collect();
@@ -1024,12 +1001,12 @@ pub async fn soe_query(
             q.page.unwrap_or(1),
             q.page_size.unwrap_or(50),
         )
-        .map_err(|e| {
-            log::error!("{}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-    let items: Vec<hmi_io_alarm::types::SoeRecord> =
-        rows.into_iter().map(hmi_io_alarm::types::SoeRecord::from).collect();
+        .await
+        .map_err(api_error)?;
+    let items: Vec<hmi_io_alarm::types::SoeRecord> = rows
+        .into_iter()
+        .map(hmi_io_alarm::types::SoeRecord::from)
+        .collect();
     Ok(Json(serde_json::json!({ "total": total, "items": items })))
 }
 
@@ -1069,16 +1046,16 @@ pub struct AlarmConfigBody {
     pub soe_retention_days: u32,
 }
 
-pub async fn get_alarm_config(
-    State(repo): State<AppState>,
-) -> Json<AlarmConfigBody> {
+pub async fn get_alarm_config(State(repo): State<AppState>) -> Json<AlarmConfigBody> {
     Json(AlarmConfigBody {
         alarm_retention_days: repo
             .get_config("alarm_retention_days")
+            .await
             .and_then(|v| v.parse().ok())
             .unwrap_or(90),
         soe_retention_days: repo
             .get_config("soe_retention_days")
+            .await
             .and_then(|v| v.parse().ok())
             .unwrap_or(30),
     })
@@ -1089,17 +1066,25 @@ pub async fn put_alarm_config(
     Extension(engine): Extension<Arc<RedundancyEngine>>,
     Json(body): Json<AlarmConfigBody>,
 ) -> Result<StatusCode, StatusCode> {
-    repo.set_config("alarm_retention_days", &body.alarm_retention_days.to_string())
-        .and_then(|_| repo.set_config("soe_retention_days", &body.soe_retention_days.to_string()))
-        .map_err(|e| {
-            log::error!("{}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-    if let Err(e) = repo.prune_alarm_data(body.alarm_retention_days as u64, body.soe_retention_days as u64)
+    repo.set_config(
+        "alarm_retention_days",
+        &body.alarm_retention_days.to_string(),
+    )
+    .await
+    .map_err(api_error)?;
+    repo.set_config("soe_retention_days", &body.soe_retention_days.to_string())
+        .await
+        .map_err(api_error)?;
+    if let Err(e) = repo
+        .prune_alarm_data(
+            body.alarm_retention_days as u64,
+            body.soe_retention_days as u64,
+        )
+        .await
     {
         log::error!("prune alarm data failed: {}", e);
     }
-    bump_version_and_push(&repo, &engine).await;
+    bump_version_and_push(repo.clone(), engine.clone()).await;
     Ok(StatusCode::OK)
 }
 
@@ -1161,6 +1146,7 @@ pub async fn monitor_history(
 ) -> Json<MonitorHistory> {
     let scan_interval_ms: u64 = repo
         .get_config("scan_interval_ms")
+        .await
         .and_then(|v| v.parse().ok())
         .unwrap_or(500);
     let limit = q.limit.unwrap_or(300).min(MAX_HISTORY_LIMIT);
@@ -1215,12 +1201,24 @@ mod tests {
 
     #[tokio::test]
     async fn list_points_returns_composite_hmi_id() {
-        let repo = Arc::new(Repo::new(":memory:").unwrap());
+        let repo = Arc::new(Repo::new(":memory:").await.unwrap());
         let pid = repo
             .insert_plugin("modbus_tcp", "modbus_tcp.wasm", "{}")
+            .await
             .unwrap();
-        repo.insert_point(pid, "P1", "coil:0", "bool", "big_endian", 1.0, 0.0, "DI", "")
-            .unwrap();
+        repo.insert_point(
+            pid,
+            "P1",
+            "coil:0",
+            "bool",
+            "big_endian",
+            1.0,
+            0.0,
+            "DI",
+            "",
+        )
+        .await
+        .unwrap();
 
         let mut cfg = AppConfig::default_config();
         cfg.plugins.instances = vec![PluginInstance {
@@ -1252,12 +1250,20 @@ mod tests {
 
     #[tokio::test]
     async fn list_points_keeps_same_name_across_instances() {
-        let repo = Arc::new(Repo::new(":memory:").unwrap());
-        let p1 = repo.insert_plugin("mb1", "modbus.wasm", "{}").unwrap();
-        let p2 = repo.insert_plugin("mb2", "modbus.wasm", "{}").unwrap();
+        let repo = Arc::new(Repo::new(":memory:").await.unwrap());
+        let p1 = repo
+            .insert_plugin("mb1", "modbus.wasm", "{}")
+            .await
+            .unwrap();
+        let p2 = repo
+            .insert_plugin("mb2", "modbus.wasm", "{}")
+            .await
+            .unwrap();
         repo.insert_point(p1, "P1", "coil:0", "bool", "big_endian", 1.0, 0.0, "DI", "")
+            .await
             .unwrap();
         repo.insert_point(p2, "P1", "coil:1", "bool", "big_endian", 1.0, 0.0, "DI", "")
+            .await
             .unwrap();
 
         let res = list_points(
@@ -1279,16 +1285,20 @@ mod tests {
 
     #[tokio::test]
     async fn list_points_uses_group_logical_id_and_hides_backups() {
-        let repo = Arc::new(Repo::new(":memory:").unwrap());
+        let repo = Arc::new(Repo::new(":memory:").await.unwrap());
         let p1 = repo
             .insert_plugin_full("mb1", "mb.wasm", "{}", "mb-link", "primary", 0)
+            .await
             .unwrap();
         let p2 = repo
             .insert_plugin_full("mb2", "mb.wasm", "{}", "mb-link", "backup", 1)
+            .await
             .unwrap();
         repo.insert_point(p1, "P1", "a", "bool", "big_endian", 1.0, 0.0, "DI", "")
+            .await
             .unwrap();
         repo.insert_point(p2, "P1", "b", "bool", "big_endian", 1.0, 0.0, "DI", "")
+            .await
             .unwrap();
 
         let mut cfg = AppConfig::default_config();
@@ -1340,19 +1350,32 @@ mod tests {
         assert_eq!(res.0.len(), 2);
     }
 
-    #[test]
-    fn build_config_snapshot_includes_all_fields() {
-        let repo = Arc::new(Repo::new(":memory:").unwrap());
+    #[tokio::test]
+    async fn build_config_snapshot_includes_all_fields() {
+        let repo = Arc::new(Repo::new(":memory:").await.unwrap());
         let pid = repo
             .insert_plugin("mb", "mb.wasm", "{\"host\":\"x\"}")
+            .await
             .unwrap();
-        repo.insert_point(pid, "P1", "coil:0", "bool", "big_endian", 1.0, 0.0, "DI", "d")
-            .unwrap();
-        repo.set_config("config_version", "3").unwrap();
+        repo.insert_point(
+            pid,
+            "P1",
+            "coil:0",
+            "bool",
+            "big_endian",
+            1.0,
+            0.0,
+            "DI",
+            "d",
+        )
+        .await
+        .unwrap();
+        repo.set_config("config_version", "3").await.unwrap();
         repo.set_config("redundancy_config", r#"{"enabled":true}"#)
+            .await
             .unwrap();
 
-        let snap = build_config_snapshot(&repo);
+        let snap = build_config_snapshot(&repo).await;
         assert_eq!(snap.config_version, 3);
         assert_eq!(snap.plugins.len(), 1);
         assert_eq!(snap.plugins[0].name, "mb");

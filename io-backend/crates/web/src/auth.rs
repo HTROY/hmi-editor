@@ -29,7 +29,9 @@ pub async fn login(
     Extension(auth): Extension<Arc<AuthService>>,
     Json(body): Json<LoginRequest>,
 ) -> Result<Json<LoginOutcome>, AuthError> {
-    auth.login(&repo, &body.username, &body.password).map(Json)
+    auth.login(&repo, &body.username, &body.password)
+        .await
+        .map(Json)
 }
 
 pub async fn refresh(
@@ -37,7 +39,7 @@ pub async fn refresh(
     Extension(auth): Extension<Arc<AuthService>>,
     Json(body): Json<RefreshRequest>,
 ) -> Result<Json<TokenPair>, AuthError> {
-    auth.refresh(&repo, &body.refresh_token).map(Json)
+    auth.refresh(&repo, &body.refresh_token).await.map(Json)
 }
 
 pub async fn change_password(
@@ -52,6 +54,7 @@ pub async fn change_password(
         &body.old_password,
         &body.new_password,
     )
+    .await
     .map(Json)
 }
 
@@ -72,8 +75,8 @@ mod tests {
 
     const SECRET: &str = "test-secret-0123456789-0123456789-0123456789";
 
-    fn test_app(repo: Arc<Repo>, auth: Arc<AuthService>) -> (Router, StoreFixture) {
-        let fixture = store();
+    async fn test_app(repo: Arc<Repo>, auth: Arc<AuthService>) -> (Router, StoreFixture) {
+        let fixture = store().await;
         let app = auth_routes(auth.clone())
             .merge(project_routes(fixture.store.clone(), auth))
             .with_state(repo);
@@ -118,18 +121,19 @@ mod tests {
         (status, value)
     }
 
-    fn make_user(repo: &Repo, username: &str, role: Role) {
+    async fn make_user(repo: &Repo, username: &str, role: Role) {
         let hash = AuthService::hash_password("correct-horse-battery").unwrap();
         repo.create_user(username, &hash, &role.to_string(), false)
+            .await
             .unwrap();
     }
 
     #[tokio::test]
     async fn login_refresh_and_forced_password_change_flow() {
-        let repo = Arc::new(Repo::new(":memory:").unwrap());
-        let initial_password = ensure_admin_seeded(&repo).unwrap().unwrap();
+        let repo = Arc::new(Repo::new(":memory:").await.unwrap());
+        let initial_password = ensure_admin_seeded(&repo).await.unwrap().unwrap();
         let auth = Arc::new(AuthService::new(SECRET).unwrap());
-        let (app, _fixture) = test_app(repo.clone(), auth.clone());
+        let (app, _fixture) = test_app(repo.clone(), auth.clone()).await;
 
         let (status, body) = send(
             &app,
@@ -189,35 +193,38 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
         assert!(
-            auth.refresh(&repo, refresh).is_err(),
+            auth.refresh(&repo, refresh).await.is_err(),
             "pre-change refresh stays blocked"
         );
     }
 
     #[tokio::test]
     async fn project_api_enforces_permission_matrix() {
-        let repo = Arc::new(Repo::new(":memory:").unwrap());
+        let repo = Arc::new(Repo::new(":memory:").await.unwrap());
         let auth = Arc::new(AuthService::new(SECRET).unwrap());
-        let (app, _fixture) = test_app(repo.clone(), auth.clone());
+        let (app, _fixture) = test_app(repo.clone(), auth.clone()).await;
 
         for (username, role) in [
             ("eng", Role::Engineer),
             ("op", Role::Operator),
             ("view", Role::Viewer),
         ] {
-            make_user(&repo, username, role);
+            make_user(&repo, username, role).await;
         }
 
         let eng = auth
             .login(&repo, "eng", "correct-horse-battery")
+            .await
             .unwrap()
             .access_token;
         let op = auth
             .login(&repo, "op", "correct-horse-battery")
+            .await
             .unwrap()
             .access_token;
         let view = auth
             .login(&repo, "view", "correct-horse-battery")
+            .await
             .unwrap()
             .access_token;
 
@@ -243,17 +250,19 @@ mod tests {
 
     #[tokio::test]
     async fn audit_log_records_jwt_actor() {
-        let repo = Arc::new(Repo::new(":memory:").unwrap());
+        let repo = Arc::new(Repo::new(":memory:").await.unwrap());
         let auth = Arc::new(AuthService::new(SECRET).unwrap());
-        let (app, fixture) = test_app(repo.clone(), auth.clone());
-        make_user(&repo, "eng", Role::Engineer);
-        make_user(&repo, "admin", Role::Admin);
+        let (app, fixture) = test_app(repo.clone(), auth.clone()).await;
+        make_user(&repo, "eng", Role::Engineer).await;
+        make_user(&repo, "admin", Role::Admin).await;
         let eng = auth
             .login(&repo, "eng", "correct-horse-battery")
+            .await
             .unwrap()
             .access_token;
         let admin = auth
             .login(&repo, "admin", "correct-horse-battery")
+            .await
             .unwrap()
             .access_token;
 
@@ -272,7 +281,11 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::OK);
 
-        let audit = fixture.repo.list_audit_logs(Some("audit-demo")).unwrap();
+        let audit = fixture
+            .repo
+            .list_audit_logs(Some("audit-demo"))
+            .await
+            .unwrap();
         assert_eq!(audit.len(), 2);
         assert_eq!(audit[0].action, "project_push");
         assert_eq!(audit[0].actor, "eng");

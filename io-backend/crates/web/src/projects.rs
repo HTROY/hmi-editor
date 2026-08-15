@@ -14,27 +14,26 @@ use serde::{Deserialize, Serialize};
 pub async fn list_projects(
     Extension(store): Extension<ProjectStore>,
 ) -> Result<Json<Vec<ProjectRow>>, StatusCode> {
-    store.list().map(Json).map_err(map_store_error)
+    let rows = store.list().await.map_err(map_store_error)?;
+    Ok(Json(rows))
 }
 
 pub async fn get_project(
     Extension(store): Extension<ProjectStore>,
     Path(id): Path<String>,
 ) -> Result<(StatusCode, [(String, String); 2], Vec<u8>), StatusCode> {
-    match store.get(&id) {
-        Ok(pkg) => Ok((
-            StatusCode::OK,
-            [
-                ("Content-Type".into(), "application/zip".into()),
-                (
-                    "Content-Disposition".into(),
-                    format!("attachment; filename=\"{}.hmi.zip\"", id),
-                ),
-            ],
-            pkg.bytes,
-        )),
-        Err(e) => Err(map_store_error(e)),
-    }
+    let pkg = store.get(&id).await.map_err(map_store_error)?;
+    Ok((
+        StatusCode::OK,
+        [
+            ("Content-Type".into(), "application/zip".into()),
+            (
+                "Content-Disposition".into(),
+                format!("attachment; filename=\"{}.hmi.zip\"", id),
+            ),
+        ],
+        pkg.bytes,
+    ))
 }
 
 #[derive(Deserialize)]
@@ -58,6 +57,7 @@ pub async fn put_project(
 ) -> Result<Json<ProjectPushResponse>, StatusCode> {
     let out = store
         .put(&id, &body, q.version, &user.username)
+        .await
         .map_err(map_store_error)?;
     Ok(Json(ProjectPushResponse {
         id,
@@ -73,6 +73,7 @@ pub async fn delete_project(
 ) -> Result<StatusCode, StatusCode> {
     store
         .delete(&id, &user.username)
+        .await
         .map(|_| StatusCode::OK)
         .map_err(map_store_error)
 }
@@ -108,7 +109,7 @@ mod tests {
 
     #[tokio::test]
     async fn project_crud_round_trip_and_optimistic_lock() {
-        let fixture = store();
+        let fixture = store().await;
         let store = fixture.store.clone();
         let zip1 = make_zip("v1");
         let zip2 = make_zip("v2");
@@ -195,7 +196,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(err, StatusCode::NOT_FOUND);
 
-        let audit = fixture.repo.list_audit_logs(None).unwrap();
+        let audit = fixture.repo.list_audit_logs(None).await.unwrap();
         assert_eq!(audit.len(), 3);
         assert!(audit.iter().all(|e| e.actor == "alice"));
     }

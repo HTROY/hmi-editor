@@ -35,14 +35,14 @@ impl AuthService {
 
     /// Resolve the signing secret from `HMI_JWT_SECRET` or the persisted
     /// `jwt_secret` server config, generating and storing one on first start.
-    pub fn for_repo(repo: &Repo) -> anyhow::Result<Self> {
+    pub async fn for_repo(repo: &Repo) -> anyhow::Result<Self> {
         let mut secret = std::env::var("HMI_JWT_SECRET").unwrap_or_default();
         if secret.trim().is_empty() {
-            secret = repo.get_config("jwt_secret").unwrap_or_default();
+            secret = repo.get_config("jwt_secret").await.unwrap_or_default();
         }
         if secret.len() < MIN_SECRET_LEN {
             secret = random_secret();
-            repo.set_config("jwt_secret", &secret)?;
+            repo.set_config("jwt_secret", &secret).await?;
         }
         Self::new(secret)
     }
@@ -67,7 +67,7 @@ impl AuthService {
     }
 
     /// Authenticate a user and issue a fresh access/refresh token pair.
-    pub fn login(
+    pub async fn login(
         &self,
         repo: &Repo,
         username: &str,
@@ -75,6 +75,7 @@ impl AuthService {
     ) -> Result<LoginOutcome, AuthError> {
         let row = repo
             .get_user(username)
+            .await
             .map_err(internal)?
             .ok_or(AuthError::InvalidCredentials)?;
         if !Self::verify_password(&row.password_hash, password) {
@@ -97,10 +98,11 @@ impl AuthService {
     }
 
     /// Exchange a valid refresh token for a new access/refresh pair.
-    pub fn refresh(&self, repo: &Repo, refresh_token: &str) -> Result<TokenPair, AuthError> {
+    pub async fn refresh(&self, repo: &Repo, refresh_token: &str) -> Result<TokenPair, AuthError> {
         let claims = self.verify_token(refresh_token, "refresh")?;
         let row = repo
             .get_user(&claims.sub)
+            .await
             .map_err(internal)?
             .ok_or(AuthError::InvalidToken)?;
         if row.token_version != claims.ver {
@@ -116,7 +118,7 @@ impl AuthService {
     }
 
     /// Verify the old password and issue a fresh token pair with the new one.
-    pub fn change_password(
+    pub async fn change_password(
         &self,
         repo: &Repo,
         username: &str,
@@ -128,6 +130,7 @@ impl AuthService {
         }
         let row = repo
             .get_user(username)
+            .await
             .map_err(internal)?
             .ok_or(AuthError::InvalidCredentials)?;
         if !Self::verify_password(&row.password_hash, old_password) {
@@ -136,6 +139,7 @@ impl AuthService {
         let hash = Self::hash_password(new_password).map_err(internal)?;
         let version = repo
             .update_user_password(username, &hash, false)
+            .await
             .map_err(internal)?;
         let role = parse_role(&row.role).ok_or(AuthError::Internal)?;
         self.issue_tokens(username, role, false, version)
@@ -250,23 +254,27 @@ mod tests {
         AuthService::new(SECRET).unwrap()
     }
 
-    fn repo() -> Repo {
-        Repo::new(":memory:").unwrap()
+    async fn repo() -> Repo {
+        Repo::new(":memory:").await.unwrap()
     }
 
-    fn add_user(repo: &Repo, username: &str, role: Role, must_change: bool) {
+    async fn add_user(repo: &Repo, username: &str, role: Role, must_change: bool) {
         let hash = AuthService::hash_password("correct-horse-battery").unwrap();
         repo.create_user(username, &hash, &role.to_string(), must_change)
+            .await
             .unwrap();
     }
 
-    #[test]
-    fn login_issues_tokens_for_valid_credentials() {
-        let repo = repo();
-        add_user(&repo, "alice", Role::Engineer, true);
+    #[tokio::test]
+    async fn login_issues_tokens_for_valid_credentials() {
+        let repo = repo().await;
+        add_user(&repo, "alice", Role::Engineer, true).await;
         let auth = service();
 
-        let out = auth.login(&repo, "alice", "correct-horse-battery").unwrap();
+        let out = auth
+            .login(&repo, "alice", "correct-horse-battery")
+            .await
+            .unwrap();
         assert_eq!(out.role, Role::Engineer);
         assert!(out.must_change_password);
         assert_eq!(out.token_type, "bearer");
@@ -279,31 +287,37 @@ mod tests {
         assert!(user.must_change_password);
     }
 
-    #[test]
-    fn login_rejects_wrong_password_and_missing_user() {
-        let repo = repo();
-        add_user(&repo, "alice", Role::Admin, false);
+    #[tokio::test]
+    async fn login_rejects_wrong_password_and_missing_user() {
+        let repo = repo().await;
+        add_user(&repo, "alice", Role::Admin, false).await;
         let auth = service();
 
         assert_eq!(
-            auth.login(&repo, "alice", "wrong-password").unwrap_err(),
+            auth.login(&repo, "alice", "wrong-password")
+                .await
+                .unwrap_err(),
             AuthError::InvalidCredentials
         );
         assert_eq!(
             auth.login(&repo, "nobody", "correct-horse-battery")
+                .await
                 .unwrap_err(),
             AuthError::InvalidCredentials
         );
     }
 
-    #[test]
-    fn refresh_issues_fresh_pair_and_new_access_works() {
-        let repo = repo();
-        add_user(&repo, "bob", Role::Operator, false);
+    #[tokio::test]
+    async fn refresh_issues_fresh_pair_and_new_access_works() {
+        let repo = repo().await;
+        add_user(&repo, "bob", Role::Operator, false).await;
         let auth = service();
-        let first = auth.login(&repo, "bob", "correct-horse-battery").unwrap();
+        let first = auth
+            .login(&repo, "bob", "correct-horse-battery")
+            .await
+            .unwrap();
 
-        let pair = auth.refresh(&repo, &first.refresh_token).unwrap();
+        let pair = auth.refresh(&repo, &first.refresh_token).await.unwrap();
         assert_ne!(pair.access_token, first.access_token);
         assert_ne!(pair.refresh_token, first.refresh_token);
 
@@ -312,19 +326,22 @@ mod tests {
         assert!(!user.must_change_password);
     }
 
-    #[test]
-    fn refresh_rejects_access_token_and_garbage() {
-        let repo = repo();
-        add_user(&repo, "bob", Role::Admin, false);
+    #[tokio::test]
+    async fn refresh_rejects_access_token_and_garbage() {
+        let repo = repo().await;
+        add_user(&repo, "bob", Role::Admin, false).await;
         let auth = service();
-        let out = auth.login(&repo, "bob", "correct-horse-battery").unwrap();
+        let out = auth
+            .login(&repo, "bob", "correct-horse-battery")
+            .await
+            .unwrap();
 
         assert_eq!(
-            auth.refresh(&repo, &out.access_token).unwrap_err(),
+            auth.refresh(&repo, &out.access_token).await.unwrap_err(),
             AuthError::InvalidToken
         );
         assert_eq!(
-            auth.refresh(&repo, "not-a-token").unwrap_err(),
+            auth.refresh(&repo, "not-a-token").await.unwrap_err(),
             AuthError::InvalidToken
         );
     }
@@ -356,60 +373,70 @@ mod tests {
         );
     }
 
-    #[test]
-    fn change_password_requires_old_password_and_clears_flag() {
-        let repo = repo();
-        add_user(&repo, "carol", Role::Viewer, true);
+    #[tokio::test]
+    async fn change_password_requires_old_password_and_clears_flag() {
+        let repo = repo().await;
+        add_user(&repo, "carol", Role::Viewer, true).await;
         let auth = service();
 
         assert_eq!(
             auth.change_password(&repo, "carol", "wrong-old", "new-password-123")
+                .await
                 .unwrap_err(),
             AuthError::InvalidCredentials
         );
         assert_eq!(
             auth.change_password(&repo, "carol", "correct-horse-battery", "short")
+                .await
                 .unwrap_err(),
             AuthError::WeakPassword
         );
 
         let pair = auth
             .change_password(&repo, "carol", "correct-horse-battery", "new-password-123")
+            .await
             .unwrap();
         let user = auth.authenticate(&pair.access_token).unwrap();
         assert_eq!(user.username, "carol");
         assert!(!user.must_change_password);
-        let row = repo.get_user("carol").unwrap().unwrap();
+        let row = repo.get_user("carol").await.unwrap().unwrap();
         assert!(!row.must_change_password);
         assert_eq!(
             auth.login(&repo, "carol", "new-password-123")
+                .await
                 .unwrap()
                 .must_change_password,
             false
         );
         assert_eq!(
             auth.login(&repo, "carol", "correct-horse-battery")
+                .await
                 .unwrap_err(),
             AuthError::InvalidCredentials
         );
     }
 
-    #[test]
-    fn refresh_rejects_token_issued_before_password_change() {
-        let repo = repo();
-        add_user(&repo, "dave", Role::Engineer, false);
+    #[tokio::test]
+    async fn refresh_rejects_token_issued_before_password_change() {
+        let repo = repo().await;
+        add_user(&repo, "dave", Role::Engineer, false).await;
         let auth = service();
-        let first = auth.login(&repo, "dave", "correct-horse-battery").unwrap();
+        let first = auth
+            .login(&repo, "dave", "correct-horse-battery")
+            .await
+            .unwrap();
 
         let pair = auth
             .change_password(&repo, "dave", "correct-horse-battery", "new-password-456")
+            .await
             .unwrap();
         assert_eq!(
-            auth.refresh(&repo, &first.refresh_token).unwrap_err(),
+            auth.refresh(&repo, &first.refresh_token).await.unwrap_err(),
             AuthError::InvalidToken
         );
         assert_eq!(
             auth.refresh(&repo, &pair.refresh_token)
+                .await
                 .unwrap()
                 .access_token
                 .len()

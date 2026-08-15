@@ -109,19 +109,21 @@ impl ProjectStore {
     }
 
     /// List project metadata, most recently updated first.
-    pub fn list(&self) -> Result<Vec<ProjectRow>, ProjectStoreError> {
+    pub async fn list(&self) -> Result<Vec<ProjectRow>, ProjectStoreError> {
         self.repo
             .list_projects()
+            .await
             .map_err(ProjectStoreError::Storage)
     }
 
-    pub fn get(&self, id: &str) -> Result<ProjectPackage, ProjectStoreError> {
+    pub async fn get(&self, id: &str) -> Result<ProjectPackage, ProjectStoreError> {
         let meta = self
             .repo
             .get_project(id)
+            .await
             .map_err(ProjectStoreError::Storage)?
             .ok_or(ProjectStoreError::NotFound)?;
-        let bytes = fs::read(self.package_path(id)?).map_err(|e| {
+        let bytes = tokio::fs::read(self.package_path(id)?).await.map_err(|e| {
             log::error!(
                 "project '{}' has metadata but no package on disk: {}",
                 id,
@@ -139,7 +141,7 @@ impl ProjectStore {
     /// The new package is swapped into place *before* the DB commit, and the
     /// swap is rolled back if the commit fails, so a failed push never
     /// leaves the disk package out of sync with the recorded version.
-    pub fn put(
+    pub async fn put(
         &self,
         id: &str,
         bytes: &[u8],
@@ -155,40 +157,43 @@ impl ProjectStore {
             .filter(|n| !n.trim().is_empty())
             .unwrap_or_else(|| id.to_string());
         let tmp = self.temp_path(id)?;
-        if let Err(e) = fs::write(&tmp, bytes) {
-            let _ = fs::remove_file(&tmp);
+        if let Err(e) = tokio::fs::write(&tmp, bytes).await {
+            let _ = tokio::fs::remove_file(&tmp).await;
             return Err(ProjectStoreError::Storage(e.into()));
         }
         let to = self.package_path(id)?;
-        let swapped = match self.swap_in(id, &tmp, &to) {
+        let swapped = match self.swap_in(id, &tmp, &to).await {
             Ok(swapped) => swapped,
             Err(e) => {
-                let _ = fs::remove_file(&tmp);
+                let _ = tokio::fs::remove_file(&tmp).await;
                 return Err(e);
             }
         };
-        let result = match self.commit_push(
-            id,
-            expected_version,
-            &name,
-            manifest.schema_version,
-            bytes.len() as u64,
-            actor,
-        ) {
+        let result = match self
+            .commit_push(
+                id,
+                expected_version,
+                &name,
+                manifest.schema_version,
+                bytes.len() as u64,
+                actor,
+            )
+            .await
+        {
             Ok(Some(result)) => result,
             Ok(None) => {
-                self.rollback_swap(id, &swapped, &to);
+                self.rollback_swap(id, &swapped, &to).await;
                 return Err(ProjectStoreError::Conflict(format!(
                     "project '{}' version mismatch (expected {:?})",
                     id, expected_version
                 )));
             }
             Err(e) => {
-                self.rollback_swap(id, &swapped, &to);
+                self.rollback_swap(id, &swapped, &to).await;
                 return Err(ProjectStoreError::Storage(e));
             }
         };
-        self.commit_swap(&swapped);
+        self.commit_swap(&swapped).await;
         Ok(PutOutcome {
             created: result.created,
             version: result.version,
@@ -197,7 +202,7 @@ impl ProjectStore {
 
     /// The DB commit step of `put`, split out so tests can inject a failure
     /// at the exact point where the file swap must be rolled back.
-    fn commit_push(
+    async fn commit_push(
         &self,
         id: &str,
         expected_version: Option<u64>,
@@ -213,23 +218,25 @@ impl ProjectStore {
         {
             return Err(anyhow::anyhow!("injected DB push failure"));
         }
-        self.repo.push_project(
-            id,
-            expected_version,
-            name,
-            schema_version,
-            size_bytes,
-            actor,
-            "push",
-        )
+        self.repo
+            .push_project(
+                id,
+                expected_version,
+                name,
+                schema_version,
+                size_bytes,
+                actor,
+                "push",
+            )
+            .await
     }
 
-    pub fn delete(&self, id: &str, actor: &str) -> Result<(), ProjectStoreError> {
+    pub async fn delete(&self, id: &str, actor: &str) -> Result<(), ProjectStoreError> {
         let path = self.package_path(id)?;
-        if !path.exists() {
+        if !tokio::fs::try_exists(&path).await.unwrap_or(false) {
             // No package on disk (maybe already removed by an earlier failure):
             // still remove the metadata so the record cannot dangle.
-            return match self.repo.delete_project(id, actor, "delete") {
+            return match self.repo.delete_project(id, actor, "delete").await {
                 Ok(Some(_)) => Ok(()),
                 Ok(None) => Err(ProjectStoreError::NotFound),
                 Err(e) => Err(ProjectStoreError::Storage(e)),
@@ -237,22 +244,24 @@ impl ProjectStore {
         }
         // Move aside first so a failed DB transaction can restore the package.
         let tomb = self.temp_path(id)?;
-        fs::rename(&path, &tomb).map_err(|e| ProjectStoreError::Storage(e.into()))?;
-        match self.repo.delete_project(id, actor, "delete") {
+        tokio::fs::rename(&path, &tomb)
+            .await
+            .map_err(|e| ProjectStoreError::Storage(e.into()))?;
+        match self.repo.delete_project(id, actor, "delete").await {
             Ok(Some(_)) => {
-                if let Err(e) = fs::remove_file(&tomb) {
+                if let Err(e) = tokio::fs::remove_file(&tomb).await {
                     log::warn!("removing tombstone for '{}' failed: {}", id, e);
                 }
                 Ok(())
             }
             Ok(None) => {
-                if let Err(e) = fs::rename(&tomb, &path) {
+                if let Err(e) = tokio::fs::rename(&tomb, &path).await {
                     log::error!("restoring project package for '{}' failed: {}", id, e);
                 }
                 Err(ProjectStoreError::NotFound)
             }
             Err(e) => {
-                if let Err(e2) = fs::rename(&tomb, &path) {
+                if let Err(e2) = tokio::fs::rename(&tomb, &path).await {
                     log::error!("restoring project package for '{}' failed: {}", id, e2);
                 }
                 Err(ProjectStoreError::Storage(e))
@@ -281,7 +290,7 @@ impl ProjectStore {
     /// either `commit_swap` (DB change applied) or `rollback_swap` (DB
     /// change failed). If the swap itself fails, the previous package is
     /// restored and `from` removed before returning.
-    fn swap_in(
+    async fn swap_in(
         &self,
         id: &str,
         from: &Path,
@@ -290,15 +299,17 @@ impl ProjectStore {
         // Windows `fs::rename` cannot overwrite an existing destination, so
         // move the old package aside first and restore it if the swap fails.
         let backup = self.temp_path(id)?;
-        let had_old = to.exists();
+        let had_old = tokio::fs::try_exists(to).await.unwrap_or(false);
         if had_old {
-            fs::rename(to, &backup).map_err(|e| ProjectStoreError::Storage(e.into()))?;
+            tokio::fs::rename(to, &backup)
+                .await
+                .map_err(|e| ProjectStoreError::Storage(e.into()))?;
         }
-        if let Err(e) = fs::rename(from, to) {
+        if let Err(e) = tokio::fs::rename(from, to).await {
             if had_old {
-                let _ = fs::rename(&backup, to);
+                let _ = tokio::fs::rename(&backup, to).await;
             }
-            let _ = fs::remove_file(from);
+            let _ = tokio::fs::remove_file(from).await;
             return Err(ProjectStoreError::Storage(e.into()));
         }
         Ok(SwappedPackage { had_old, backup })
@@ -306,9 +317,9 @@ impl ProjectStore {
 
     /// Finalize a successful swap: the DB change is committed, so the
     /// parked previous package can be dropped.
-    fn commit_swap(&self, swapped: &SwappedPackage) {
+    async fn commit_swap(&self, swapped: &SwappedPackage) {
         if swapped.had_old {
-            if let Err(e) = fs::remove_file(&swapped.backup) {
+            if let Err(e) = tokio::fs::remove_file(&swapped.backup).await {
                 log::warn!(
                     "removing project backup '{}' failed: {}",
                     swapped.backup.display(),
@@ -321,8 +332,8 @@ impl ProjectStore {
     /// Undo a swap after the DB change failed: remove the newly placed
     /// package and restore the previous one (if any). Best effort; failures
     /// are logged and the original error is reported by the caller.
-    fn rollback_swap(&self, id: &str, swapped: &SwappedPackage, to: &Path) {
-        if let Err(e) = fs::remove_file(to) {
+    async fn rollback_swap(&self, id: &str, swapped: &SwappedPackage, to: &Path) {
+        if let Err(e) = tokio::fs::remove_file(to).await {
             log::warn!(
                 "removing replaced project package '{}' failed: {}",
                 to.display(),
@@ -330,7 +341,7 @@ impl ProjectStore {
             );
         }
         if swapped.had_old {
-            if let Err(e) = fs::rename(&swapped.backup, to) {
+            if let Err(e) = tokio::fs::rename(&swapped.backup, to).await {
                 log::error!(
                     "restoring previous package for '{}' after failed DB commit failed: {}",
                     id,
@@ -508,8 +519,8 @@ mod tests {
         }
     }
 
-    fn repo() -> Arc<Repo> {
-        Arc::new(Repo::new(":memory:").unwrap())
+    async fn repo() -> Arc<Repo> {
+        Arc::new(Repo::new(":memory:").await.unwrap())
     }
 
     fn make_zip(schema_version: u64, name: Option<&str>, asset: &str) -> Vec<u8> {
@@ -526,52 +537,55 @@ mod tests {
         writer.finish().unwrap().into_inner()
     }
 
-    #[test]
-    fn put_creates_and_get_round_trips_package() {
+    #[tokio::test]
+    async fn put_creates_and_get_round_trips_package() {
         let dir = TempDir::new("put");
-        let store = ProjectStore::new(repo(), dir.path()).unwrap();
+        let store = ProjectStore::new(repo().await, dir.path()).unwrap();
         let zip = make_zip(1, Some("Line 1"), "hello");
 
-        let out = store.put("demo", &zip, None, "tester").unwrap();
+        let out = store.put("demo", &zip, None, "tester").await.unwrap();
         assert!(out.created);
         assert_eq!(out.version, 1);
 
-        let pkg = store.get("demo").unwrap();
+        let pkg = store.get("demo").await.unwrap();
         assert_eq!(pkg.bytes, zip);
         assert_eq!(pkg.meta.name, "Line 1");
         assert_eq!(pkg.meta.schema_version, 1);
         assert_eq!(pkg.meta.version, 1);
         assert_eq!(pkg.meta.size_bytes, zip.len() as u64);
         assert!(dir.path().join("demo.hmi.zip").exists());
-        assert_eq!(store.list().unwrap().len(), 1);
+        assert_eq!(store.list().await.unwrap().len(), 1);
     }
 
-    #[test]
-    fn put_bumps_version_and_rejects_stale() {
+    #[tokio::test]
+    async fn put_bumps_version_and_rejects_stale() {
         let dir = TempDir::new("bump");
-        let store = ProjectStore::new(repo(), dir.path()).unwrap();
+        let store = ProjectStore::new(repo().await, dir.path()).unwrap();
         let v1 = make_zip(1, None, "v1");
         let v2 = make_zip(1, Some("v2"), "v2");
 
-        store.put("demo", &v1, None, "tester").unwrap();
-        let out = store.put("demo", &v2, Some(1), "tester").unwrap();
+        store.put("demo", &v1, None, "tester").await.unwrap();
+        let out = store.put("demo", &v2, Some(1), "tester").await.unwrap();
         assert!(!out.created);
         assert_eq!(out.version, 2);
 
-        let err = store.put("demo", &v1, Some(1), "tester").unwrap_err();
+        let err = store.put("demo", &v1, Some(1), "tester").await.unwrap_err();
         assert!(matches!(err, ProjectStoreError::Conflict(_)));
-        let pkg = store.get("demo").unwrap();
+        let pkg = store.get("demo").await.unwrap();
         assert_eq!(pkg.bytes, v2);
         assert_eq!(pkg.meta.version, 2);
     }
 
-    #[test]
-    fn invalid_packages_are_rejected() {
+    #[tokio::test]
+    async fn invalid_packages_are_rejected() {
         let dir = TempDir::new("invalid");
-        let store = ProjectStore::new(repo(), dir.path()).unwrap();
+        let store = ProjectStore::new(repo().await, dir.path()).unwrap();
 
         assert!(matches!(
-            store.put("demo", b"not a zip", None, "tester").unwrap_err(),
+            store
+                .put("demo", b"not a zip", None, "tester")
+                .await
+                .unwrap_err(),
             ProjectStoreError::InvalidPackage(_)
         ));
         assert!(matches!(
@@ -600,14 +614,17 @@ mod tests {
         writer.write_all(b"x").unwrap();
         let no_manifest = writer.finish().unwrap().into_inner();
         assert!(matches!(
-            store.put("demo", &no_manifest, None, "tester").unwrap_err(),
+            store
+                .put("demo", &no_manifest, None, "tester")
+                .await
+                .unwrap_err(),
             ProjectStoreError::InvalidPackage(_)
         ));
 
         // Oversized package.
         let big = vec![0u8; MAX_PROJECT_ZIP_SIZE + 1];
         assert!(matches!(
-            store.put("demo", &big, None, "tester").unwrap_err(),
+            store.put("demo", &big, None, "tester").await.unwrap_err(),
             ProjectStoreError::TooLarge(_)
         ));
 
@@ -621,6 +638,7 @@ mod tests {
         assert!(matches!(
             store
                 .put("demo", &bad_manifest, None, "tester")
+                .await
                 .unwrap_err(),
             ProjectStoreError::InvalidPackage(_)
         ));
@@ -637,7 +655,10 @@ mod tests {
         writer.write_all(b"x").unwrap();
         let unsafe_zip = writer.finish().unwrap().into_inner();
         assert!(matches!(
-            store.put("demo", &unsafe_zip, None, "tester").unwrap_err(),
+            store
+                .put("demo", &unsafe_zip, None, "tester")
+                .await
+                .unwrap_err(),
             ProjectStoreError::InvalidPackage(_)
         ));
 
@@ -653,47 +674,49 @@ mod tests {
         assert!(matches!(
             store
                 .put("demo", &big_manifest, None, "tester")
+                .await
                 .unwrap_err(),
             ProjectStoreError::InvalidPackage(_)
         ));
     }
 
-    #[test]
-    fn delete_removes_package_metadata_and_writes_audit() {
+    #[tokio::test]
+    async fn delete_removes_package_metadata_and_writes_audit() {
         let dir = TempDir::new("delete");
-        let store = ProjectStore::new(repo(), dir.path()).unwrap();
+        let store = ProjectStore::new(repo().await, dir.path()).unwrap();
         let zip = make_zip(1, Some("del"), "x");
-        store.put("demo", &zip, None, "tester").unwrap();
+        store.put("demo", &zip, None, "tester").await.unwrap();
 
-        store.delete("demo", "tester").unwrap();
+        store.delete("demo", "tester").await.unwrap();
         assert!(!dir.path().join("demo.hmi.zip").exists());
         assert!(matches!(
-            store.get("demo").unwrap_err(),
+            store.get("demo").await.unwrap_err(),
             ProjectStoreError::NotFound
         ));
         assert!(matches!(
-            store.delete("demo", "tester").unwrap_err(),
+            store.delete("demo", "tester").await.unwrap_err(),
             ProjectStoreError::NotFound
         ));
-        let audit = store.repo.list_audit_logs(Some("demo")).unwrap();
+        let audit = store.repo.list_audit_logs(Some("demo")).await.unwrap();
         assert_eq!(audit.len(), 2);
         assert_eq!(audit[0].action, "project_push");
         assert_eq!(audit[1].action, "project_delete");
         assert!(audit.iter().all(|e| e.actor == "tester"));
     }
 
-    #[test]
-    fn delete_cleans_up_metadata_when_package_missing() {
+    #[tokio::test]
+    async fn delete_cleans_up_metadata_when_package_missing() {
         let dir = TempDir::new("delete-missing");
-        let store = ProjectStore::new(repo(), dir.path()).unwrap();
+        let store = ProjectStore::new(repo().await, dir.path()).unwrap();
         store
             .put("demo", &make_zip(1, None, "x"), None, "tester")
+            .await
             .unwrap();
         fs::remove_file(dir.path().join("demo.hmi.zip")).unwrap();
 
-        store.delete("demo", "tester").unwrap();
+        store.delete("demo", "tester").await.unwrap();
         assert!(matches!(
-            store.get("demo").unwrap_err(),
+            store.get("demo").await.unwrap_err(),
             ProjectStoreError::NotFound
         ));
     }
@@ -709,100 +732,104 @@ mod tests {
             .collect()
     }
 
-    #[test]
-    fn put_rolls_back_swap_when_db_commit_fails() {
+    #[tokio::test]
+    async fn put_rolls_back_swap_when_db_commit_fails() {
         let dir = TempDir::new("put-db-fail");
-        let store = ProjectStore::new(repo(), dir.path()).unwrap();
+        let store = ProjectStore::new(repo().await, dir.path()).unwrap();
         let v1 = make_zip(1, Some("v1"), "v1");
         let v2 = make_zip(1, Some("v2"), "v2");
-        store.put("demo", &v1, None, "tester").unwrap();
+        store.put("demo", &v1, None, "tester").await.unwrap();
 
         // Fail the DB commit after the file swap: the swap must be rolled
         // back, keeping disk and DB on the previous version.
         store.fail_push.store(true, Ordering::SeqCst);
-        let err = store.put("demo", &v2, Some(1), "tester").unwrap_err();
+        let err = store.put("demo", &v2, Some(1), "tester").await.unwrap_err();
         assert!(matches!(err, ProjectStoreError::Storage(_)));
 
         // The previous package is back on disk and the DB still records
         // version 1 (no version bump leaked from the failed commit).
         assert_eq!(fs::read(dir.path().join("demo.hmi.zip")).unwrap(), v1);
-        let meta = store.repo.get_project("demo").unwrap().unwrap();
+        let meta = store.repo.get_project("demo").await.unwrap().unwrap();
         assert_eq!(meta.version, 1);
         assert_eq!(meta.name, "v1");
         assert!(stray_tmp_files(dir.path()).is_empty());
     }
 
-    #[test]
-    fn put_db_failure_without_previous_package_leaves_no_trace() {
+    #[tokio::test]
+    async fn put_db_failure_without_previous_package_leaves_no_trace() {
         let dir = TempDir::new("put-db-fail-new");
-        let store = ProjectStore::new(repo(), dir.path()).unwrap();
+        let store = ProjectStore::new(repo().await, dir.path()).unwrap();
 
         store.fail_push.store(true, Ordering::SeqCst);
         let err = store
             .put("demo", &make_zip(1, Some("v1"), "v1"), None, "tester")
+            .await
             .unwrap_err();
         assert!(matches!(err, ProjectStoreError::Storage(_)));
 
         // No package left behind and no dangling metadata row.
         assert!(!dir.path().join("demo.hmi.zip").exists());
-        assert!(store.repo.get_project("demo").unwrap().is_none());
+        assert!(store.repo.get_project("demo").await.unwrap().is_none());
         assert!(stray_tmp_files(dir.path()).is_empty());
     }
 
-    #[test]
-    fn put_conflict_rolls_back_swap_and_keeps_previous_package() {
+    #[tokio::test]
+    async fn put_conflict_rolls_back_swap_and_keeps_previous_package() {
         let dir = TempDir::new("put-conflict");
-        let store = ProjectStore::new(repo(), dir.path()).unwrap();
+        let store = ProjectStore::new(repo().await, dir.path()).unwrap();
         let v1 = make_zip(1, Some("v1"), "v1");
         let v2 = make_zip(1, Some("v2"), "v2");
-        store.put("demo", &v1, None, "tester").unwrap();
+        store.put("demo", &v1, None, "tester").await.unwrap();
 
         // Stale expected_version: the package is swapped in before the lock
         // check, so the swap must be rolled back before the conflict is
         // reported, keeping disk and DB on the previous version.
-        let err = store.put("demo", &v2, Some(99), "tester").unwrap_err();
+        let err = store
+            .put("demo", &v2, Some(99), "tester")
+            .await
+            .unwrap_err();
         assert!(matches!(err, ProjectStoreError::Conflict(_)));
 
-        let pkg = store.get("demo").unwrap();
+        let pkg = store.get("demo").await.unwrap();
         assert_eq!(pkg.bytes, v1);
         assert_eq!(pkg.meta.version, 1);
         assert!(stray_tmp_files(dir.path()).is_empty());
     }
 
-    #[test]
-    fn swap_in_restores_previous_package_on_rename_failure() {
+    #[tokio::test]
+    async fn swap_in_restores_previous_package_on_rename_failure() {
         let dir = TempDir::new("swap-fail");
-        let store = ProjectStore::new(repo(), dir.path()).unwrap();
+        let store = ProjectStore::new(repo().await, dir.path()).unwrap();
         let v1 = make_zip(1, Some("v1"), "v1");
-        store.put("demo", &v1, None, "tester").unwrap();
+        store.put("demo", &v1, None, "tester").await.unwrap();
 
         // A missing `from` makes the second rename fail; the previous
         // package must be restored and no temp files may remain.
         let missing = dir.path().join("does-not-exist.tmp");
         let to = store.package_path("demo").unwrap();
-        let err = store.swap_in("demo", &missing, &to).unwrap_err();
+        let err = store.swap_in("demo", &missing, &to).await.unwrap_err();
         assert!(matches!(err, ProjectStoreError::Storage(_)));
 
         assert_eq!(fs::read(&to).unwrap(), v1);
         assert!(stray_tmp_files(dir.path()).is_empty());
     }
 
-    #[test]
-    fn put_recovers_when_previous_package_is_missing_on_disk() {
+    #[tokio::test]
+    async fn put_recovers_when_previous_package_is_missing_on_disk() {
         let dir = TempDir::new("put-missing-pkg");
-        let store = ProjectStore::new(repo(), dir.path()).unwrap();
+        let store = ProjectStore::new(repo().await, dir.path()).unwrap();
         let v1 = make_zip(1, None, "v1");
         let v2 = make_zip(1, Some("v2"), "v2");
-        store.put("demo", &v1, None, "tester").unwrap();
+        store.put("demo", &v1, None, "tester").await.unwrap();
         // Simulate an earlier failure that left metadata without a package:
         // the next push must still succeed and end up consistent.
         fs::remove_file(dir.path().join("demo.hmi.zip")).unwrap();
 
-        let out = store.put("demo", &v2, Some(1), "tester").unwrap();
+        let out = store.put("demo", &v2, Some(1), "tester").await.unwrap();
         assert!(!out.created);
         assert_eq!(out.version, 2);
 
-        let pkg = store.get("demo").unwrap();
+        let pkg = store.get("demo").await.unwrap();
         assert_eq!(pkg.bytes, v2);
         assert_eq!(pkg.meta.version, 2);
         assert!(stray_tmp_files(dir.path()).is_empty());

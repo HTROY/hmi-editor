@@ -1,3 +1,5 @@
+use hmi_io_alarm::engine::AlarmEngine;
+use hmi_io_alarm::types::AlarmRule;
 use hmi_io_bridge::bridge::Bridge;
 use hmi_io_config::AppConfig;
 use hmi_io_db::repo::Repo;
@@ -5,8 +7,6 @@ use hmi_io_monitor::collector::MonitorCollector;
 use hmi_io_plugin::registry::PluginRegistry;
 use hmi_io_point::manager::PointManager;
 use hmi_io_point::redundancy::{NodeState, RedundancyEngine, RoleCommand};
-use hmi_io_alarm::engine::AlarmEngine;
-use hmi_io_alarm::types::AlarmRule;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 
@@ -16,53 +16,60 @@ fn main() -> anyhow::Result<()> {
         .init();
     log::info!("=== HMI I/O Backend v{} ===", env!("CARGO_PKG_VERSION"));
 
-    let db_path = "hmi_io.db";
-    let repo = Repo::new(db_path)?;
-    log::info!("Database: {}", db_path);
-    let repo_arc = Arc::new(repo);
-
-    if let Some(initial_password) = hmi_io_auth::ensure_admin_seeded(repo_arc.as_ref())? {
-        log::warn!(
-            "Seeded initial admin user: username=admin password={} (must change on first login)",
-            initial_password
-        );
-    }
-    let auth = Arc::new(hmi_io_auth::AuthService::for_repo(repo_arc.as_ref())?);
-
-    let monitor = MonitorCollector::new();
-
     let config_path = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "config.yaml".to_string());
-    let app_config = build_config(repo_arc.as_ref(), &config_path)?;
-
-    let ws_port: u16 = repo_arc
-        .get_config("ws_port")
-        .unwrap_or_else(|| "8080".into())
-        .parse()
-        .unwrap_or(app_config.server.port);
-    let web_port: u16 = repo_arc
-        .get_config("web_port")
-        .unwrap_or_else(|| "8081".into())
-        .parse()
-        .unwrap_or(app_config.server.web_port);
-    let batch_interval_ms: u64 = repo_arc
-        .get_config("batch_interval_ms")
-        .unwrap_or_else(|| "100".into())
-        .parse()
-        .unwrap_or(100);
 
     let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(4)
+        .worker_threads(8)
         .enable_all()
         .build()?;
 
     rt.block_on(async move {
+        let db_path = "hmi_io.db";
+        let repo = Repo::new(db_path).await?;
+        log::info!("Database: {}", db_path);
+        let repo_arc = Arc::new(repo);
+
+        if let Some(initial_password) =
+            hmi_io_auth::ensure_admin_seeded(repo_arc.as_ref()).await?
+        {
+            log::warn!(
+                "Seeded initial admin user: username=admin password={} (must change on first login)",
+                initial_password
+            );
+        }
+        let auth = Arc::new(hmi_io_auth::AuthService::for_repo(repo_arc.as_ref()).await?);
+
+        let monitor = MonitorCollector::new();
+
+        let app_config = build_config(repo_arc.as_ref(), &config_path).await?;
+
+        let ws_port: u16 = repo_arc
+            .get_config("ws_port")
+            .await
+            .unwrap_or_else(|| "8080".into())
+            .parse()
+            .unwrap_or(app_config.server.port);
+        let web_port: u16 = repo_arc
+            .get_config("web_port")
+            .await
+            .unwrap_or_else(|| "8081".into())
+            .parse()
+            .unwrap_or(app_config.server.web_port);
+        let batch_interval_ms: u64 = repo_arc
+            .get_config("batch_interval_ms")
+            .await
+            .unwrap_or_else(|| "100".into())
+            .parse()
+            .unwrap_or(100);
+
         // Alarm engine: IO-free state machine + persister task.
         let (alarm_tx, alarm_rx) = mpsc::unbounded_channel::<hmi_io_alarm::types::OutEvent>();
-        let alarm_engine = AlarmEngine::with_soe_seq(alarm_tx, repo_arc.max_soe_seq());
+        let alarm_engine = AlarmEngine::with_soe_seq(alarm_tx, repo_arc.max_soe_seq().await);
         let rules: Vec<AlarmRule> = repo_arc
             .list_alarm_rules()
+            .await
             .map(|rows| rows.into_iter().map(AlarmRule::from).collect())
             .unwrap_or_else(|e| {
                 log::error!("Load alarm rules failed: {}", e);
@@ -71,10 +78,12 @@ fn main() -> anyhow::Result<()> {
         alarm_engine.load_rules(rules);
         let active = repo_arc
             .list_active_alarm_occurrences()
+            .await
             .map(|rows| rows.into_iter().map(hmi_io_alarm::types::AlarmOccurrence::from).collect())
             .unwrap_or_default();
         let recovered_unacked = repo_arc
             .list_recovered_unacked()
+            .await
             .map(|rows| rows.into_iter().map(hmi_io_alarm::types::AlarmOccurrence::from).collect())
             .unwrap_or_default();
         alarm_engine.restore_occurrences(active, recovered_unacked);
@@ -115,13 +124,15 @@ fn main() -> anyhow::Result<()> {
                     interval.tick().await;
                     let alarm_days: u64 = repo_for_prune
                         .get_config("alarm_retention_days")
+                        .await
                         .and_then(|v| v.parse().ok())
                         .unwrap_or(90);
                     let soe_days: u64 = repo_for_prune
                         .get_config("soe_retention_days")
+                        .await
                         .and_then(|v| v.parse().ok())
                         .unwrap_or(30);
-                    match repo_for_prune.prune_alarm_data(alarm_days, soe_days) {
+                    match repo_for_prune.prune_alarm_data(alarm_days, soe_days).await {
                         Ok((a, s)) => log::info!("Pruned alarm/SOE rows: {}/{}", a, s),
                         Err(e) => log::error!("Prune alarm data failed: {}", e),
                     }
@@ -195,12 +206,13 @@ fn main() -> anyhow::Result<()> {
                 match cmd {
                     RoleCommand::Promote => {
                         log::info!("Role command: PROMOTE");
-                        let cfg = hmi_io_config::AppConfig::from_repo_sync(&repo_for_roles);
+                        let cfg = hmi_io_config::AppConfig::from_repo(&repo_for_roles).await;
                         match reg_for_roles.start_instances(&cfg).await {
                             Ok(()) => {
                                 log::info!("Plugins started after promotion");
                                 let rules: Vec<AlarmRule> = repo_for_roles
                                     .list_alarm_rules()
+                                    .await
                                     .map(|rows| {
                                         rows.into_iter().map(AlarmRule::from).collect()
                                     })
@@ -220,7 +232,7 @@ fn main() -> anyhow::Result<()> {
                     }
                     RoleCommand::ProbeData { reply } => {
                         log::info!("Role command: PROBE DATA");
-                        let cfg = hmi_io_config::AppConfig::from_repo_sync(&repo_for_roles);
+                        let cfg = hmi_io_config::AppConfig::from_repo(&repo_for_roles).await;
                         let ok = async {
                             if reg_for_roles.start_instances(&cfg).await.is_err() {
                                 return false;
@@ -249,12 +261,14 @@ fn main() -> anyhow::Result<()> {
         let ws_cfg = hmi_io_config::ServerConfig {
             host: repo_arc
                 .get_config("ws_host")
+                .await
                 .unwrap_or_else(|| "0.0.0.0".into()),
             port: ws_port,
             web_port,
             path: "/iscs/data".into(),
             project_dir: repo_arc
                 .get_config("project_dir")
+                .await
                 .unwrap_or_else(|| "./projects".into()),
             batch_interval_ms,
         };
@@ -337,11 +351,11 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn build_config(repo: &Repo, yaml_path: &str) -> anyhow::Result<AppConfig> {
-    if let Ok(plugins) = repo.list_plugins() {
+async fn build_config(repo: &Repo, yaml_path: &str) -> anyhow::Result<AppConfig> {
+    if let Ok(plugins) = repo.list_plugins().await {
         if !plugins.is_empty() {
             log::info!("Loading config from database");
-            let cfg = AppConfig::from_repo_sync(repo);
+            let cfg = AppConfig::from_repo(repo).await;
             cfg.validate()?;
             return Ok(cfg);
         }
@@ -357,37 +371,55 @@ fn build_config(repo: &Repo, yaml_path: &str) -> anyhow::Result<AppConfig> {
         }
     };
     app_config.validate()?;
-    migrate_yaml_to_db(repo, &app_config);
+    migrate_yaml_to_db(repo, &app_config).await;
     Ok(app_config)
 }
 
-fn migrate_yaml_to_db(repo: &Repo, config: &AppConfig) {
+async fn migrate_yaml_to_db(repo: &Repo, config: &AppConfig) {
     log::info!("Migrating YAML to DB...");
-    let _ = repo.set_config(
-        "scan_interval_ms",
-        &config.plugins.scan_interval_ms.to_string(),
-    );
-    let _ = repo.set_config(
-        "batch_interval_ms",
-        &config.server.batch_interval_ms.to_string(),
-    );
-    let _ = repo.set_config("plugin_dir", &config.plugins.directory);
-    let _ = repo.set_config("ws_host", &config.server.host);
-    let _ = repo.set_config("ws_port", &config.server.port.to_string());
-    let _ = repo.set_config("web_port", &config.server.web_port.to_string());
-    let _ = repo.set_config("project_dir", &config.server.project_dir);
-    let _ = repo.set_config(
-        "redundancy_config",
-        &serde_json::to_string(&config.redundancy).unwrap_or_else(|_| "{}".into()),
-    );
-    let _ = repo.set_config(
-        "alarm_retention_days",
-        &config.alarm.retention_alarm_days.to_string(),
-    );
-    let _ = repo.set_config(
-        "soe_retention_days",
-        &config.alarm.retention_soe_days.to_string(),
-    );
+    let _ = repo
+        .set_config(
+            "scan_interval_ms",
+            &config.plugins.scan_interval_ms.to_string(),
+        )
+        .await;
+    let _ = repo
+        .set_config(
+            "batch_interval_ms",
+            &config.server.batch_interval_ms.to_string(),
+        )
+        .await;
+    let _ = repo
+        .set_config("plugin_dir", &config.plugins.directory)
+        .await;
+    let _ = repo.set_config("ws_host", &config.server.host).await;
+    let _ = repo
+        .set_config("ws_port", &config.server.port.to_string())
+        .await;
+    let _ = repo
+        .set_config("web_port", &config.server.web_port.to_string())
+        .await;
+    let _ = repo
+        .set_config("project_dir", &config.server.project_dir)
+        .await;
+    let _ = repo
+        .set_config(
+            "redundancy_config",
+            &serde_json::to_string(&config.redundancy).unwrap_or_else(|_| "{}".into()),
+        )
+        .await;
+    let _ = repo
+        .set_config(
+            "alarm_retention_days",
+            &config.alarm.retention_alarm_days.to_string(),
+        )
+        .await;
+    let _ = repo
+        .set_config(
+            "soe_retention_days",
+            &config.alarm.retention_soe_days.to_string(),
+        )
+        .await;
     for rule in &config.alarm.rules {
         let row = hmi_io_db::repo::AlarmRuleRow {
             id: rule.id.clone(),
@@ -402,7 +434,7 @@ fn migrate_yaml_to_db(repo: &Repo, config: &AppConfig) {
             hysteresis: rule.hysteresis,
             confirm_ms: rule.confirm_ms,
         };
-        if let Err(e) = repo.insert_alarm_rule(&row) {
+        if let Err(e) = repo.insert_alarm_rule(&row).await {
             log::warn!("  Skip alarm rule '{}': {}", rule.id, e);
         } else {
             log::info!("  Migrated alarm rule '{}'", rule.id);
@@ -410,27 +442,32 @@ fn migrate_yaml_to_db(repo: &Repo, config: &AppConfig) {
     }
     for inst in &config.plugins.instances {
         let cj = serde_json::to_string(&inst.config).unwrap_or_else(|_| "{}".into());
-        match repo.insert_plugin_full(
-            &inst.name,
-            &inst.wasm_file,
-            &cj,
-            &inst.redundancy_group,
-            &inst.redundancy_role,
-            inst.priority,
-        ) {
+        match repo
+            .insert_plugin_full(
+                &inst.name,
+                &inst.wasm_file,
+                &cj,
+                &inst.redundancy_group,
+                &inst.redundancy_role,
+                inst.priority,
+            )
+            .await
+        {
             Ok(pid) => {
                 for pt in &inst.points {
-                    let _ = repo.insert_point(
-                        pid,
-                        &pt.id,
-                        &pt.address,
-                        &pt.data_type,
-                        &pt.byte_order,
-                        pt.scale,
-                        pt.offset,
-                        &pt.var_type,
-                        "",
-                    );
+                    let _ = repo
+                        .insert_point(
+                            pid,
+                            &pt.id,
+                            &pt.address,
+                            &pt.data_type,
+                            &pt.byte_order,
+                            pt.scale,
+                            pt.offset,
+                            &pt.var_type,
+                            "",
+                        )
+                        .await;
                 }
                 log::info!("  Migrated '{}': {} points", inst.name, inst.points.len());
             }

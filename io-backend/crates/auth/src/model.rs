@@ -312,7 +312,7 @@ mod tests {
         status
     }
 
-    fn login_token(auth: &AuthService, repo: &Repo, username: &str) -> String {
+    async fn login_token(auth: &AuthService, repo: &Repo, username: &str) -> String {
         let hash = AuthService::hash_password("correct-horse-battery").unwrap();
         let role = match username {
             "admin" => Role::Admin,
@@ -322,8 +322,10 @@ mod tests {
             _ => Role::Viewer,
         };
         repo.create_user(username, &hash, &role.to_string(), false)
+            .await
             .unwrap();
         auth.login(repo, username, "correct-horse-battery")
+            .await
             .unwrap()
             .access_token
     }
@@ -345,14 +347,14 @@ mod tests {
 
     #[tokio::test]
     async fn middleware_enforces_project_permission_matrix() {
-        let repo = Repo::new(":memory:").unwrap();
+        let repo = Repo::new(":memory:").await.unwrap();
         let auth = Arc::new(AuthService::new(SECRET).unwrap());
         let app = test_app(auth.clone());
 
-        let admin = login_token(&auth, &repo, "admin");
-        let eng = login_token(&auth, &repo, "eng");
-        let op = login_token(&auth, &repo, "op");
-        let view = login_token(&auth, &repo, "view");
+        let admin = login_token(&auth, &repo, "admin").await;
+        let eng = login_token(&auth, &repo, "eng").await;
+        let op = login_token(&auth, &repo, "op").await;
+        let view = login_token(&auth, &repo, "view").await;
 
         assert_eq!(
             request_status(app.clone(), "GET", Some(&admin)).await,
@@ -391,12 +393,15 @@ mod tests {
 
     #[tokio::test]
     async fn middleware_blocks_project_access_until_password_changed() {
-        let repo = Repo::new(":memory:").unwrap();
+        let repo = Repo::new(":memory:").await.unwrap();
         let hash = AuthService::hash_password("correct-horse-battery").unwrap();
-        repo.create_user("newbie", &hash, "admin", true).unwrap();
+        repo.create_user("newbie", &hash, "admin", true)
+            .await
+            .unwrap();
         let auth = Arc::new(AuthService::new(SECRET).unwrap());
         let token = auth
             .login(&repo, "newbie", "correct-horse-battery")
+            .await
             .unwrap()
             .access_token;
 

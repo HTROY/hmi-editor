@@ -375,11 +375,7 @@ impl AppConfig {
             let mut seen = std::collections::HashSet::new();
             for b in backups {
                 if !seen.insert(b.priority) {
-                    anyhow::bail!(
-                        "group '{}' has duplicate backup priority {}",
-                        g,
-                        b.priority
-                    );
+                    anyhow::bail!("group '{}' has duplicate backup priority {}", g, b.priority);
                 }
                 let ids: std::collections::HashSet<&str> =
                     b.points.iter().map(|p| p.id.as_str()).collect();
@@ -406,11 +402,7 @@ impl AppConfig {
                     r.condition.as_str(),
                     "high" | "low" | "equal" | "notEqual" | "change"
                 ) {
-                    anyhow::bail!(
-                        "alarm rule '{}': invalid condition '{}'",
-                        r.id,
-                        r.condition
-                    );
+                    anyhow::bail!("alarm rule '{}': invalid condition '{}'", r.id, r.condition);
                 }
                 if !matches!(
                     r.severity.as_str(),
@@ -423,39 +415,45 @@ impl AppConfig {
         Ok(())
     }
 
-    /// Build AppConfig from the database via Repo
-    pub fn from_repo_sync(repo: &Repo) -> Self {
+    /// Build AppConfig from the database via Repo.
+    pub async fn from_repo(repo: &Repo) -> Self {
         let scan_interval_ms: u64 = repo
             .get_config("scan_interval_ms")
+            .await
             .unwrap_or_else(|| "500".into())
             .parse()
             .unwrap_or(500);
         let batch_interval_ms: u64 = repo
             .get_config("batch_interval_ms")
+            .await
             .unwrap_or_else(|| "100".into())
             .parse()
             .unwrap_or(100);
         let plugin_dir = repo
             .get_config("plugin_dir")
+            .await
             .unwrap_or_else(|| "./plugins".into());
         let redundancy = repo
             .get_config("redundancy_config")
+            .await
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default();
         let alarm = AlarmConfig {
             enabled: true,
             retention_alarm_days: repo
                 .get_config("alarm_retention_days")
+                .await
                 .and_then(|v| v.parse().ok())
                 .unwrap_or_else(default_alarm_retention_days),
             retention_soe_days: repo
                 .get_config("soe_retention_days")
+                .await
                 .and_then(|v| v.parse().ok())
                 .unwrap_or_else(default_soe_retention_days),
             rules: vec![],
         };
 
-        let instances = match repo.list_plugins_with_points() {
+        let instances = match repo.list_plugins_with_points().await {
             Ok(pws) => pws
                 .into_iter()
                 .filter(|pw| pw.plugin.enabled)
@@ -467,20 +465,20 @@ impl AppConfig {
                     points: pw
                         .points
                         .into_iter()
-                .map(|p| PointMapping {
-                    id: p.variable_id,
-                    address: p.address,
-                    data_type: p.data_type,
-                    byte_order: p.byte_order,
-                    scale: p.scale,
-                    offset: p.offset_val,
-                    var_type: p.var_type,
+                        .map(|p| PointMapping {
+                            id: p.variable_id,
+                            address: p.address,
+                            data_type: p.data_type,
+                            byte_order: p.byte_order,
+                            scale: p.scale,
+                            offset: p.offset_val,
+                            var_type: p.var_type,
+                        })
+                        .collect(),
+                    redundancy_group: pw.plugin.redundancy_group.clone(),
+                    redundancy_role: pw.plugin.redundancy_role.clone(),
+                    priority: pw.plugin.priority,
                 })
-                .collect(),
-                redundancy_group: pw.plugin.redundancy_group.clone(),
-                redundancy_role: pw.plugin.redundancy_role.clone(),
-                priority: pw.plugin.priority,
-            })
                 .collect(),
             Err(e) => {
                 log::error!("Failed to load plugins from DB: {}", e);
@@ -492,20 +490,24 @@ impl AppConfig {
             server: ServerConfig {
                 host: repo
                     .get_config("ws_host")
+                    .await
                     .unwrap_or_else(|| "0.0.0.0".into()),
                 port: repo
                     .get_config("ws_port")
+                    .await
                     .unwrap_or_else(|| "8080".into())
                     .parse()
                     .unwrap_or(8080),
                 web_port: repo
                     .get_config("web_port")
+                    .await
                     .unwrap_or_else(|| "8081".into())
                     .parse()
                     .unwrap_or(8081),
                 path: "/iscs/data".into(),
                 project_dir: repo
                     .get_config("project_dir")
+                    .await
                     .unwrap_or_else(|| "./projects".into()),
                 batch_interval_ms,
             },
@@ -690,15 +692,16 @@ redundancy:
         assert_eq!(cfg.redundancy.role, NodeRole::Primary);
     }
 
-    #[test]
-    fn from_repo_sync_reads_redundancy_config() {
-        let repo = Repo::new(":memory:").unwrap();
+    #[tokio::test]
+    async fn from_repo_reads_redundancy_config() {
+        let repo = Repo::new(":memory:").await.unwrap();
         repo.set_config(
             "redundancy_config",
             r#"{"enabled":true,"node_id":"node-b","role":"backup"}"#,
         )
+        .await
         .unwrap();
-        let cfg = AppConfig::from_repo_sync(&repo);
+        let cfg = AppConfig::from_repo(&repo).await;
         assert!(cfg.redundancy.enabled);
         assert_eq!(cfg.redundancy.role, NodeRole::Backup);
     }

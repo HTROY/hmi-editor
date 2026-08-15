@@ -1,3 +1,8 @@
+use axum::{
+    extract::DefaultBodyLimit,
+    routing::{get, post, put},
+    Extension, Router,
+};
 use hmi_io_alarm::engine::AlarmEngine;
 use hmi_io_auth::model::{require_auth, require_project_permission};
 use hmi_io_auth::AuthService;
@@ -7,11 +12,6 @@ use hmi_io_plugin::registry::PluginRegistry;
 use hmi_io_point::manager::PointManager;
 use hmi_io_point::redundancy::RedundancyEngine;
 use hmi_io_project::ProjectStore;
-use axum::{
-    extract::DefaultBodyLimit,
-    routing::{get, post, put},
-    Extension, Router,
-};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::broadcast;
@@ -31,6 +31,7 @@ pub async fn run_web_server(
 ) -> anyhow::Result<()> {
     let project_dir = repo
         .get_config("project_dir")
+        .await
         .unwrap_or_else(|| "./projects".into());
     let project_store = ProjectStore::new(repo.clone(), project_dir)?;
 
@@ -97,10 +98,7 @@ pub async fn run_web_server(
             get(super::api::redundancy_snapshot),
         )
         .route("/api/redundancy/claim", post(super::api::redundancy_claim))
-        .route(
-            "/api/redundancy/status",
-            get(super::api::redundancy_status),
-        )
+        .route("/api/redundancy/status", get(super::api::redundancy_status))
         .route(
             "/api/redundancy/instance-groups",
             get(super::api::redundancy_instance_groups),
@@ -121,7 +119,10 @@ pub async fn run_web_server(
         )
         .route("/api/monitor/history", get(super::api::monitor_history))
         // Alarm & SOE API
-        .route("/api/alarm/rules", get(super::api::list_alarm_rules).post(super::api::upsert_alarm_rule))
+        .route(
+            "/api/alarm/rules",
+            get(super::api::list_alarm_rules).post(super::api::upsert_alarm_rule),
+        )
         .route(
             "/api/alarm/rules/{id}",
             axum::routing::put(super::api::update_alarm_rule).delete(super::api::delete_alarm_rule),
