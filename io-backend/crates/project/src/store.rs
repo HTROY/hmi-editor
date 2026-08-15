@@ -1,6 +1,6 @@
 //! File-backed `.hmi.zip` storage with versioned metadata and audit entries.
 
-use hmi_io_db::repo::{ProjectRow, Repo};
+use hmi_io_db::repo::{ProjectPushResult, ProjectRow, Repo};
 use serde::Deserialize;
 use std::fs;
 use std::io::{Cursor, Read};
@@ -17,6 +17,10 @@ const MAX_MANIFEST_SIZE: usize = 1024 * 1024;
 pub struct ProjectStore {
     repo: Arc<Repo>,
     root: PathBuf,
+    /// Test hook: when set, the next `put` fails at the DB commit step (after
+    /// the file swap) so tests can exercise the rollback path deterministically.
+    #[cfg(test)]
+    fail_push: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +33,15 @@ pub struct ProjectPackage {
 pub struct PutOutcome {
     pub created: bool,
     pub version: u64,
+}
+
+/// A package swap that has moved the new package into place but has not
+/// been finalized: the previous package (if any) is parked at `backup`
+/// until the caller either commits or rolls back the swap.
+#[derive(Debug)]
+struct SwappedPackage {
+    had_old: bool,
+    backup: PathBuf,
 }
 
 #[derive(Debug)]
@@ -82,7 +95,12 @@ impl ProjectStore {
     pub fn new(repo: Arc<Repo>, root: impl Into<PathBuf>) -> anyhow::Result<Self> {
         let root = root.into();
         fs::create_dir_all(&root)?;
-        Ok(Self { repo, root })
+        Ok(Self {
+            repo,
+            root,
+            #[cfg(test)]
+            fail_push: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        })
     }
 
     /// Directory holding one `.hmi.zip` per project.
@@ -117,6 +135,10 @@ impl ProjectStore {
     /// Push a whole-package zip. `expected_version` carries the optimistic
     /// lock: `None` (or 0) creates a new project, and an existing project
     /// requires the current version.
+    ///
+    /// The new package is swapped into place *before* the DB commit, and the
+    /// swap is rolled back if the commit fails, so a failed push never
+    /// leaves the disk package out of sync with the recorded version.
     pub fn put(
         &self,
         id: &str,
@@ -137,33 +159,69 @@ impl ProjectStore {
             let _ = fs::remove_file(&tmp);
             return Err(ProjectStoreError::Storage(e.into()));
         }
-        let result = match self.repo.push_project(
+        let to = self.package_path(id)?;
+        let swapped = match self.swap_in(id, &tmp, &to) {
+            Ok(swapped) => swapped,
+            Err(e) => {
+                let _ = fs::remove_file(&tmp);
+                return Err(e);
+            }
+        };
+        let result = match self.commit_push(
             id,
             expected_version,
             &name,
             manifest.schema_version,
             bytes.len() as u64,
             actor,
-            "push",
         ) {
             Ok(Some(result)) => result,
             Ok(None) => {
-                let _ = fs::remove_file(&tmp);
+                self.rollback_swap(id, &swapped, &to);
                 return Err(ProjectStoreError::Conflict(format!(
                     "project '{}' version mismatch (expected {:?})",
                     id, expected_version
                 )));
             }
             Err(e) => {
-                let _ = fs::remove_file(&tmp);
+                self.rollback_swap(id, &swapped, &to);
                 return Err(ProjectStoreError::Storage(e));
             }
         };
-        self.replace_file(id, &tmp, &self.package_path(id)?)?;
+        self.commit_swap(&swapped);
         Ok(PutOutcome {
             created: result.created,
             version: result.version,
         })
+    }
+
+    /// The DB commit step of `put`, split out so tests can inject a failure
+    /// at the exact point where the file swap must be rolled back.
+    fn commit_push(
+        &self,
+        id: &str,
+        expected_version: Option<u64>,
+        name: &str,
+        schema_version: u32,
+        size_bytes: u64,
+        actor: &str,
+    ) -> anyhow::Result<Option<ProjectPushResult>> {
+        #[cfg(test)]
+        if self
+            .fail_push
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(anyhow::anyhow!("injected DB push failure"));
+        }
+        self.repo.push_project(
+            id,
+            expected_version,
+            name,
+            schema_version,
+            size_bytes,
+            actor,
+            "push",
+        )
     }
 
     pub fn delete(&self, id: &str, actor: &str) -> Result<(), ProjectStoreError> {
@@ -218,7 +276,17 @@ impl ProjectStore {
             .join(format!(".{}.{}.{}.tmp", id, std::process::id(), nanos)))
     }
 
-    fn replace_file(&self, id: &str, from: &Path, to: &Path) -> Result<(), ProjectStoreError> {
+    /// Move `from` into `to`, parking the previous package (if any) at a
+    /// backup path instead of deleting it. The caller must finish with
+    /// either `commit_swap` (DB change applied) or `rollback_swap` (DB
+    /// change failed). If the swap itself fails, the previous package is
+    /// restored and `from` removed before returning.
+    fn swap_in(
+        &self,
+        id: &str,
+        from: &Path,
+        to: &Path,
+    ) -> Result<SwappedPackage, ProjectStoreError> {
         // Windows `fs::rename` cannot overwrite an existing destination, so
         // move the old package aside first and restore it if the swap fails.
         let backup = self.temp_path(id)?;
@@ -233,16 +301,43 @@ impl ProjectStore {
             let _ = fs::remove_file(from);
             return Err(ProjectStoreError::Storage(e.into()));
         }
-        if had_old {
-            if let Err(e) = fs::remove_file(&backup) {
+        Ok(SwappedPackage { had_old, backup })
+    }
+
+    /// Finalize a successful swap: the DB change is committed, so the
+    /// parked previous package can be dropped.
+    fn commit_swap(&self, swapped: &SwappedPackage) {
+        if swapped.had_old {
+            if let Err(e) = fs::remove_file(&swapped.backup) {
                 log::warn!(
                     "removing project backup '{}' failed: {}",
-                    backup.display(),
+                    swapped.backup.display(),
                     e
                 );
             }
         }
-        Ok(())
+    }
+
+    /// Undo a swap after the DB change failed: remove the newly placed
+    /// package and restore the previous one (if any). Best effort; failures
+    /// are logged and the original error is reported by the caller.
+    fn rollback_swap(&self, id: &str, swapped: &SwappedPackage, to: &Path) {
+        if let Err(e) = fs::remove_file(to) {
+            log::warn!(
+                "removing replaced project package '{}' failed: {}",
+                to.display(),
+                e
+            );
+        }
+        if swapped.had_old {
+            if let Err(e) = fs::rename(&swapped.backup, to) {
+                log::error!(
+                    "restoring previous package for '{}' after failed DB commit failed: {}",
+                    id,
+                    e
+                );
+            }
+        }
     }
 }
 
@@ -383,6 +478,7 @@ fn is_safe_zip_name(name: &str) -> bool {
 mod tests {
     use super::*;
     use std::io::Write;
+    use std::sync::atomic::Ordering;
 
     struct TempDir(PathBuf);
 
@@ -600,5 +696,115 @@ mod tests {
             store.get("demo").unwrap_err(),
             ProjectStoreError::NotFound
         ));
+    }
+
+    /// Return every leftover `*.tmp` file under `dir` (swap backups, aborted
+    /// uploads). A successful put must leave none behind.
+    fn stray_tmp_files(dir: &Path) -> Vec<PathBuf> {
+        fs::read_dir(dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().map_or(false, |x| x == "tmp"))
+            .collect()
+    }
+
+    #[test]
+    fn put_rolls_back_swap_when_db_commit_fails() {
+        let dir = TempDir::new("put-db-fail");
+        let store = ProjectStore::new(repo(), dir.path()).unwrap();
+        let v1 = make_zip(1, Some("v1"), "v1");
+        let v2 = make_zip(1, Some("v2"), "v2");
+        store.put("demo", &v1, None, "tester").unwrap();
+
+        // Fail the DB commit after the file swap: the swap must be rolled
+        // back, keeping disk and DB on the previous version.
+        store.fail_push.store(true, Ordering::SeqCst);
+        let err = store.put("demo", &v2, Some(1), "tester").unwrap_err();
+        assert!(matches!(err, ProjectStoreError::Storage(_)));
+
+        // The previous package is back on disk and the DB still records
+        // version 1 (no version bump leaked from the failed commit).
+        assert_eq!(fs::read(dir.path().join("demo.hmi.zip")).unwrap(), v1);
+        let meta = store.repo.get_project("demo").unwrap().unwrap();
+        assert_eq!(meta.version, 1);
+        assert_eq!(meta.name, "v1");
+        assert!(stray_tmp_files(dir.path()).is_empty());
+    }
+
+    #[test]
+    fn put_db_failure_without_previous_package_leaves_no_trace() {
+        let dir = TempDir::new("put-db-fail-new");
+        let store = ProjectStore::new(repo(), dir.path()).unwrap();
+
+        store.fail_push.store(true, Ordering::SeqCst);
+        let err = store
+            .put("demo", &make_zip(1, Some("v1"), "v1"), None, "tester")
+            .unwrap_err();
+        assert!(matches!(err, ProjectStoreError::Storage(_)));
+
+        // No package left behind and no dangling metadata row.
+        assert!(!dir.path().join("demo.hmi.zip").exists());
+        assert!(store.repo.get_project("demo").unwrap().is_none());
+        assert!(stray_tmp_files(dir.path()).is_empty());
+    }
+
+    #[test]
+    fn put_conflict_rolls_back_swap_and_keeps_previous_package() {
+        let dir = TempDir::new("put-conflict");
+        let store = ProjectStore::new(repo(), dir.path()).unwrap();
+        let v1 = make_zip(1, Some("v1"), "v1");
+        let v2 = make_zip(1, Some("v2"), "v2");
+        store.put("demo", &v1, None, "tester").unwrap();
+
+        // Stale expected_version: the package is swapped in before the lock
+        // check, so the swap must be rolled back before the conflict is
+        // reported, keeping disk and DB on the previous version.
+        let err = store.put("demo", &v2, Some(99), "tester").unwrap_err();
+        assert!(matches!(err, ProjectStoreError::Conflict(_)));
+
+        let pkg = store.get("demo").unwrap();
+        assert_eq!(pkg.bytes, v1);
+        assert_eq!(pkg.meta.version, 1);
+        assert!(stray_tmp_files(dir.path()).is_empty());
+    }
+
+    #[test]
+    fn swap_in_restores_previous_package_on_rename_failure() {
+        let dir = TempDir::new("swap-fail");
+        let store = ProjectStore::new(repo(), dir.path()).unwrap();
+        let v1 = make_zip(1, Some("v1"), "v1");
+        store.put("demo", &v1, None, "tester").unwrap();
+
+        // A missing `from` makes the second rename fail; the previous
+        // package must be restored and no temp files may remain.
+        let missing = dir.path().join("does-not-exist.tmp");
+        let to = store.package_path("demo").unwrap();
+        let err = store.swap_in("demo", &missing, &to).unwrap_err();
+        assert!(matches!(err, ProjectStoreError::Storage(_)));
+
+        assert_eq!(fs::read(&to).unwrap(), v1);
+        assert!(stray_tmp_files(dir.path()).is_empty());
+    }
+
+    #[test]
+    fn put_recovers_when_previous_package_is_missing_on_disk() {
+        let dir = TempDir::new("put-missing-pkg");
+        let store = ProjectStore::new(repo(), dir.path()).unwrap();
+        let v1 = make_zip(1, None, "v1");
+        let v2 = make_zip(1, Some("v2"), "v2");
+        store.put("demo", &v1, None, "tester").unwrap();
+        // Simulate an earlier failure that left metadata without a package:
+        // the next push must still succeed and end up consistent.
+        fs::remove_file(dir.path().join("demo.hmi.zip")).unwrap();
+
+        let out = store.put("demo", &v2, Some(1), "tester").unwrap();
+        assert!(!out.created);
+        assert_eq!(out.version, 2);
+
+        let pkg = store.get("demo").unwrap();
+        assert_eq!(pkg.bytes, v2);
+        assert_eq!(pkg.meta.version, 2);
+        assert!(stray_tmp_files(dir.path()).is_empty());
     }
 }
