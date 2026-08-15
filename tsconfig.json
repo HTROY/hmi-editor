@@ -18,7 +18,8 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@hmi/contracts": ["packages/contracts/src/index.ts"]
     }
   },
   "include": ["src"]

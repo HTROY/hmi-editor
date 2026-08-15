@@ -1,5 +1,6 @@
 import { VariableManager } from "../variables/VariableManager";
 import type { WebSocketClient } from "../io/WebSocketClient";
+import type { WsServerEnvelope } from "@hmi/contracts";
 import type {
   AlarmCondition,
   AlarmEventType,
@@ -7,11 +8,13 @@ import type {
   AlarmOccurrence,
   AlarmRule,
   AlarmStreamEvent,
-  AlarmUpdateMessage,
   Paged,
   SOEQuery,
   SOERecord,
 } from "./types";
+import { createLogger } from "../platform/logger";
+
+const logger = createLogger("AlarmManager");
 
 export type AlarmMode = "local" | "remote";
 
@@ -23,7 +26,7 @@ interface ConfirmEntry {
 function conditionTriggered(
   condition: AlarmCondition,
   n: number,
-  threshold: number,
+  threshold: number
 ): boolean {
   switch (condition) {
     case "high":
@@ -85,7 +88,10 @@ export class AlarmManager {
   private unsubVar: (() => void) | null = null;
   private confirmTimer: ReturnType<typeof setInterval> | null = null;
   private confirmState = new Map<string, ConfirmEntry>();
-  private lastValues = new Map<string, { value: number | boolean; quality: string }>();
+  private lastValues = new Map<
+    string,
+    { value: number | boolean; quality: string }
+  >();
   private localSoeSeq = 0;
   private occCounter = 0;
   private streamEventCounter = 0;
@@ -133,7 +139,9 @@ export class AlarmManager {
     this.wsClient = wsClient;
     this.apiBaseUrl = apiBaseUrl || this.apiBaseUrl;
     this.wsUnsub?.();
-    this.wsUnsub = wsClient.onAlarmMessage((msg) => this.handleRemoteMessage(msg));
+    this.wsUnsub = wsClient.onAlarmMessage((msg) =>
+      this.handleRemoteMessage(msg)
+    );
     this.wsStatusUnsub?.();
     this.wsStatusUnsub = wsClient.subscribe({
       onData: () => {},
@@ -151,7 +159,7 @@ export class AlarmManager {
   start(): void {
     if (this.mode === "remote") {
       this.refreshAll().catch((err) =>
-        console.warn("[AlarmManager] 后端报警数据初始化失败:", err),
+        logger.warn("后端报警数据初始化失败:", err)
       );
       return;
     }
@@ -178,7 +186,9 @@ export class AlarmManager {
   // ---- 规则 ----
 
   listRules(): AlarmRule[] {
-    return Array.from(this.rules.values()).sort((a, b) => a.id.localeCompare(b.id));
+    return Array.from(this.rules.values()).sort((a, b) =>
+      a.id.localeCompare(b.id)
+    );
   }
 
   getRule(id: string): AlarmRule | undefined {
@@ -298,36 +308,47 @@ export class AlarmManager {
   }
 
   get unacknowledgedCount(): number {
-    const activeUnacked = this.activeOccurrences.filter((o) => o.status === "active").length;
+    const activeUnacked = this.activeOccurrences.filter(
+      (o) => o.status === "active"
+    ).length;
     const recoveredUnacked = this.historyOccurrences.filter(
-      (o) => o.status === "recovered" && o.acknowledgedAt == null,
+      (o) => o.status === "recovered" && o.acknowledgedAt == null
     ).length;
     return activeUnacked + recoveredUnacked;
   }
 
   get highestSeverity(): AlarmOccurrence["severity"] | null {
-    if (this.activeOccurrences.some((o) => o.severity === "critical")) return "critical";
-    if (this.activeOccurrences.some((o) => o.severity === "major")) return "major";
-    if (this.activeOccurrences.some((o) => o.severity === "minor")) return "minor";
-    if (this.activeOccurrences.some((o) => o.severity === "warning")) return "warning";
+    if (this.activeOccurrences.some((o) => o.severity === "critical"))
+      return "critical";
+    if (this.activeOccurrences.some((o) => o.severity === "major"))
+      return "major";
+    if (this.activeOccurrences.some((o) => o.severity === "minor"))
+      return "minor";
+    if (this.activeOccurrences.some((o) => o.severity === "warning"))
+      return "warning";
     return null;
   }
 
   async queryHistory(q: AlarmHistoryQuery = {}): Promise<void> {
     if (this.mode === "remote") {
       const params = this.buildQuery(q);
-      const paged = await this.request<Paged<AlarmOccurrence>>(`/api/alarm/history?${params}`);
+      const paged = await this.request<Paged<AlarmOccurrence>>(
+        `/api/alarm/history?${params}`
+      );
       this.historyOccurrences = paged.items;
       this.historyTotal = paged.total;
       this.notify();
       return;
     }
-    let items = [...this.historyOccurrences].sort((a, b) => b.triggeredAt - a.triggeredAt);
+    let items = [...this.historyOccurrences].sort(
+      (a, b) => b.triggeredAt - a.triggeredAt
+    );
     if (q.from) items = items.filter((o) => o.triggeredAt >= q.from!);
     if (q.to) items = items.filter((o) => o.triggeredAt <= q.to!);
     if (q.severity) items = items.filter((o) => o.severity === q.severity);
     if (q.group) items = items.filter((o) => o.group === q.group);
-    if (q.variableId) items = items.filter((o) => o.variableId === q.variableId);
+    if (q.variableId)
+      items = items.filter((o) => o.variableId === q.variableId);
     if (q.status === "unacknowledged") {
       items = items.filter((o) => o.acknowledgedAt == null);
     } else if (q.status === "acknowledged") {
@@ -354,7 +375,8 @@ export class AlarmManager {
     let items = [...this.soeRecords].sort((a, b) => b.seq - a.seq);
     if (q.from) items = items.filter((r) => r.receiveTime >= q.from!);
     if (q.to) items = items.filter((r) => r.receiveTime <= q.to!);
-    if (q.variableId) items = items.filter((r) => r.variableId === q.variableId);
+    if (q.variableId)
+      items = items.filter((r) => r.variableId === q.variableId);
     if (q.quality) items = items.filter((r) => r.quality === q.quality);
     const page = q.page ?? 1;
     const size = q.pageSize ?? 100;
@@ -366,7 +388,7 @@ export class AlarmManager {
   async getOccurrenceEvents(occurrenceId: string): Promise<AlarmStreamEvent[]> {
     if (this.mode === "remote") {
       return this.request<AlarmStreamEvent[]>(
-        `/api/alarm/occurrences/${encodeURIComponent(occurrenceId)}/events`,
+        `/api/alarm/occurrences/${encodeURIComponent(occurrenceId)}/events`
       );
     }
     return this.localStreamEvents.get(occurrenceId) ?? [];
@@ -400,14 +422,18 @@ export class AlarmManager {
       if (occ.status === "active") this.applyAck(occ, user);
     }
     for (const occ of this.historyOccurrences) {
-      if (occ.status === "recovered" && occ.acknowledgedAt == null) this.applyAck(occ, user);
+      if (occ.status === "recovered" && occ.acknowledgedAt == null)
+        this.applyAck(occ, user);
     }
     this.notify();
   }
 
   // ---- 内部：remote ----
 
-  private async request<T = unknown>(path: string, init?: RequestInit): Promise<T> {
+  private async request<T = unknown>(
+    path: string,
+    init?: RequestInit
+  ): Promise<T> {
     const resp = await fetch(this.apiBaseUrl + path, init);
     if (!resp.ok) {
       const text = await resp.text().catch(() => "");
@@ -435,20 +461,23 @@ export class AlarmManager {
   }
 
   private async fetchActive(): Promise<void> {
-    this.activeOccurrences = await this.request<AlarmOccurrence[]>("/api/alarm/active");
+    this.activeOccurrences =
+      await this.request<AlarmOccurrence[]>("/api/alarm/active");
     this.notify();
   }
 
   private async fetchHistory(): Promise<void> {
     const paged = await this.request<Paged<AlarmOccurrence>>(
-      "/api/alarm/history?page=1&pageSize=100",
+      "/api/alarm/history?page=1&pageSize=100"
     );
     this.historyOccurrences = paged.items;
     this.historyTotal = paged.total;
   }
 
   private async fetchSOE(): Promise<void> {
-    const paged = await this.request<Paged<SOERecord>>("/api/soe?page=1&pageSize=50");
+    const paged = await this.request<Paged<SOERecord>>(
+      "/api/soe?page=1&pageSize=50"
+    );
     this.soeRecords = paged.items;
     this.soeTotal = paged.total;
     for (const r of paged.items) this.soeSeqSeen.add(r.seq);
@@ -460,14 +489,14 @@ export class AlarmManager {
     for (const r of rules) this.rules.set(r.id, r);
   }
 
-  private handleRemoteMessage(msg: { type: string; data?: any }): void {
+  private handleRemoteMessage(msg: WsServerEnvelope): void {
     switch (msg.type) {
       case "alarm_snapshot":
-        this.activeOccurrences = msg.data ?? [];
+        this.activeOccurrences = msg.data;
         this.notify();
         break;
       case "alarm_update": {
-        const update = msg.data as AlarmUpdateMessage;
+        const update = msg.data;
         this.applyRemoteUpdate({
           eventType: update.event_type,
           occurrence: update.occurrence,
@@ -476,7 +505,7 @@ export class AlarmManager {
         break;
       }
       case "alarm_rules": {
-        const rules = msg.data as AlarmRule[];
+        const rules = msg.data;
         this.rules.clear();
         for (const r of rules) this.rules.set(r.id, r);
         this.notify();
@@ -486,13 +515,13 @@ export class AlarmManager {
         this.fetchRules()
           .then(() => this.notify())
           .catch((err) =>
-            console.warn("[AlarmManager] refresh backend alarm rules failed:", err),
+            logger.warn("refresh backend alarm rules failed:", err)
           );
         this.notify();
         break;
       }
       case "soe": {
-        const records = msg.data as SOERecord[];
+        const records = msg.data;
         for (const rec of records) {
           if (this.soeSeqSeen.has(rec.seq)) continue;
           this.soeSeqSeen.add(rec.seq);
@@ -506,6 +535,9 @@ export class AlarmManager {
         this.notify();
         break;
       }
+      default:
+        // data/snapshot/config_change/role 不属于报警通道
+        break;
     }
   }
 
@@ -531,7 +563,9 @@ export class AlarmManager {
       return;
     }
     // recover / rule_disabled
-    this.activeOccurrences = this.activeOccurrences.filter((o) => o.id !== occ.id);
+    this.activeOccurrences = this.activeOccurrences.filter(
+      (o) => o.id !== occ.id
+    );
     const idx = this.historyOccurrences.findIndex((o) => o.id === occ.id);
     if (idx >= 0) this.historyOccurrences[idx] = occ;
     else this.historyOccurrences.unshift(occ);
@@ -543,7 +577,9 @@ export class AlarmManager {
       this.activeOccurrences[activeIdx] = occ;
       return;
     }
-    const historyIdx = this.historyOccurrences.findIndex((o) => o.id === occ.id);
+    const historyIdx = this.historyOccurrences.findIndex(
+      (o) => o.id === occ.id
+    );
     if (historyIdx >= 0) this.historyOccurrences[historyIdx] = occ;
   }
 
@@ -553,7 +589,7 @@ export class AlarmManager {
     variableId: string,
     value: number | boolean,
     quality: string,
-    timestamp: number,
+    timestamp: number
   ): void {
     const now = Date.now();
     const prev = this.lastValues.get(variableId);
@@ -642,10 +678,21 @@ export class AlarmManager {
     };
     this.activeOccurrences.unshift(occurrence);
     this.historyTotal += 1;
-    this.addStreamEvent(occurrence, "trigger", now, "", value, occurrence.message);
+    this.addStreamEvent(
+      occurrence,
+      "trigger",
+      now,
+      "",
+      value,
+      occurrence.message
+    );
   }
 
-  private triggerTransient(rule: AlarmRule, value: number | boolean, now: number): void {
+  private triggerTransient(
+    rule: AlarmRule,
+    value: number | boolean,
+    now: number
+  ): void {
     const id = `occ_${now}_${this.occCounter++}`;
     const occurrence: AlarmOccurrence = {
       id,
@@ -666,7 +713,14 @@ export class AlarmManager {
     };
     this.historyOccurrences.unshift(occurrence);
     this.historyTotal += 1;
-    this.addStreamEvent(occurrence, "trigger", now, "", value, occurrence.message);
+    this.addStreamEvent(
+      occurrence,
+      "trigger",
+      now,
+      "",
+      value,
+      occurrence.message
+    );
   }
 
   private recoverByRule(ruleId: string, reason: string): void {
@@ -678,7 +732,9 @@ export class AlarmManager {
   }
 
   private recover(occ: AlarmOccurrence, now: number, reason: string): void {
-    this.activeOccurrences = this.activeOccurrences.filter((o) => o.id !== occ.id);
+    this.activeOccurrences = this.activeOccurrences.filter(
+      (o) => o.id !== occ.id
+    );
     occ.status = "recovered";
     occ.recoveredAt = now;
     occ.recoveredReason = reason;
@@ -686,7 +742,9 @@ export class AlarmManager {
     if (idx >= 0) this.historyOccurrences[idx] = occ;
     else this.historyOccurrences.unshift(occ);
     const eventType: AlarmEventType =
-      reason === "规则停用" || reason === "规则删除" ? "rule_disabled" : "recover";
+      reason === "规则停用" || reason === "规则删除"
+        ? "rule_disabled"
+        : "recover";
     this.addStreamEvent(occ, eventType, now, "", occ.value, reason);
   }
 
@@ -697,7 +755,8 @@ export class AlarmManager {
       return;
     }
     const recovered = this.historyOccurrences.find(
-      (o) => o.id === alarmId && o.status === "recovered" && o.acknowledgedAt == null,
+      (o) =>
+        o.id === alarmId && o.status === "recovered" && o.acknowledgedAt == null
     );
     if (recovered) this.applyAck(recovered, user);
   }
@@ -706,7 +765,14 @@ export class AlarmManager {
     occ.status = "acknowledged";
     occ.acknowledgedAt = Date.now();
     occ.acknowledgedBy = user;
-    this.addStreamEvent(occ, "ack", Date.now(), user, occ.value, `${user} 确认报警`);
+    this.addStreamEvent(
+      occ,
+      "ack",
+      Date.now(),
+      user,
+      occ.value,
+      `${user} 确认报警`
+    );
   }
 
   private addStreamEvent(
@@ -715,7 +781,7 @@ export class AlarmManager {
     at: number,
     byUser: string,
     value: number | boolean,
-    message: string,
+    message: string
   ): void {
     const ev: AlarmStreamEvent = {
       id: ++this.streamEventCounter,

@@ -9,11 +9,15 @@ import type {
   DataSourceType,
   MonitorSnapshot,
 } from "./types";
+import type { PointRow } from "@hmi/contracts";
+import { createLogger } from "../platform/logger";
 
 // ============================================================
 // DataBridge — I/O 数据源 → VariableManager 桥接
 // 统一管理数据源生命周期，将外部数据路由到变量管理器
 // ============================================================
+
+const logger = createLogger("DataBridge");
 
 export type ActiveSource = "simulation" | "iec104" | "websocket" | "io_backend";
 
@@ -49,6 +53,11 @@ export class DataBridge {
   /** 外部刷新回调（用于通知 UI 更新变量列表） */
   private onVarsRefreshed: (() => void) | null = null;
 
+  // 数据点调试日志批量计数（F17：避免每点一条 console 刷屏）
+  private dataLogCount = 0;
+  private dataLogLastMs = 0;
+  private static readonly DATA_LOG_INTERVAL_MS = 5000;
+
   constructor(variableManager: VariableManager) {
     this.variableManager = variableManager;
 
@@ -74,9 +83,8 @@ export class DataBridge {
     // 断开当前
     this.disconnectAll();
 
-    console.log("[DataBridge] Active source set to:", type);
+    logger.info("Active source set to:", type);
     this.activeSource = type;
-
     if (type === "iec104") {
       this.connectSource("iec104");
     } else if (type === "websocket" || type === "io_backend") {
@@ -91,7 +99,7 @@ export class DataBridge {
       this.variableManager.startSimulation(800);
     } else {
       this.connectSource(
-        this.activeSource === "io_backend" ? "websocket" : this.activeSource,
+        this.activeSource === "io_backend" ? "websocket" : this.activeSource
       );
     }
   }
@@ -145,7 +153,7 @@ export class DataBridge {
           }
         },
         onStatus: (status) => {},
-        onError: (err) => console.warn("[DataBridge]", err.message),
+        onError: (err) => logger.warn(err.message),
       });
     }
   }
@@ -185,7 +193,7 @@ export class DataBridge {
     const base = apiBaseUrl ?? this.apiBaseUrl;
     this.apiBaseUrl = base;
     const url = `${base}/api/points`;
-    console.log("[DataBridge] 正在从后端拉取变量列表:", url);
+    logger.info("正在从后端拉取变量列表:", url);
     const fallback = this.backupApiBaseUrl
       ? `${this.backupApiBaseUrl}/api/points`
       : null;
@@ -193,12 +201,12 @@ export class DataBridge {
     try {
       resp = await fetch(url);
       if (!resp.ok && fallback) {
-        console.log("[DataBridge] 主 API 不可用，尝试备用:", fallback);
+        logger.info("主 API 不可用，尝试备用:", fallback);
         resp = await fetch(fallback);
       }
     } catch (err) {
       if (!fallback) throw err;
-      console.log("[DataBridge] 主 API 连接失败，尝试备用:", fallback);
+      logger.info("主 API 连接失败，尝试备用:", fallback);
       resp = await fetch(fallback);
     }
     if (!resp.ok) {
@@ -206,22 +214,9 @@ export class DataBridge {
       throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
     }
     try {
-      const points: Array<{
-        id: number;
-        plugin_id: number;
-        variable_id: string;
-        address: string;
-        data_type: string;
-        byte_order: string;
-        scale: number;
-        offset_val: number;
-        var_type: string;
-        description?: string;
-        plugin_name?: string;
-        hmi_id?: string;
-      }> = await resp.json();
+      const points: PointRow[] = await resp.json();
 
-      console.log(`[DataBridge] 后端返回 ${points.length} 个点`);
+      logger.info(`后端返回 ${points.length} 个点`);
 
       // 清空旧映射
       this.pointIdToVarId.clear();
@@ -244,7 +239,7 @@ export class DataBridge {
 
       for (const p of points) {
         const varType: VariableType = ["AI", "DI", "AO", "DO"].includes(
-          p.var_type,
+          p.var_type
         )
           ? (p.var_type as VariableType)
           : "AI";
@@ -283,13 +278,13 @@ export class DataBridge {
         this.variableManager.setValue(id, p.value, p.quality);
       }
 
-      console.log(
-        `[DataBridge] 变量列表已导入: ${defs.length} 个（后端返回 ${points.length} 条）, 映射表: ${this.pointIdToVarId.size} 条`,
+      logger.info(
+        `变量列表已导入: ${defs.length} 个（后端返回 ${points.length} 条）, 映射表: ${this.pointIdToVarId.size} 条`
       );
       this.onVarsRefreshed?.();
       return defs.length;
     } catch (err) {
-      console.error("[DataBridge] 拉取变量列表失败:", err);
+      logger.error("拉取变量列表失败:", err);
       throw err;
     }
   }
@@ -315,16 +310,7 @@ export class DataBridge {
         // 将后端点 ID 转换为内部变量 ID
         const varId = this.pointIdToVarId.get(String(point.id)) ?? point.id;
         const mapping = this.pointIdToVarId.get(String(point.id));
-        console.log(
-          "[DataBridge] Data point:",
-          point.id,
-          "val:",
-          point.value,
-          "mapped to:",
-          varId,
-          "hasMapping:",
-          !!mapping,
-        );
+        this.maybeLogDataPoint(point.id, varId, !!mapping);
         // 先缓存再写入：若变量尚未导入，setValue 会被丢弃，导入完成后需要重放
         this.lastValues.set(varId, point);
         this.variableManager.setValue(varId, point.value, point.quality);
@@ -336,37 +322,51 @@ export class DataBridge {
         this.notifyStatus(name, status);
       },
       onError: (err) => {
-        console.warn("[DataBridge] " + name + ":", err.message);
+        logger.warn(`${name}:`, err.message);
       },
     });
     this.sourceUnsubscribers.set(name, unsub);
 
     source.connect().catch((err) => {
-      console.error("[DataBridge] 连接失败 " + name + ":", err.message);
+      logger.error(`连接失败 ${name}:`, err.message);
     });
   }
 
   /** 监听 WebSocket 的 config_change 事件，自动刷新变量列表 */
   private setupConfigChangeWatcher(): void {
     this.configChangeUnsub = this.wsClient.onConfigChange((event) => {
-      console.log(
-        "[DataBridge] Config change detected:",
-        event.action,
-        event.variableId,
-      );
+      logger.info("Config change detected:", event.action, event.variableId);
       // 防抖：2 秒内的多次变更合并为一次刷新
       if (this.configRefreshTimer) {
         clearTimeout(this.configRefreshTimer);
       }
       this.configRefreshTimer = setTimeout(async () => {
-        console.log("[DataBridge] Auto-refreshing variables from backend...");
+        logger.info("Auto-refreshing variables from backend...");
         try {
           await this.fetchVariablesFromBackend();
         } catch (err) {
-          console.warn("[DataBridge] Auto-refresh failed:", err);
+          logger.warn("Auto-refresh failed:", err);
         }
       }, 2000);
     });
+  }
+
+  /** 数据点调试日志：按时间窗口批量计数，避免每点一条刷屏（F17） */
+  private maybeLogDataPoint(
+    pointId: string,
+    varId: string,
+    hasMapping: boolean
+  ): void {
+    this.dataLogCount += 1;
+    const now = Date.now();
+    if (now - this.dataLogLastMs >= DataBridge.DATA_LOG_INTERVAL_MS) {
+      logger.debug(
+        `最近 ${DataBridge.DATA_LOG_INTERVAL_MS / 1000}s 收到 ${this.dataLogCount} 个点 ` +
+          `(示例: ${pointId} → ${varId}, hasMapping: ${hasMapping})`
+      );
+      this.dataLogCount = 0;
+      this.dataLogLastMs = now;
+    }
   }
 
   private disconnectAll(): void {

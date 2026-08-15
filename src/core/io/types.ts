@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // I/O 层类型定义
 // ============================================================
 
@@ -53,41 +53,18 @@ export type DataSourceCallback = {
   onError: (error: Error) => void;
 };
 
-/** 插件信息（来自后端 Monitor API） */
-export interface PluginInfo {
-  name: string;
-  wasm_file: string;
-  connection_state: number;
-  connection_label: string;
-  scan_count: number;
-  error_count: number;
-  last_scan_time_ms: number;
-  last_error: string;
-  last_error_time_ms: number;
-  uptime_ms: number;
-}
+// 监控 DTO 单一契约源（F13）：与 web-ui 共用 packages/contracts，
+// 字段名与后端 monitor/types.rs 一致，禁止在本文件手写镜像。
+import type {
+  PluginStatus,
+  LivePointInfo,
+  MonitorSnapshot,
+} from "@hmi/contracts";
 
-/** 实时点位信息（来自后端 Monitor API） */
-export interface LivePointInfo {
-  variable_id: string;
-  address: string;
-  var_type: string;
-  value: number | boolean | null;
-  quality: string;
-  timestamp_ms: number;
-  age_ms: number;
-  data_type: string;
-  byte_order: string;
-  scale: number;
-  offset_val: number;
-}
-
-/** 监控快照（来自 GET /api/monitor/overview） */
-export interface MonitorSnapshot {
-  server_uptime_ms: number;
-  plugins: PluginInfo[];
-  total_scans: number;
-  total_errors: number;
-  total_points: number;
-  active_ws_clients: number;
-}
+export type {
+  PluginStatus,
+  LivePointInfo,
+  MonitorSnapshot,
+} from "@hmi/contracts";
+/** 兼容别名：契约中的规范命名为 PluginStatus */
+export type PluginInfo = PluginStatus;

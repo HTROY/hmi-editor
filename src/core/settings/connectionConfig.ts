@@ -1,8 +1,11 @@
 import type { ActiveSource } from "../io";
+import { createStorage } from "../platform/storage";
+import type { StorageLike } from "../platform/storage";
 
 // ============================================================
 // connectionConfig — 编辑器级数据连接设置持久化
 // 与工程自动保存（IndexedDB 快照）分离，只存面板配置本身
+// 存储访问统一走 platform/storage（F17）
 // ============================================================
 
 export interface ConnectionConfig {
@@ -29,15 +32,7 @@ export const DEFAULT_CONNECTION_CONFIG: ConnectionConfig = {
   ioBackendBackupApiUrl: "",
 };
 
-export interface StorageLike {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-}
-
-function defaultStorage(): StorageLike | null {
-  if (typeof localStorage === "undefined") return null;
-  return localStorage;
-}
+export type { StorageLike } from "../platform/storage";
 
 function isConnectionConfig(value: unknown): value is ConnectionConfig {
   if (!value || typeof value !== "object") return false;
@@ -57,23 +52,15 @@ function isConnectionConfig(value: unknown): value is ConnectionConfig {
 export function loadConnectionConfig(
   storage?: StorageLike
 ): ConnectionConfig | null {
-  const s = storage ?? defaultStorage();
-  if (!s) return null;
-  try {
-    const raw = s.getItem(CONNECTION_CONFIG_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    return isConnectionConfig(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
+  const s = createStorage("", storage);
+  const parsed: unknown = s.getJSON(CONNECTION_CONFIG_STORAGE_KEY);
+  return isConnectionConfig(parsed) ? parsed : null;
 }
 
 export function saveConnectionConfig(
   config: ConnectionConfig,
   storage?: StorageLike
 ): void {
-  const s = storage ?? defaultStorage();
-  if (!s) return;
-  s.setItem(CONNECTION_CONFIG_STORAGE_KEY, JSON.stringify(config));
+  const s = createStorage("", storage);
+  s.setJSON(CONNECTION_CONFIG_STORAGE_KEY, config);
 }

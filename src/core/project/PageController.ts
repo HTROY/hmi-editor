@@ -8,6 +8,9 @@ import { createShape } from "../shapes";
 import type { ShapeProps } from "../types";
 import { ProjectManager } from "./ProjectManager";
 import type { PageMeta, ProjectData } from "./types";
+import { createLogger } from "../platform/logger";
+
+const logger = createLogger("PageController");
 
 /** 一次页面加载/切换的选项 */
 export interface PageSwapOptions {
@@ -107,7 +110,7 @@ export class PageController {
       try {
         this.scene.add(createShape(sp.type, sp));
       } catch (e) {
-        console.warn("导入图元失败:", sp.type, e);
+        logger.warn("导入图元失败:", sp.type, e);
       }
     }
     this.sceneEditor.resetHistories(page.meta.id);

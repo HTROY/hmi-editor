@@ -2,10 +2,13 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { theme as antdTheme } from "antd";
 import type { ThemeConfig } from "antd";
-import * as echarts from "echarts";
+import { echarts } from "./lib/echarts";
+import { createStorage } from "./utils/storage";
 
 type ThemeMode = "dark" | "light";
 
+// 键保持 hmi-io-theme 不变（F17：统一走 storage 封装）
+const storage = createStorage("");
 const STORAGE_KEY = "hmi-io-theme";
 
 interface ThemeContextValue {
@@ -67,7 +70,7 @@ echarts.registerTheme("app", darkEchartsTheme);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = storage.get(STORAGE_KEY);
     if (saved === "light" || saved === "dark") return saved;
     return window.matchMedia?.("(prefers-color-scheme: dark)").matches
       ? "dark"
@@ -75,11 +78,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, mode);
+    storage.set(STORAGE_KEY, mode);
     document.documentElement.setAttribute("data-theme", mode);
     echarts.registerTheme(
       "app",
-      mode === "dark" ? darkEchartsTheme : lightEchartsTheme,
+      mode === "dark" ? darkEchartsTheme : lightEchartsTheme
     );
   }, [mode]);
 

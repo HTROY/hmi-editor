@@ -19,7 +19,7 @@ import {
   Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import type { EChartsOption } from "echarts";
+import type { AppEChartsOption } from "../lib/echarts";
 import { api } from "../api/client";
 import type { MonitorSnapshot, PluginStatus } from "../api/types";
 import ConnectionBadge from "../components/ConnectionBadge";
@@ -35,7 +35,7 @@ export default function Dashboard() {
   const snap: MonitorSnapshot | null = overview.data;
   const samples = history.data?.samples ?? [];
 
-  const chartOption = useMemo<EChartsOption | null>(() => {
+  const chartOption = useMemo<AppEChartsOption | null>(() => {
     if (!samples.length) return null;
     const ordered = [...samples].reverse();
     const times = ordered.map((s) => formatTime(s.timestamp_ms));
@@ -59,7 +59,7 @@ export default function Dashboard() {
           }[];
           const lines = list.map(
             (p) =>
-              `${p.seriesName}: <b>${p.value === null || p.value === undefined ? "-" : p.value}</b>`,
+              `${p.seriesName}: <b>${p.value === null || p.value === undefined ? "-" : p.value}</b>`
           );
           return `${list[0]?.axisValue ?? ""}<br/>${lines.join("<br/>")}`;
         },

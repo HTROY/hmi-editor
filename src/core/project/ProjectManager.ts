@@ -7,6 +7,7 @@ import { PROJECT_SCHEMA_VERSION, upgradeProjectData } from "./upgrade";
 import { packProjectPackage, unpackProjectPackage } from "./package";
 import { NOOP_STORAGE, noopDownload, systemClock } from "../platform/defaults";
 import type { ClockPort, DownloadPort, StoragePort } from "../platform/ports";
+import { createLogger } from "../platform/logger";
 
 export interface RemoteProjectLink {
   id: string;
@@ -70,6 +71,7 @@ export class ProjectManager {
   private readonly storage: StoragePort;
   private readonly download: DownloadPort;
   private readonly clock: ClockPort;
+  private readonly logger = createLogger("ProjectManager");
 
   constructor(ports: ProjectManagerPorts = {}) {
     this.storage =
@@ -296,7 +298,7 @@ export class ProjectManager {
           const shape = createShape(shapeProps.type, shapeProps);
           scene.add(shape);
         } catch (e) {
-          console.warn("导入图元失败:", shapeProps.type, e);
+          this.logger.warn("导入图元失败:", shapeProps.type, e);
         }
       }
       this.pageMetas.set(pageData.meta.id, { ...pageData.meta });

@@ -1,14 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Button,
-  Card,
-  message,
-  Select,
-  Space,
-  Table,
-  Tabs,
-  Tag,
-} from "antd";
+import { Button, Card, message, Select, Space, Table, Tabs, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { api } from "../api/client";
 import type {
@@ -21,6 +12,9 @@ import type {
 import SeverityTag, { SEVERITY_OPTIONS } from "../components/SeverityTag";
 import { getOperator } from "../operator";
 import { errMsg } from "../utils/error";
+import { createLogger } from "../utils/logger";
+
+const logger = createLogger("AlarmMonitor");
 
 const QUALITY_LABEL: Record<string, string> = {
   good: "良好",
@@ -57,7 +51,9 @@ export default function AlarmMonitor() {
 
   const [histPage, setHistPage] = useState(1);
   const [histSeverity, setHistSeverity] = useState<AlarmSeverity | "">("");
-  const [histStatus, setHistStatus] = useState<AlarmStatus | "unacknowledged" | "">("");
+  const [histStatus, setHistStatus] = useState<
+    AlarmStatus | "unacknowledged" | ""
+  >("");
   const [soePage, setSoePage] = useState(1);
   const [soeQuality, setSoeQuality] = useState("");
 
@@ -70,7 +66,7 @@ export default function AlarmMonitor() {
       const data = await api.alarmActive();
       if (mounted.current) setActive(data);
     } catch (e) {
-      console.warn("刷新活跃报警失败:", errMsg(e));
+      logger.warn("刷新活跃报警失败:", errMsg(e));
     }
   }, []);
 
@@ -87,7 +83,7 @@ export default function AlarmMonitor() {
         setHistoryTotal(data.total);
       }
     } catch (e) {
-      console.warn("刷新报警历史失败:", errMsg(e));
+      logger.warn("刷新报警历史失败:", errMsg(e));
     }
   }, [histPage, histSeverity, histStatus]);
 
@@ -103,7 +99,7 @@ export default function AlarmMonitor() {
         setSoeTotal(data.total);
       }
     } catch (e) {
-      console.warn("刷新 SOE 失败:", errMsg(e));
+      logger.warn("刷新 SOE 失败:", errMsg(e));
     }
   }, [soePage, soeQuality]);
 

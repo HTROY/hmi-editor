@@ -1,8 +1,12 @@
 import { useCallback, useState } from "react";
+import { browserStorage } from "./platform/browserPorts";
+import { createStorage } from "../core/platform/storage";
 
 export type ThemeMode = "dark" | "light";
 
-const STORAGE_KEY = "hmi-editor-theme";
+// 键保持 hmi-editor-theme 不变（F17：统一走 platform/storage）
+const storage = createStorage("", browserStorage);
+const THEME_KEY = "hmi-editor-theme";
 
 function getInitialTheme(): ThemeMode {
   if (typeof document === "undefined") return "dark";
@@ -17,11 +21,8 @@ export function useTheme() {
     setTheme((prev) => {
       const next: ThemeMode = prev === "dark" ? "light" : "dark";
       document.documentElement.setAttribute("data-theme", next);
-      try {
-        localStorage.setItem(STORAGE_KEY, next);
-      } catch {
-        // 隐私模式等场景下忽略持久化失败
-      }
+      // 隐私模式等场景下忽略持久化失败
+      storage.set(THEME_KEY, next);
       return next;
     });
   }, []);

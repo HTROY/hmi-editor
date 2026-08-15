@@ -1,10 +1,19 @@
 import { DataSource } from "./DataSource";
 import type { WebSocketConfig, DataPoint } from "./types";
+import {
+  parseWsEnvelope,
+  type PointValue,
+  type WsServerEnvelope,
+} from "@hmi/contracts";
+import { createLogger } from "../platform/logger";
 
 // ============================================================
 // WebSocketClient — WebSocket 数据源
 // 连接后端实时数据服务，推送变量值变化
+// 协议契约单一来源：packages/contracts/src/ws.ts（F13）
 // ============================================================
+
+const logger = createLogger("WebSocket");
 
 export type ConfigChangeHandler = (event: {
   action: string;
@@ -12,10 +21,8 @@ export type ConfigChangeHandler = (event: {
   pluginId: number;
 }) => void;
 
-export type AlarmMessageHandler = (msg: {
-  type: string;
-  data?: any;
-}) => void;
+/** 报警/SOE 推送处理（alarm_snapshot/alarm_update/soe/alarm_rules/...） */
+export type AlarmMessageHandler = (msg: WsServerEnvelope) => void;
 
 // ------------------------------------------------------------
 // 客户端 → 后端 WS 协议（与服务端 ClientCommand 一一对应，扁平结构）
@@ -23,25 +30,7 @@ export type AlarmMessageHandler = (msg: {
 // 不要再用 `{command, value:{...}}` 嵌套包络。
 // ------------------------------------------------------------
 
-export interface ControlMessage {
-  command: "control";
-  variableId: string;
-  value: number | boolean;
-}
-
-export interface SubscribeMessage {
-  command: "subscribe";
-  variableIds: string[];
-}
-
-export interface HeartbeatMessage {
-  command: "heartbeat";
-}
-
-export type ClientMessage =
-  | ControlMessage
-  | SubscribeMessage
-  | HeartbeatMessage;
+export type { WsClientMessage } from "@hmi/contracts";
 
 export class WebSocketClient extends DataSource {
   declare config: WebSocketConfig;
@@ -78,12 +67,12 @@ export class WebSocketClient extends DataSource {
     return new Promise((resolve, reject) => {
       try {
         const ws = new WebSocket(
-          this.getUrls()[this.urlIndex] ?? this.config.url,
+          this.getUrls()[this.urlIndex] ?? this.config.url
         );
         ws.onopen = () => {
-          console.log(
-            "[WebSocket] Connected to",
-            this.getUrls()[this.urlIndex] ?? this.config.url,
+          logger.info(
+            "Connected to",
+            this.getUrls()[this.urlIndex] ?? this.config.url
           );
           this.ws = ws;
           this.emitStatus("connected");
@@ -92,19 +81,10 @@ export class WebSocketClient extends DataSource {
         };
 
         ws.onmessage = (event) => {
-          console.log(
-            "[WebSocket] Raw message received, length:",
-            typeof event.data === "string" ? event.data.length : "binary",
-          );
+          if (typeof event.data !== "string") return;
+          logger.debug("Raw message received, length:", event.data.length);
           try {
-            const msg = JSON.parse(event.data);
-            console.log(
-              "[WebSocket] Parsed:",
-              msg.type,
-              "points:",
-              msg.data?.length ?? "single",
-            );
-            this.handleMessage(msg);
+            this.handleMessage(JSON.parse(event.data));
           } catch {
             // 尝试按行解析（多个 JSON 对象）
             const lines = event.data.split("\n").filter(Boolean);
@@ -119,22 +99,17 @@ export class WebSocketClient extends DataSource {
         };
 
         ws.onerror = (err) => {
-          console.error("[WebSocket] Connection error:", err);
+          logger.error("Connection error:", err);
           this.emitError(
             new Error(
-              "WebSocket 连接错误: " + ((err as any)?.message ?? "未知"),
-            ),
+              "WebSocket 连接错误: " + ((err as any)?.message ?? "未知")
+            )
           );
           reject(err);
         };
 
         ws.onclose = (ev) => {
-          console.log(
-            "[WebSocket] Closed, code:",
-            ev.code,
-            "reason:",
-            ev.reason,
-          );
+          logger.info("Closed, code:", ev.code, "reason:", ev.reason);
           this.ws = null;
           this.stopHeartbeat();
           this.emitStatus("disconnected");
@@ -199,67 +174,49 @@ export class WebSocketClient extends DataSource {
 
   // ---- 内部 ----
 
-  private handleMessage(msg: any): void {
-    // Alarm & SOE push messages
-    if (
-      [
-        "alarm_snapshot",
-        "alarm_update",
-        "soe",
-        "alarm_rules",
-        "alarm_rules_changed",
-      ].includes(msg.type)
-    ) {
-      for (const handler of this.alarmHandlers) {
-        handler(msg);
-      }
+  private handleMessage(raw: unknown): void {
+    // 受信解析：只接受契约定义的 {type, ...} 判别联合（packages/contracts）
+    const msg = parseWsEnvelope(raw);
+    if (!msg) {
+      logger.debug("忽略无法识别的 WS 消息:", raw);
       return;
     }
 
-    // Handle config change notifications
-    if (msg.type === "config_change") {
-      for (const handler of this.configChangeHandlers) {
-        handler({
-          action: msg.action ?? "",
-          variableId: msg.variable_id ?? "",
-          pluginId: msg.plugin_id ?? 0,
-        });
-      }
-      return;
-    }
+    switch (msg.type) {
+      // 初始快照与周期数据
+      case "snapshot":
+      case "data":
+        for (const p of msg.data) {
+          this.emitData(toDataPoint(p));
+        }
+        return;
 
-    // Handle snapshot (initial bulk data on connect)
-    if (msg.type === "snapshot" && Array.isArray(msg.data)) {
-      for (const p of msg.data) {
-        this.emitData({
-          id: p.id ?? p.variableId ?? p.tag ?? "",
-          value: p.value ?? p.val ?? 0,
-          quality: p.quality ?? "good",
-          timestamp: p.timestamp ?? Date.now(),
-        });
-      }
-      return;
-    }
+      // 配置变更通知
+      case "config_change":
+        for (const handler of this.configChangeHandlers) {
+          handler({
+            action: msg.action,
+            variableId: msg.variable_id,
+            pluginId: msg.plugin_id,
+          });
+        }
+        return;
 
-    // Handle regular data messages
-    if (msg.type === "data" || msg.data) {
-      const points = Array.isArray(msg.data) ? msg.data : [msg.data ?? msg];
-      for (const p of points) {
-        this.emitData({
-          id: p.id ?? p.variableId ?? p.tag ?? "",
-          value: p.value ?? p.val ?? 0,
-          quality: p.quality ?? "good",
-          timestamp: p.timestamp ?? Date.now(),
-        });
-      }
-    } else if (msg.id || msg.variableId) {
-      // 单点格式
-      this.emitData({
-        id: msg.id ?? msg.variableId,
-        value: msg.value ?? msg.val,
-        quality: msg.quality ?? "good",
-        timestamp: msg.timestamp ?? Date.now(),
-      });
+      // Alarm & SOE 推送
+      case "alarm_update":
+      case "soe":
+      case "alarm_snapshot":
+      case "alarm_rules":
+      case "alarm_rules_changed":
+        for (const handler of this.alarmHandlers) {
+          handler(msg);
+        }
+        return;
+
+      // 冗余角色变更（后端会随之断开连接）
+      case "role":
+        logger.debug("冗余角色变更:", msg.state);
+        return;
     }
   }
 
@@ -315,4 +272,23 @@ export class WebSocketClient extends DataSource {
       this.connect();
     }
   }
+}
+
+/**
+ * 契约 PointValue → 内部 DataPoint。
+ * 字段名以契约为准（id/value/quality/timestamp），不做多命名兼容；
+ * 字符串/空值按数值归一（后端 value 为 serde_json::Value）。
+ */
+function toDataPoint(p: PointValue): DataPoint {
+  const value: number | boolean =
+    typeof p.value === "number" || typeof p.value === "boolean"
+      ? p.value
+      : typeof p.value === "string"
+        ? Number(p.value) || 0
+        : 0;
+  const quality: DataPoint["quality"] =
+    p.quality === "good" || p.quality === "bad" || p.quality === "uncertain"
+      ? p.quality
+      : "good";
+  return { id: p.id, value, quality, timestamp: p.timestamp };
 }

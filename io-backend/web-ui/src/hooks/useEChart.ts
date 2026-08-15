@@ -1,12 +1,12 @@
 import { useEffect, useRef } from "react";
-import * as echarts from "echarts";
-import type { EChartsOption } from "echarts";
+import { echarts, type AppEChartsOption } from "../lib/echarts";
 
 /**
  * Mount an ECharts instance bound to a div.
- * 主题只由 theme.tsx 维护（registerTheme("app", ...)），此处仅消费。
+ * 主题只由 theme.tsx 维护（registerTheme("app", ...)），此处仅消费；
+ * 实例来自 lib/echarts（按需注册的 echarts/core）。
  */
-export function useEChart(option: EChartsOption | null) {
+export function useEChart(option: AppEChartsOption | null) {
   const ref = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
 

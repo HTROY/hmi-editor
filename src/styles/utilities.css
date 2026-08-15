@@ -73,6 +73,13 @@
 .slide-in {
   animation: slideIn 0.18s ease;
 }
+/* 懒加载面板（F11）的 Suspense 占位 */
+.panel-loading {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--muted, #8a97a8);
+  font-size: 13px;
+}
 
 /* ============================================================
    可访问性
@@ -100,4 +107,3 @@ textarea:focus-visible,
     animation: none;
   }
 }
-

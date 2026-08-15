@@ -12,7 +12,7 @@ import {
   Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import type { EChartsOption } from "echarts";
+import type { AppEChartsOption } from "../lib/echarts";
 import { api } from "../api/client";
 import type {
   InstanceGroupStatus,
@@ -36,7 +36,7 @@ export default function RedundancyMonitor() {
   const snap = status.data;
   const groups = usePolling(() => api.getInstanceGroups(), 1000);
 
-  const chartOption = useMemo<EChartsOption | null>(() => {
+  const chartOption = useMemo<AppEChartsOption | null>(() => {
     const rtt = snap?.rtt_history ?? [];
     if (rtt.length < 2) return null;
     return {
@@ -115,9 +115,7 @@ export default function RedundancyMonitor() {
       dataIndex: "quality",
       width: 90,
       render: (v: string) => (
-        <Tag
-          color={v === "good" ? "green" : v === "bad" ? "red" : "default"}
-        >
+        <Tag color={v === "good" ? "green" : v === "bad" ? "red" : "default"}>
           {v}
         </Tag>
       ),
@@ -149,9 +147,9 @@ export default function RedundancyMonitor() {
   const sortedPoints = useMemo(
     () =>
       [...(snap?.synced_points ?? [])].sort(
-        (a, b) => a.timestamp - b.timestamp,
+        (a, b) => a.timestamp - b.timestamp
       ),
-    [snap],
+    [snap]
   );
 
   const groupColumns: ColumnsType<InstanceGroupStatus> = [

@@ -9,6 +9,9 @@ import type {
   DownloadPort,
   StoragePort,
 } from "./ports";
+import { createLogger } from "./logger";
+
+const logger = createLogger("core/platform");
 
 /** 无存储环境（Node/测试）下的空实现 */
 export const NOOP_STORAGE: StoragePort = {
@@ -20,9 +23,7 @@ export const NOOP_STORAGE: StoragePort = {
 /** 未注入下载端口时的兜底：记录警告，避免浏览器外环境抛错 */
 export const noopDownload: DownloadPort = {
   download: (filename) => {
-    console.warn(
-      "[core/platform] 未配置 DownloadPort，已跳过下载: " + filename
-    );
+    logger.warn("未配置 DownloadPort，已跳过下载:", filename);
   },
 };
 

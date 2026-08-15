@@ -3,6 +3,9 @@ import type { LibraryItem } from "../shapes";
 import { normalizeGrouping } from "../shapes/libraryGroups";
 import type { PageMeta, ProjectData, ProjectMeta } from "./types";
 import type { ShapeProps } from "../types";
+import { createLogger } from "../platform/logger";
+
+const logger = createLogger("upgrade");
 
 // ============================================================
 // upgrade.ts — 工程数据 schemaVersion 归一化
@@ -100,7 +103,7 @@ export function upgradeProjectData(value: unknown): ProjectData {
         try {
           return normalizeShapeProps(s);
         } catch (e) {
-          console.warn("导入图元失败:", e);
+          logger.warn("导入图元失败:", e);
           return null;
         }
       })
@@ -133,7 +136,7 @@ export function upgradeProjectData(value: unknown): ProjectData {
           updatedAt: stringOr(item.updatedAt, now()),
         };
       } catch (e) {
-        console.warn("导入库项失败:", e);
+        logger.warn("导入库项失败:", e);
         return null;
       }
     })

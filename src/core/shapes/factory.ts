@@ -1,4 +1,5 @@
 import type { ShapeType } from "../types";
+import { createLogger } from "../platform/logger";
 import { ShapeBase } from "./ShapeBase";
 import { RectShape } from "./RectShape";
 import { CircleShape } from "./CircleShape";
@@ -17,6 +18,8 @@ import {
   MetroGauge,
   MetroTransformer,
 } from "./metro";
+
+const logger = createLogger("factory");
 
 /** 图元工厂：根据 type 创建对应实例 */
 export function createShape(type: ShapeType, props?: any): ShapeBase {
@@ -52,7 +55,7 @@ export function createShape(type: ShapeType, props?: any): ShapeBase {
     case "metro-transformer":
       return new MetroTransformer(props);
     default:
-      console.warn("未知图元类型: " + String(type) + "，使用矩形代替");
+      logger.warn("未知图元类型:", String(type), "，使用矩形代替");
       return new RectShape(props);
   }
 }

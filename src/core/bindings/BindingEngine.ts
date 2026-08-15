@@ -7,6 +7,7 @@ import { GroupShape } from "../shapes/GroupShape";
 import type { Binding } from "../types";
 import { applyValueMapping } from "./mapping";
 import { forEachShape, resolveShape, type ShapePath } from "../inspector/tree";
+import { createLogger } from "../platform/logger";
 
 // ============================================================
 // BindingEngine — 绑定引擎
@@ -33,6 +34,7 @@ export class BindingEngine {
   private scene: SceneGraph;
   private variables: VariableManager;
   private renderer: Renderer | null = null;
+  private readonly logger = createLogger("BindingEngine");
 
   // 反向索引: variableId → 绑定了该变量的图元列表
   private index: Map<string, BindingRecord[]> = new Map();
@@ -165,7 +167,7 @@ export class BindingEngine {
     const key = shape.type + ":" + prop;
     if (this.warnedProps.has(key)) return;
     this.warnedProps.add(key);
-    console.warn("绑定目标属性未在能力注册表登记，忽略写入: " + key);
+    this.logger.warn("绑定目标属性未在能力注册表登记，忽略写入:", key);
   }
 
   private removeRecords(pred: (path: ShapePath) => boolean): void {

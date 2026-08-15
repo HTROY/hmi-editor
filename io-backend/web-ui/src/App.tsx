@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import {
   Navigate,
   Route,
@@ -25,18 +25,20 @@ import {
   Layout,
   Menu,
   Space,
+  Spin,
   Tag,
   theme as antdTheme,
 } from "antd";
 import type { MenuProps } from "antd";
-import Dashboard from "./pages/Dashboard";
-import Plugins from "./pages/Plugins";
-import Points from "./pages/Points";
-import Monitor from "./pages/Monitor";
-import RedundancyConfig from "./pages/RedundancyConfig";
-import RedundancyMonitor from "./pages/RedundancyMonitor";
-import AlarmMonitor from "./pages/AlarmMonitor";
-import AlarmRules from "./pages/AlarmRules";
+// F11：页面按路由懒加载，各自独立 chunk
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Plugins = lazy(() => import("./pages/Plugins"));
+const Points = lazy(() => import("./pages/Points"));
+const Monitor = lazy(() => import("./pages/Monitor"));
+const RedundancyConfig = lazy(() => import("./pages/RedundancyConfig"));
+const RedundancyMonitor = lazy(() => import("./pages/RedundancyMonitor"));
+const AlarmMonitor = lazy(() => import("./pages/AlarmMonitor"));
+const AlarmRules = lazy(() => import("./pages/AlarmRules"));
 import { useTheme } from "./theme";
 import { getOperator, setOperator } from "./operator";
 
@@ -50,7 +52,11 @@ const MENU_ITEMS: NonNullable<MenuProps["items"]> = [
   { key: "/alarm", icon: <WarningOutlined />, label: "报警监控" },
   { key: "/alarm/rules", icon: <SettingOutlined />, label: "报警规则" },
   { key: "/redundancy", icon: <ControlOutlined />, label: "冗余配置" },
-  { key: "/redundancy/monitor", icon: <RadarChartOutlined />, label: "冗余监控" },
+  {
+    key: "/redundancy/monitor",
+    icon: <RadarChartOutlined />,
+    label: "冗余监控",
+  },
 ];
 
 const TITLES: Record<string, string> = {
@@ -147,17 +153,28 @@ export default function App() {
           </Space>
         </Header>
         <Content style={{ padding: 20, overflow: "auto" }}>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/plugins" element={<Plugins />} />
-            <Route path="/points" element={<Points />} />
-            <Route path="/monitor" element={<Monitor />} />
-            <Route path="/alarm" element={<AlarmMonitor />} />
-            <Route path="/alarm/rules" element={<AlarmRules />} />
-            <Route path="/redundancy" element={<RedundancyConfig />} />
-            <Route path="/redundancy/monitor" element={<RedundancyMonitor />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <Suspense
+            fallback={
+              <div style={{ padding: "80px 0", textAlign: "center" }}>
+                <Spin tip="页面加载中…" />
+              </div>
+            }
+          >
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/plugins" element={<Plugins />} />
+              <Route path="/points" element={<Points />} />
+              <Route path="/monitor" element={<Monitor />} />
+              <Route path="/alarm" element={<AlarmMonitor />} />
+              <Route path="/alarm/rules" element={<AlarmRules />} />
+              <Route path="/redundancy" element={<RedundancyConfig />} />
+              <Route
+                path="/redundancy/monitor"
+                element={<RedundancyMonitor />}
+              />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
         </Content>
       </Layout>
     </Layout>

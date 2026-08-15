@@ -1,0 +1,10 @@
+{
+  "name": "@hmi/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "前后端共享契约：WS 协议与 REST DTO 的单一来源（TypeScript 类型 + JSON Schema + 运行时校验）",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

@@ -8,6 +8,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@hmi/contracts": path.resolve(
+        __dirname,
+        "./packages/contracts/src/index.ts"
+      ),
     },
   },
   test: {

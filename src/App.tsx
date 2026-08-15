@@ -1,20 +1,61 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Toolbar } from "./editor/toolbar/Toolbar";
 import { EditorCanvas } from "./editor/canvas/EditorCanvas";
 import { InspectorPanel } from "./editor/inspector/InspectorPanel";
-import { VariablePanel } from "./editor/panels/VariablePanel";
-import { ConnectionPanel } from "./editor/panels/ConnectionPanel";
-import { PagePanel } from "./editor/panels/PagePanel";
-import { AlarmPanel } from "./editor/panels/alarm/AlarmPanel";
-import { TrendPanel } from "./editor/panels/alarm/TrendPanel";
-import { AuthPanel } from "./editor/panels/alarm/AuthPanel";
-import { ScriptPanel } from "./editor/panels/script/ScriptPanel";
-import { ReportPanel } from "./editor/panels/script/ReportPanel";
-import { ShapeLibrary } from "./editor/panels/ShapeLibrary";
 import { StatusBar } from "./editor/StatusBar";
-import { SyncDialogs } from "./editor/dialogs/SyncDialogs";
 import { Icon, type IconName } from "./editor/icons";
 import { useEditorStore, type LeftPanel } from "./store/editorStore";
+import { browserStorage } from "./editor/platform/browserPorts";
+import { createStorage } from "./core/platform/storage";
+// F11：左侧面板按需懒加载，低频面板（报警/趋势/脚本/报表等）单独拆 chunk
+const ShapeLibrary = lazy(() =>
+  import("./editor/panels/ShapeLibrary").then((m) => ({
+    default: m.ShapeLibrary,
+  }))
+);
+const VariablePanel = lazy(() =>
+  import("./editor/panels/VariablePanel").then((m) => ({
+    default: m.VariablePanel,
+  }))
+);
+const ConnectionPanel = lazy(() =>
+  import("./editor/panels/ConnectionPanel").then((m) => ({
+    default: m.ConnectionPanel,
+  }))
+);
+const PagePanel = lazy(() =>
+  import("./editor/panels/PagePanel").then((m) => ({ default: m.PagePanel }))
+);
+const AlarmPanel = lazy(() =>
+  import("./editor/panels/alarm/AlarmPanel").then((m) => ({
+    default: m.AlarmPanel,
+  }))
+);
+const TrendPanel = lazy(() =>
+  import("./editor/panels/alarm/TrendPanel").then((m) => ({
+    default: m.TrendPanel,
+  }))
+);
+const AuthPanel = lazy(() =>
+  import("./editor/panels/alarm/AuthPanel").then((m) => ({
+    default: m.AuthPanel,
+  }))
+);
+const ScriptPanel = lazy(() =>
+  import("./editor/panels/script/ScriptPanel").then((m) => ({
+    default: m.ScriptPanel,
+  }))
+);
+const ReportPanel = lazy(() =>
+  import("./editor/panels/script/ReportPanel").then((m) => ({
+    default: m.ReportPanel,
+  }))
+);
+const SyncDialogs = lazy(() =>
+  import("./editor/dialogs/SyncDialogs").then((m) => ({
+    default: m.SyncDialogs,
+  }))
+);
 // 样式按域拆分（tokens → base → 布局 → 面板），导入顺序即层叠顺序，勿随意调整
 import "./styles/tokens.css";
 import "./styles/base.css";
@@ -62,18 +103,14 @@ const PANELS: Record<LeftPanel, React.ReactNode> = {
   report: <ReportPanel />,
 };
 
-const LEFT_W_KEY = "hmi.leftPanelWidth";
-const RIGHT_W_KEY = "hmi.rightPanelWidth";
+// 左右栏宽度记忆（F17：统一走 platform/storage，键保持 hmi.leftPanelWidth）
+const widthStorage = createStorage("hmi.", browserStorage);
 const DEFAULT_LEFT_W = 280;
 const DEFAULT_RIGHT_W = 324;
 
 function loadWidth(key: string, fallback: number): number {
-  try {
-    const n = Number(localStorage.getItem(key));
-    return Number.isFinite(n) && n > 0 ? n : fallback;
-  } catch {
-    return fallback;
-  }
+  const n = Number(widthStorage.get(key));
+  return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
 function App() {
@@ -81,10 +118,10 @@ function App() {
   const setLp = useEditorStore((s) => s.setLeftPanel);
   const [showLeft, setShowLeft] = useState(true);
   const [leftW, setLeftW] = useState(() =>
-    loadWidth(LEFT_W_KEY, DEFAULT_LEFT_W)
+    loadWidth("leftPanelWidth", DEFAULT_LEFT_W)
   );
   const [rightW, setRightW] = useState(() =>
-    loadWidth(RIGHT_W_KEY, DEFAULT_RIGHT_W)
+    loadWidth("rightPanelWidth", DEFAULT_RIGHT_W)
   );
   const [visited, setVisited] = useState<Set<LeftPanel>>(() => new Set([lp]));
   const drag = useRef<{
@@ -116,14 +153,11 @@ function App() {
       drag.current = null;
       document.body.classList.remove("resizing-h");
       const w = kind === "left" ? leftW : rightW;
-      try {
-        localStorage.setItem(
-          kind === "left" ? LEFT_W_KEY : RIGHT_W_KEY,
-          String(w)
-        );
-      } catch {
-        // localStorage 不可用时仅会话内生效
-      }
+      // 配额/隐私模式失败时仅会话内生效（storage.set 内部已吞掉异常）
+      widthStorage.set(
+        kind === "left" ? "leftPanelWidth" : "rightPanelWidth",
+        String(w)
+      );
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
@@ -188,17 +222,21 @@ function App() {
                 ))}
               </div>
               <div className="panel fade-in">
-                {LEFT_TABS.map((t) =>
-                  visited.has(t.key) ? (
-                    <div
-                      key={t.key}
-                      className="panel-host"
-                      style={{ display: lp === t.key ? undefined : "none" }}
-                    >
-                      {PANELS[t.key]}
-                    </div>
-                  ) : null
-                )}
+                <Suspense
+                  fallback={<div className="panel-loading">面板加载中…</div>}
+                >
+                  {LEFT_TABS.map((t) =>
+                    visited.has(t.key) ? (
+                      <div
+                        key={t.key}
+                        className="panel-host"
+                        style={{ display: lp === t.key ? undefined : "none" }}
+                      >
+                        {PANELS[t.key]}
+                      </div>
+                    ) : null
+                  )}
+                </Suspense>
               </div>
             </div>
             <div
@@ -248,7 +286,9 @@ function App() {
         </div>
       </div>
       <StatusBar />
-      <SyncDialogs />
+      <Suspense fallback={null}>
+        <SyncDialogs />
+      </Suspense>
     </div>
   );
 }
