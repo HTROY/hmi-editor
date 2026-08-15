@@ -6,11 +6,11 @@ import type {
 } from "./types";
 
 // ============================================================
-// VariableManager ¡ª ±äÁ¿/µã±í¹ÜÀíÆ÷
-//   - ¹ÜÀíËùÓĞ±äÁ¿¶¨Òå£¨µã±í£©
-//   - ¹ÜÀí±äÁ¿ÔËĞĞÊ±Öµ
-//   - Ö§³Ö¶©ÔÄ±äÁ¿±ä»¯ÊÂ¼ş
-//   - Ö§³ÖÄ£ÄâÊı¾İÉú³É
+// VariableManager â€” å˜é‡/ç‚¹è¡¨ç®¡ç†å™¨
+//   - ç®¡ç†æ‰€æœ‰å˜é‡å®šä¹‰ï¼ˆç‚¹è¡¨ï¼‰
+//   - ç®¡ç†å˜é‡è¿è¡Œæ—¶å€¼
+//   - æ”¯æŒè®¢é˜…å˜é‡å˜åŒ–äº‹ä»¶
+//   - æ”¯æŒæ¨¡æ‹Ÿæ•°æ®ç”Ÿæˆ
 // ============================================================
 
 export class VariableManager {
@@ -19,12 +19,12 @@ export class VariableManager {
   private listeners: Map<string, Set<VariableChangeCallback>> = new Map();
   private globalListeners: Set<VariableChangeCallback> = new Set();
 
-  // ---- ±äÁ¿¶¨Òå¹ÜÀí ----
+  // ---- å˜é‡å®šä¹‰ç®¡ç† ----
 
-  /** Ìí¼Ó/¸üĞÂ±äÁ¿¶¨Òå */
+  /** æ·»åŠ /æ›´æ–°å˜é‡å®šä¹‰ */
   define(def: VariableDef): void {
     this.defs.set(def.id, def);
-    // ³õÊ¼»¯ÔËĞĞÊ±Öµ
+    // åˆå§‹åŒ–è¿è¡Œæ—¶å€¼
     if (!this.values.has(def.id)) {
       this.values.set(def.id, {
         id: def.id,
@@ -35,41 +35,41 @@ export class VariableManager {
     }
   }
 
-  /** ÅúÁ¿¶¨Òå */
+  /** æ‰¹é‡å®šä¹‰ */
   defineMany(defs: VariableDef[]): void {
     for (const d of defs) this.define(d);
   }
 
-  /** É¾³ı±äÁ¿¶¨Òå */
+  /** åˆ é™¤å˜é‡å®šä¹‰ */
   remove(id: string): void {
     this.defs.delete(id);
     this.values.delete(id);
     this.listeners.delete(id);
   }
 
-  /** »ñÈ¡±äÁ¿¶¨Òå */
+  /** è·å–å˜é‡å®šä¹‰ */
   getDef(id: string): VariableDef | undefined {
     return this.defs.get(id);
   }
 
-  /** »ñÈ¡ËùÓĞ±äÁ¿¶¨Òå */
+  /** è·å–æ‰€æœ‰å˜é‡å®šä¹‰ */
   getAllDefs(): VariableDef[] {
     return Array.from(this.defs.values());
   }
 
-  /** °´·Ö×é»ñÈ¡ */
+  /** æŒ‰åˆ†ç»„è·å– */
   getDefsByGroup(group: string): VariableDef[] {
     return this.getAllDefs().filter((d) => d.group === group);
   }
 
-  /** °´ÀàĞÍ»ñÈ¡ */
+  /** æŒ‰ç±»å‹è·å– */
   getDefsByType(type: VariableType): VariableDef[] {
     return this.getAllDefs().filter((d) => d.type === type);
   }
 
-  // ---- ÔËĞĞÊ±Öµ¹ÜÀí ----
+  // ---- è¿è¡Œæ—¶å€¼ç®¡ç† ----
 
-  /** ÉèÖÃ±äÁ¿Öµ£¨ºËĞÄ·½·¨ ¡ª ´¥·¢Í¨Öª£© */
+  /** è®¾ç½®å˜é‡å€¼ï¼ˆæ ¸å¿ƒæ–¹æ³• â€” è§¦å‘é€šçŸ¥ï¼‰ */
   setValue(
     id: string,
     value: number | boolean,
@@ -78,7 +78,7 @@ export class VariableManager {
     const def = this.defs.get(id);
     if (!def) return;
 
-    // ÊıÖµÀàĞÍ×ª»»
+    // æ•°å€¼ç±»å‹è½¬æ¢
     let normalizedValue = value;
     if (def.type === "DI" || def.type === "DO") {
       normalizedValue = value ? 1 : 0;
@@ -92,11 +92,11 @@ export class VariableManager {
     };
     this.values.set(id, vv);
 
-    // Í¨Öª¶©ÔÄÕß
+    // é€šçŸ¥è®¢é˜…è€…
     this.notify(id, vv);
   }
 
-  /** ÅúÁ¿ÉèÖÃ£¨¸ßĞ§ ¡ª Ò»´ÎĞÔÍ¨ÖªËùÓĞ±ä¸ü£© */
+  /** æ‰¹é‡è®¾ç½®ï¼ˆé«˜æ•ˆ â€” ä¸€æ¬¡æ€§é€šçŸ¥æ‰€æœ‰å˜æ›´ï¼‰ */
   setValues(
     updates: {
       id: string;
@@ -119,25 +119,25 @@ export class VariableManager {
       this.values.set(u.id, vv);
       notified.add(u.id);
     }
-    // Í³Ò»Í¨Öª
+    // ç»Ÿä¸€é€šçŸ¥
     for (const id of notified) {
       this.notify(id, this.values.get(id)!);
     }
   }
 
-  /** »ñÈ¡±äÁ¿ÔËĞĞÊ±Öµ */
+  /** è·å–å˜é‡è¿è¡Œæ—¶å€¼ */
   getValue(id: string): VariableValue | undefined {
     return this.values.get(id);
   }
 
-  /** »ñÈ¡ËùÓĞÔËĞĞÊ±Öµ */
+  /** è·å–æ‰€æœ‰è¿è¡Œæ—¶å€¼ */
   getAllValues(): VariableValue[] {
     return Array.from(this.values.values());
   }
 
-  // ---- ¶©ÔÄ»úÖÆ ----
+  // ---- è®¢é˜…æœºåˆ¶ ----
 
-  /** ¶©ÔÄµ¥¸ö±äÁ¿±ä»¯ */
+  /** è®¢é˜…å•ä¸ªå˜é‡å˜åŒ– */
   subscribe(variableId: string, callback: VariableChangeCallback): () => void {
     if (!this.listeners.has(variableId)) {
       this.listeners.set(variableId, new Set());
@@ -146,7 +146,7 @@ export class VariableManager {
     return () => this.listeners.get(variableId)?.delete(callback);
   }
 
-  /** ¶©ÔÄËùÓĞ±äÁ¿±ä»¯ */
+  /** è®¢é˜…æ‰€æœ‰å˜é‡å˜åŒ– */
   subscribeAll(callback: VariableChangeCallback): () => void {
     this.globalListeners.add(callback);
     return () => this.globalListeners.delete(callback);
@@ -157,11 +157,11 @@ export class VariableManager {
     this.globalListeners.forEach((cb) => cb(id, vv));
   }
 
-  // ---- Ä£ÄâÊı¾İ ----
+  // ---- æ¨¡æ‹Ÿæ•°æ® ----
 
   private simTimer: ReturnType<typeof setInterval> | null = null;
 
-  /** Æô¶¯Ä£ÄâÊı¾İ£¨DI Ëæ»úÌø±ä£¬AI ÕıÏÒ²¨£© */
+  /** å¯åŠ¨æ¨¡æ‹Ÿæ•°æ®ï¼ˆDI éšæœºè·³å˜ï¼ŒAI æ­£å¼¦æ³¢ï¼‰ */
   startSimulation(intervalMs = 1000): void {
     if (this.simTimer) return;
     this.simTimer = setInterval(() => {
@@ -194,9 +194,9 @@ export class VariableManager {
     return this.simTimer !== null;
   }
 
-  // ---- ¹¤¾ß ----
+  // ---- å·¥å…· ----
 
-  /** Ìæ»»ËùÓĞ±äÁ¿¶¨Òå£¨Çå³ı¾ÉÊı¾İ²¢ÅúÁ¿µ¼Èë£© */
+  /** æ›¿æ¢æ‰€æœ‰å˜é‡å®šä¹‰ï¼ˆæ¸…é™¤æ—§æ•°æ®å¹¶æ‰¹é‡å¯¼å…¥ï¼‰ */
   replaceAll(defs: VariableDef[]): void {
     this.stopSimulation();
     this.defs.clear();
@@ -212,7 +212,7 @@ export class VariableManager {
     this.listeners.clear();
   }
 
-  /** »ñÈ¡±äÁ¿ÊıÁ¿ */
+  /** è·å–å˜é‡æ•°é‡ */
   get count(): number {
     return this.defs.size;
   }
