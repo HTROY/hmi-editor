@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   App as AntdApp,
   Button,
@@ -30,6 +30,10 @@ import {
 } from "@ant-design/icons";
 import { api, importExcel } from "../api/client";
 import type { PluginRow, PointRow } from "../api/types";
+import { useCrudTable } from "../hooks/useCrudTable";
+import { useDownload } from "../hooks/useDownload";
+import { useModalForm } from "../hooks/useModalForm";
+import { errMsg } from "../utils/error";
 
 const DATA_TYPES = ["bool", "int16", "uint16", "int32", "uint32", "float32"];
 const BYTE_ORDERS = [
@@ -53,18 +57,22 @@ interface PointFormValues {
   description?: string;
 }
 
+const CREATE_DEFAULTS: Partial<PointFormValues> = {
+  data_type: "uint16",
+  byte_order: "big_endian",
+  scale: 1,
+  offset_val: 0,
+  var_type: "AI",
+};
+
 export default function Points() {
   const { message } = AntdApp.useApp();
   const [plugins, setPlugins] = useState<PluginRow[]>([]);
   const [pluginId, setPluginId] = useState<number | null>(null);
-  const [points, setPoints] = useState<PointRow[]>([]);
-  const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [includeBackup, setIncludeBackup] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<PointRow | null>(null);
-  const [saving, setSaving] = useState(false);
   const [form] = Form.useForm<PointFormValues>();
+  const download = useDownload();
 
   useEffect(() => {
     api
@@ -73,70 +81,23 @@ export default function Points() {
       .catch(() => setPlugins([]));
   }, []);
 
-  const loadPoints = useCallback(
-    async (pid: number) => {
-      setLoading(true);
-      try {
-        setPoints(await api.listPoints(pid, includeBackup));
-      } catch (e) {
-        message.error(`加载点位失败: ${e instanceof Error ? e.message : e}`);
-        setPoints([]);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [message],
-  );
+  const table = useCrudTable<PointRow>({
+    fetcher: () =>
+      pluginId === null ? Promise.resolve([]) : api.listPoints(pluginId, includeBackup),
+    errorPrefix: "加载点位失败",
+    clearOnError: true,
+  });
 
   useEffect(() => {
-    if (pluginId !== null) loadPoints(pluginId);
-  }, [pluginId, includeBackup, loadPoints]);
+    if (pluginId !== null) table.load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pluginId, includeBackup]);
 
-  const filtered = useMemo(() => {
-    const kw = keyword.trim().toLowerCase();
-    if (!kw) return points;
-    return points.filter(
-      (p) =>
-        p.variable_id.toLowerCase().includes(kw) ||
-        p.address.toLowerCase().includes(kw) ||
-        p.description.toLowerCase().includes(kw),
-    );
-  }, [points, keyword]);
-
-  const openCreate = () => {
-    setEditing(null);
-    form.resetFields();
-    form.setFieldsValue({
-      data_type: "uint16",
-      byte_order: "big_endian",
-      scale: 1,
-      offset_val: 0,
-      var_type: "AI",
-    });
-    setModalOpen(true);
-  };
-
-  const openEdit = (pt: PointRow) => {
-    setEditing(pt);
-    form.setFieldsValue({
-      variable_id: pt.variable_id,
-      address: pt.address,
-      data_type: pt.data_type,
-      byte_order: pt.byte_order,
-      scale: pt.scale,
-      offset_val: pt.offset_val,
-      var_type: pt.var_type,
-      description: pt.description,
-    });
-    setModalOpen(true);
-  };
-
-  const save = async () => {
-    if (pluginId === null) return;
-    const v = await form.validateFields();
-    const payload = { ...v, plugin_id: pluginId };
-    setSaving(true);
-    try {
+  const modal = useModalForm<PointFormValues, PointRow>({
+    form,
+    submit: async (v, editing) => {
+      if (pluginId === null) return;
+      const payload = { ...v, plugin_id: pluginId };
       if (editing) {
         await api.updatePoint(editing.id, payload);
         message.success("更新成功");
@@ -144,33 +105,29 @@ export default function Points() {
         await api.createPoint(payload);
         message.success("添加成功");
       }
-      setModalOpen(false);
-      await loadPoints(pluginId);
-    } catch (e) {
-      message.error(`保存失败: ${e instanceof Error ? e.message : e}`);
-    } finally {
-      setSaving(false);
-    }
-  };
+      await table.load();
+    },
+  });
 
-  const remove = async (pt: PointRow) => {
-    try {
-      await api.deletePoint(pt.id);
-      message.success(`已删除点位 ${pt.variable_id}`);
-      if (pluginId !== null) await loadPoints(pluginId);
-    } catch (e) {
-      message.error(`删除失败: ${e instanceof Error ? e.message : e}`);
-    }
-  };
+  const filtered = useMemo(() => {
+    const kw = keyword.trim().toLowerCase();
+    if (!kw) return table.items;
+    return table.items.filter(
+      (p) =>
+        p.variable_id.toLowerCase().includes(kw) ||
+        p.address.toLowerCase().includes(kw) ||
+        p.description.toLowerCase().includes(kw),
+    );
+  }, [table.items, keyword]);
 
   const onImport = async (file: File) => {
     if (pluginId === null) return false;
     try {
       const r = await importExcel(pluginId, file);
       message.success(`导入成功，共 ${r.imported} 条`);
-      await loadPoints(pluginId);
+      await table.load();
     } catch (e) {
-      message.error(`导入失败: ${e instanceof Error ? e.message : e}`);
+      message.error(`导入失败: ${errMsg(e)}`);
     }
     return false;
   };
@@ -178,18 +135,10 @@ export default function Points() {
   const exportConfig = async () => {
     try {
       const cfg = await api.exportConfig();
-      const blob = new Blob([JSON.stringify(cfg, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "hmi-config-export.json";
-      a.click();
-      URL.revokeObjectURL(url);
+      download(JSON.stringify(cfg, null, 2), "hmi-config-export.json");
       message.success("配置已导出");
     } catch (e) {
-      message.error(`导出失败: ${e instanceof Error ? e.message : e}`);
+      message.error(`导出失败: ${errMsg(e)}`);
     }
   };
 
@@ -262,8 +211,8 @@ export default function Points() {
       width: 130,
       render: (_, pt) => (
         <Space size={4}>
-          {pt.plugin_role === "primary" && <Tag color="green">主</Tag>}
-          {pt.plugin_role === "backup" && <Tag color="orange">备</Tag>}
+          {pt.redundancy_role === "primary" && <Tag color="green">主</Tag>}
+          {pt.redundancy_role === "backup" && <Tag color="orange">备</Tag>}
           {pt.redundancy_group && (
             <Tag color="blue" className="mono">
               {pt.redundancy_group}
@@ -287,14 +236,30 @@ export default function Points() {
           <Button
             size="small"
             icon={<EditOutlined />}
-            onClick={() => openEdit(pt)}
+            onClick={() =>
+              modal.openEdit(pt, {
+                variable_id: pt.variable_id,
+                address: pt.address,
+                data_type: pt.data_type,
+                byte_order: pt.byte_order,
+                scale: pt.scale,
+                offset_val: pt.offset_val,
+                var_type: pt.var_type,
+                description: pt.description,
+              })
+            }
           >
             编辑
           </Button>
           <Popconfirm
             title="确定删除该点位？"
             description={`${pt.variable_id} 将从配置中移除。`}
-            onConfirm={() => remove(pt)}
+            onConfirm={() =>
+              table.remove(
+                () => api.deletePoint(pt.id),
+                `已删除点位 ${pt.variable_id}`,
+              )
+            }
           >
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
@@ -373,7 +338,7 @@ export default function Points() {
             type="primary"
             icon={<PlusOutlined />}
             disabled={pluginId === null}
-            onClick={openCreate}
+            onClick={() => modal.openCreate(CREATE_DEFAULTS)}
           >
             添加点位
           </Button>
@@ -387,7 +352,7 @@ export default function Points() {
             size="small"
             columns={columns}
             dataSource={filtered}
-            loading={loading}
+            loading={table.loading}
             pagination={{
               pageSize: 10,
               showTotal: (t) => `共 ${t} 个点位`,
@@ -399,11 +364,11 @@ export default function Points() {
       </Card>
 
       <Modal
-        title={editing ? `编辑点位：${editing.variable_id}` : "添加点位"}
-        open={modalOpen}
-        onOk={save}
-        onCancel={() => setModalOpen(false)}
-        confirmLoading={saving}
+        title={modal.editing ? `编辑点位：${modal.editing.variable_id}` : "添加点位"}
+        open={modal.open}
+        onOk={modal.save}
+        onCancel={modal.close}
+        confirmLoading={modal.saving}
         okText="保存"
         cancelText="取消"
         destroyOnClose

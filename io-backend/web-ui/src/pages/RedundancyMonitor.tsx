@@ -21,6 +21,7 @@ import type {
   RedundancyPoint,
 } from "../api/types";
 import StatCard from "../components/StatCard";
+import PointValueCell from "../components/PointValueCell";
 import { useEChart } from "../hooks/useEChart";
 import { usePolling } from "../hooks/usePolling";
 import {
@@ -107,11 +108,7 @@ export default function RedundancyMonitor() {
       title: "值",
       dataIndex: "value",
       width: 120,
-      render: (v: RedundancyPoint["value"]) => (
-        <span className="mono" style={{ fontWeight: 600 }}>
-          {v === null || v === undefined ? "--" : String(v)}
-        </span>
-      ),
+      render: (v: RedundancyPoint["value"]) => <PointValueCell value={v} />,
     },
     {
       title: "质量",

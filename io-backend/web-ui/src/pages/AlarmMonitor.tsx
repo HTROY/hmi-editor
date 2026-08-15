@@ -18,14 +18,9 @@ import type {
   AlarmStreamEvent,
   SoeRecord,
 } from "../api/types";
+import SeverityTag, { SEVERITY_OPTIONS } from "../components/SeverityTag";
 import { getOperator } from "../operator";
-
-const SEV: Record<AlarmSeverity, { color: string; label: string }> = {
-  critical: { color: "red", label: "紧急" },
-  major: { color: "orange", label: "严重" },
-  minor: { color: "gold", label: "一般" },
-  warning: { color: "blue", label: "预警" },
-};
+import { errMsg } from "../utils/error";
 
 const QUALITY_LABEL: Record<string, string> = {
   good: "良好",
@@ -74,8 +69,8 @@ export default function AlarmMonitor() {
     try {
       const data = await api.alarmActive();
       if (mounted.current) setActive(data);
-    } catch (e: any) {
-      console.warn("刷新活跃报警失败:", e?.message);
+    } catch (e) {
+      console.warn("刷新活跃报警失败:", errMsg(e));
     }
   }, []);
 
@@ -91,8 +86,8 @@ export default function AlarmMonitor() {
         setHistory(data.items);
         setHistoryTotal(data.total);
       }
-    } catch (e: any) {
-      console.warn("刷新报警历史失败:", e?.message);
+    } catch (e) {
+      console.warn("刷新报警历史失败:", errMsg(e));
     }
   }, [histPage, histSeverity, histStatus]);
 
@@ -107,8 +102,8 @@ export default function AlarmMonitor() {
         setSoe(data.items);
         setSoeTotal(data.total);
       }
-    } catch (e: any) {
-      console.warn("刷新 SOE 失败:", e?.message);
+    } catch (e) {
+      console.warn("刷新 SOE 失败:", errMsg(e));
     }
   }, [soePage, soeQuality]);
 
@@ -140,8 +135,8 @@ export default function AlarmMonitor() {
       message.success("已确认");
       refreshActive();
       refreshHistory();
-    } catch (e: any) {
-      message.error("确认失败: " + (e?.message ?? "未知错误"));
+    } catch (e) {
+      message.error(`确认失败: ${errMsg(e)}`);
     }
   };
 
@@ -151,8 +146,8 @@ export default function AlarmMonitor() {
       message.success(`已确认 ${r.acknowledged} 条`);
       refreshActive();
       refreshHistory();
-    } catch (e: any) {
-      message.error("确认失败: " + (e?.message ?? "未知错误"));
+    } catch (e) {
+      message.error(`确认失败: ${errMsg(e)}`);
     }
   };
 
@@ -170,9 +165,7 @@ export default function AlarmMonitor() {
       title: "级别",
       dataIndex: "severity",
       width: 76,
-      render: (v: AlarmSeverity) => (
-        <Tag color={SEV[v]?.color}>{SEV[v]?.label}</Tag>
-      ),
+      render: (v: AlarmSeverity) => <SeverityTag severity={v} />,
     },
     { title: "名称", dataIndex: "name" },
     { title: "变量", dataIndex: "variableId", width: 200 },
@@ -209,9 +202,7 @@ export default function AlarmMonitor() {
       title: "级别",
       dataIndex: "severity",
       width: 76,
-      render: (v: AlarmSeverity) => (
-        <Tag color={SEV[v]?.color}>{SEV[v]?.label}</Tag>
-      ),
+      render: (v: AlarmSeverity) => <SeverityTag severity={v} />,
     },
     { title: "名称", dataIndex: "name" },
     { title: "变量", dataIndex: "variableId", width: 200 },
@@ -343,12 +334,7 @@ export default function AlarmMonitor() {
                         setHistSeverity(v ?? "");
                         setHistPage(1);
                       }}
-                      options={[
-                        { value: "critical", label: "紧急" },
-                        { value: "major", label: "严重" },
-                        { value: "minor", label: "一般" },
-                        { value: "warning", label: "预警" },
-                      ]}
+                      options={SEVERITY_OPTIONS}
                     />
                     <Select
                       allowClear

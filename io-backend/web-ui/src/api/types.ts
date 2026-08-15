@@ -25,7 +25,8 @@ export interface PointRow {
   plugin_name?: string;
   hmi_id?: string;
   redundancy_group: string;
-  plugin_role: string;
+  /** 实例冗余角色（与 PluginRow / 后端 PointView 一致）。 */
+  redundancy_role: string;
 }
 
 export interface PointUpsert {

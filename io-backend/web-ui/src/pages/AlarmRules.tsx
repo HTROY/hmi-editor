@@ -1,18 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  App as AntdApp,
   Button,
   Card,
   Form,
   Input,
   InputNumber,
-  message,
   Modal,
   Popconfirm,
   Select,
   Space,
   Switch,
   Table,
-  Tag,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { api } from "../api/client";
@@ -22,6 +21,10 @@ import type {
   AlarmRuleUpsert,
   AlarmSeverity,
 } from "../api/types";
+import SeverityTag, { SEVERITY_OPTIONS } from "../components/SeverityTag";
+import { useCrudTable } from "../hooks/useCrudTable";
+import { useModalForm } from "../hooks/useModalForm";
+import { errMsg } from "../utils/error";
 
 const CONDITION_LABEL: Record<AlarmCondition, string> = {
   high: "高于阈值",
@@ -29,13 +32,6 @@ const CONDITION_LABEL: Record<AlarmCondition, string> = {
   equal: "等于阈值",
   notEqual: "不等于阈值",
   change: "变位（瞬时）",
-};
-
-const SEV: Record<AlarmSeverity, { color: string; label: string }> = {
-  critical: { color: "red", label: "紧急" },
-  major: { color: "orange", label: "严重" },
-  minor: { color: "gold", label: "一般" },
-  warning: { color: "blue", label: "预警" },
 };
 
 const emptyUpsert: AlarmRuleUpsert = {
@@ -52,27 +48,30 @@ const emptyUpsert: AlarmRuleUpsert = {
 };
 
 export default function AlarmRules() {
-  const [rules, setRules] = useState<AlarmRule[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<AlarmRule | null>(null);
-  const [saving, setSaving] = useState(false);
+  const { message } = AntdApp.useApp();
   const [points, setPoints] = useState<{ value: string; label: string }[]>([]);
   const [form] = Form.useForm<AlarmRuleUpsert>();
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      setRules(await api.listAlarmRules());
-    } catch (e: any) {
-      message.error("加载规则失败: " + (e?.message ?? "未知错误"));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const table = useCrudTable<AlarmRule>({
+    fetcher: () => api.listAlarmRules(),
+    errorPrefix: "加载规则失败",
+  });
+
+  const modal = useModalForm<AlarmRuleUpsert, AlarmRule>({
+    form,
+    submit: async (values, editing) => {
+      if (editing) {
+        await api.updateAlarmRule(editing.id, values);
+        message.success("规则已更新");
+      } else {
+        await api.createAlarmRule(values);
+        message.success("规则已创建");
+      }
+      await table.load();
+    },
+  });
 
   useEffect(() => {
-    refresh();
     api
       .listAllPoints(true)
       .then((pts) => {
@@ -82,60 +81,7 @@ export default function AlarmRules() {
         setPoints(items);
       })
       .catch(() => setPoints([]));
-  }, [refresh]);
-
-  const openCreate = () => {
-    setEditing(null);
-    form.setFieldsValue(emptyUpsert);
-    setOpen(true);
-  };
-
-  const openEdit = (rule: AlarmRule) => {
-    setEditing(rule);
-    form.setFieldsValue({
-      variableId: rule.variableId,
-      name: rule.name,
-      description: rule.description,
-      severity: rule.severity,
-      group: rule.group,
-      condition: rule.condition,
-      threshold: rule.threshold,
-      enabled: rule.enabled,
-      hysteresis: rule.hysteresis,
-      confirmMs: rule.confirmMs,
-    });
-    setOpen(true);
-  };
-
-  const handleSave = async () => {
-    const values = await form.validateFields();
-    setSaving(true);
-    try {
-      if (editing) {
-        await api.updateAlarmRule(editing.id, values);
-        message.success("规则已更新");
-      } else {
-        await api.createAlarmRule(values);
-        message.success("规则已创建");
-      }
-      setOpen(false);
-      refresh();
-    } catch (e: any) {
-      message.error("保存失败: " + (e?.message ?? "未知错误"));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      await api.deleteAlarmRule(id);
-      message.success("规则已删除");
-      refresh();
-    } catch (e: any) {
-      message.error("删除失败: " + (e?.message ?? "未知错误"));
-    }
-  };
+  }, []);
 
   const handleToggle = async (rule: AlarmRule, enabled: boolean) => {
     try {
@@ -152,10 +98,10 @@ export default function AlarmRules() {
         confirmMs: rule.confirmMs,
       });
       message.success(enabled ? "规则已启用" : "规则已停用");
-      refresh();
-    } catch (e: any) {
-      message.error("操作失败: " + (e?.message ?? "未知错误"));
-      refresh();
+      await table.load();
+    } catch (e) {
+      message.error(`操作失败: ${errMsg(e)}`);
+      await table.load();
     }
   };
 
@@ -164,9 +110,7 @@ export default function AlarmRules() {
       title: "级别",
       dataIndex: "severity",
       width: 76,
-      render: (v: AlarmSeverity) => (
-        <Tag color={SEV[v]?.color}>{SEV[v]?.label}</Tag>
-      ),
+      render: (v: AlarmSeverity) => <SeverityTag severity={v} />,
     },
     { title: "ID", dataIndex: "id", width: 140 },
     { title: "名称", dataIndex: "name", width: 140 },
@@ -179,7 +123,12 @@ export default function AlarmRules() {
     },
     { title: "阈值", dataIndex: "threshold", width: 80 },
     { title: "滞回", dataIndex: "hysteresis", width: 70 },
-    { title: "确认时间", dataIndex: "confirmMs", width: 100, render: (v: number) => (v > 0 ? `${v}ms` : "-") },
+    {
+      title: "确认时间",
+      dataIndex: "confirmMs",
+      width: 100,
+      render: (v: number) => (v > 0 ? `${v}ms` : "-"),
+    },
     { title: "分组", dataIndex: "group", width: 130 },
     {
       title: "启用",
@@ -199,12 +148,30 @@ export default function AlarmRules() {
       width: 130,
       render: (_v, r) => (
         <Space>
-          <Button size="small" onClick={() => openEdit(r)}>
+          <Button
+            size="small"
+            onClick={() =>
+              modal.openEdit(r, {
+                variableId: r.variableId,
+                name: r.name,
+                description: r.description,
+                severity: r.severity,
+                group: r.group,
+                condition: r.condition,
+                threshold: r.threshold,
+                enabled: r.enabled,
+                hysteresis: r.hysteresis,
+                confirmMs: r.confirmMs,
+              })
+            }
+          >
             编辑
           </Button>
           <Popconfirm
             title={`删除规则「${r.name}」？`}
-            onConfirm={() => handleDelete(r.id)}
+            onConfirm={() =>
+              table.remove(() => api.deleteAlarmRule(r.id), "规则已删除")
+            }
           >
             <Button size="small" danger>
               删除
@@ -219,7 +186,10 @@ export default function AlarmRules() {
     <Card
       title="报警规则"
       extra={
-        <Button type="primary" onClick={openCreate}>
+        <Button
+          type="primary"
+          onClick={() => modal.openCreate(emptyUpsert)}
+        >
           + 新建规则
         </Button>
       }
@@ -227,18 +197,18 @@ export default function AlarmRules() {
       <Table
         rowKey="id"
         size="small"
-        loading={loading}
+        loading={table.loading}
         columns={columns}
-        dataSource={rules}
+        dataSource={table.items}
         pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 条` }}
       />
 
       <Modal
-        title={editing ? "编辑报警规则" : "新建报警规则"}
-        open={open}
-        onOk={handleSave}
-        onCancel={() => setOpen(false)}
-        confirmLoading={saving}
+        title={modal.editing ? "编辑报警规则" : "新建报警规则"}
+        open={modal.open}
+        onOk={modal.save}
+        onCancel={modal.close}
+        confirmLoading={modal.saving}
         width={560}
       >
         <Form form={form} layout="vertical" initialValues={emptyUpsert}>
@@ -268,14 +238,7 @@ export default function AlarmRules() {
           </Form.Item>
           <Space size="large" style={{ display: "flex" }} wrap>
             <Form.Item name="severity" label="级别" style={{ width: 140 }}>
-              <Select
-                options={[
-                  { value: "critical", label: "紧急" },
-                  { value: "major", label: "严重" },
-                  { value: "minor", label: "一般" },
-                  { value: "warning", label: "预警" },
-                ]}
-              />
+              <Select options={SEVERITY_OPTIONS} />
             </Form.Item>
             <Form.Item name="group" label="分组" style={{ width: 180 }}>
               <Input placeholder="如 供电/400V" />

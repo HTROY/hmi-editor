@@ -34,7 +34,7 @@ pub struct PointView {
     pub plugin_name: String,
     pub hmi_id: String,
     pub redundancy_group: String,
-    pub plugin_role: String,
+    pub redundancy_role: String,
 }
 
 impl From<PointRow> for PointView {
@@ -54,7 +54,7 @@ impl From<PointRow> for PointView {
             plugin_name: row.plugin_name,
             hmi_id,
             redundancy_group: row.redundancy_group,
-            plugin_role: row.redundancy_role,
+            redundancy_role: row.redundancy_role,
         }
     }
 }

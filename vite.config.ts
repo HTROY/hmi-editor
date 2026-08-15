@@ -1,4 +1,5 @@
-﻿import { defineConfig } from "vite";
+/// <reference types="vitest/config" />
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
@@ -8,5 +9,14 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+  },
+  test: {
+    // 主编辑器测试只覆盖 src/；web-ui 是独立工程（自带 vitest 配置）
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "io-backend/**",
+      "scripts/**",
+    ],
   },
 });

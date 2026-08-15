@@ -28,6 +28,7 @@ import type {
   PluginStatus,
 } from "../api/types";
 import ConnectionBadge from "../components/ConnectionBadge";
+import PointValueCell from "../components/PointValueCell";
 import StatCard from "../components/StatCard";
 import { usePolling } from "../hooks/usePolling";
 import {
@@ -37,18 +38,6 @@ import {
   formatTimeMs,
   formatUptime,
 } from "../utils/format";
-
-function fmtValue(v: LivePointInfo["value"]): { text: string; stale: boolean } {
-  if (v === null || v === undefined) return { text: "--", stale: true };
-  if (typeof v === "number") {
-    return {
-      text: Number.isInteger(v) ? String(v) : v.toFixed(3),
-      stale: false,
-    };
-  }
-  if (typeof v === "boolean") return { text: v ? "1" : "0", stale: false };
-  return { text: String(v), stale: false };
-}
 
 export default function Monitor() {
   const [selected, setSelected] = useState<string | null>(null);
@@ -124,25 +113,13 @@ export default function Monitor() {
       title: "当前值",
       dataIndex: "value",
       width: 130,
-      render: (v: LivePointInfo["value"], pt) => {
-        const { text, stale } = fmtValue(v);
-        return (
-          <span
-            className="mono"
-            style={{
-              color: stale
-                ? "inherit"
-                : pt.var_type === "AI"
-                  ? "#22c55e"
-                  : "#3b82f6",
-              opacity: stale ? 0.4 : 1,
-              fontWeight: 600,
-            }}
-          >
-            {text}
-          </span>
-        );
-      },
+      render: (v: LivePointInfo["value"], pt) => (
+        <PointValueCell
+          value={v}
+          stale={v === null || v === undefined}
+          color={pt.var_type === "AI" ? "#22c55e" : "#3b82f6"}
+        />
+      ),
     },
     {
       title: "质量",
