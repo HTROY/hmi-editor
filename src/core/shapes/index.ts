@@ -1,4 +1,6 @@
-﻿export { ShapeBase, generateId } from "./ShapeBase";
+export { ShapeBase, generateId } from "./ShapeBase";
+export { capabilityOf, shapeCapabilities } from "./capability";
+export type { BindableProp, EditorDescriptor, ShapeCapability } from "./capability";
 export { RectShape } from "./RectShape";
 export { CircleShape } from "./CircleShape";
 export { LineShape } from "./LineShape";

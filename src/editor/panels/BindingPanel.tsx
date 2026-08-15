@@ -4,6 +4,7 @@ import { getBindingStatus } from "../../core/bindings";
 import type { Binding, ValueMapping } from "../../core/types";
 import type { VariableDef } from "../../core/variables/types";
 import { getSelectedShape } from "../../core";
+import { capabilityOf } from "../../core/shapes/capability";
 import { MappingEditor } from "./MappingEditor";
 
 // ============================================================
@@ -13,21 +14,6 @@ import { MappingEditor } from "./MappingEditor";
 // ============================================================
 import { Icon } from "../icons";
 
-// 数值型绑定属性支持平滑过渡
-const NUMERIC_PROPS = new Set([
-  "rotation",
-  "x",
-  "y",
-  "width",
-  "height",
-  "opacity",
-  "fontSize",
-  "strokeWidth",
-  "cornerRadius",
-  "speedPercent",
-  "value",
-]);
-
 export function BindingPanel() {
   const { scene, selection, varManager, updateShapeAt } = useEditorStore();
   // 订阅 shape 修改版本号：updateShape 原地修改 shape 后触发重渲染
@@ -36,6 +22,18 @@ export function BindingPanel() {
   const path =
     selection.primaryPath ??
     (selection.primaryId ? [selection.primaryId] : null);
+
+  // 可绑定属性选项与数值判定均来自图元能力注册表（ADR-0007 切片 4）；
+  // 兼容旧绑定：目标属性不在当前类型注册表时仍保留该选项，避免下拉显示空白。
+  const bindableOptionProps = (() => {
+    const props = new Set<string>(
+      Object.keys(shape ? capabilityOf(shape.type).bindableProps ?? {} : {})
+    );
+    for (const b of shape?.bindings ?? []) props.add(b.targetProp);
+    return [...props];
+  })();
+  const isNumericProp = (prop: string): boolean =>
+    !!shape && capabilityOf(shape.type).bindableProps?.[prop]?.kind === "number";
 
   // 订阅变量值变化，让「手动测试」区域的值实时刷新
   const [, forceUpdate] = useState(0);
@@ -224,16 +222,11 @@ export function BindingPanel() {
                       updateBinding(idx, { targetProp: e.target.value })
                     }
                   >
-                    <option value="fill">填充色 (fill)</option>
-                    <option value="stroke">边框色 (stroke)</option>
-                    <option value="rotation">旋转 (rotation)</option>
-                    <option value="opacity">透明度 (opacity)</option>
-                    <option value="visible">可见 (visible)</option>
-                    <option value="x">X 坐标</option>
-                    <option value="y">Y 坐标</option>
-                    <option value="width">宽度</option>
-                    <option value="height">高度</option>
-                    <option value="text">文本 (text)</option>
+                    {bindableOptionProps.map((prop) => (
+                      <option key={prop} value={prop}>
+                        {prop}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -250,7 +243,7 @@ export function BindingPanel() {
                   <div className="panel-hint">提示：AI 变量可配置多段枚举</div>
                 )}
 
-                {NUMERIC_PROPS.has(binding.targetProp) && (
+                {isNumericProp(binding.targetProp) && (
                   <div className="binding-smooth">
                     <label className="anim-enabled">
                       <input

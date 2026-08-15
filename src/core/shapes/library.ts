@@ -1,6 +1,7 @@
 import type { BoundingBox, ShapeProps } from "../types";
 import { createShape } from "./factory";
 import { generateId, ShapeBase } from "./ShapeBase";
+import { capabilityOf } from "./capability";
 
 // ============================================================
 // library.ts — 图元库（自定义图元）核心逻辑
@@ -49,62 +50,20 @@ export function offsetShapeProps(
   dy: number
 ): ShapeProps {
   if (dx === 0 && dy === 0) return props;
-  if (props.type === "line") {
-    return {
-      ...props,
-      startPoint: {
-        x: (props.startPoint?.x ?? 0) + dx,
-        y: (props.startPoint?.y ?? 0) + dy,
-      },
-      endPoint: {
-        x: (props.endPoint?.x ?? 0) + dx,
-        y: (props.endPoint?.y ?? 0) + dy,
-      },
-    };
-  }
-  if (props.type === "polyline" || props.type === "polygon") {
-    return {
-      ...props,
-      points: (props.points ?? []).map((p) => ({ x: p.x + dx, y: p.y + dy })),
-    };
+  const points = capabilityOf(props.type).points;
+  if (points) {
+    return points.write(
+      props,
+      points.read(props).map((p) => ({ x: p.x + dx, y: p.y + dy }))
+    );
   }
   return { ...props, x: props.x + dx, y: props.y + dy };
 }
 
 /** 计算图元定义的包围盒（对点集/子图元递归计算） */
 export function getShapeBounds(props: ShapeProps): BoundingBox {
-  if (props.type === "line") {
-    const start = props.startPoint ?? { x: props.x, y: props.y };
-    const end = props.endPoint ?? {
-      x: props.x + props.width,
-      y: props.y + props.height,
-    };
-    return {
-      x: Math.min(start.x, end.x),
-      y: Math.min(start.y, end.y),
-      width: Math.abs(end.x - start.x) || 1,
-      height: Math.abs(end.y - start.y) || 1,
-    };
-  }
-  if (props.type === "polyline" || props.type === "polygon") {
-    const points = props.points ?? [];
-    if (points.length === 0) {
-      return {
-        x: props.x,
-        y: props.y,
-        width: props.width,
-        height: props.height,
-      };
-    }
-    const xs = points.map((p) => p.x);
-    const ys = points.map((p) => p.y);
-    return {
-      x: Math.min(...xs),
-      y: Math.min(...ys),
-      width: Math.max(...xs) - Math.min(...xs) || 1,
-      height: Math.max(...ys) - Math.min(...ys) || 1,
-    };
-  }
+  const own = capabilityOf(props.type).boundsFromProps?.(props);
+  if (own) return own;
   const children = props.children ?? [];
   if (children.length > 0) {
     const boxes = children.map(getShapeBounds);

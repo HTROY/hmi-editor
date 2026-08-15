@@ -1,4 +1,6 @@
 import { ShapeBase } from "./ShapeBase";
+import { baseBindableProps } from "./bindable";
+import type { ShapeCapability } from "./capability";
 import type { ShapeProps, Point } from "../types";
 
 // ============================================================
@@ -79,3 +81,18 @@ export class ImageShape extends ShapeBase {
     return img;
   }
 }
+
+/** 栅格图元能力条目（ADR-0007 切片 4）：基础可绑定 */
+export const imageCapability: ShapeCapability = {
+  type: "image",
+  editor: [
+    {
+      key: "src",
+      label: "图片",
+      kind: "text",
+      placeholder: "data:image/png;base64,... 或图片 URL",
+      get: (s) => (s as ImageShape).src,
+    },
+  ],
+  bindableProps: baseBindableProps(),
+};

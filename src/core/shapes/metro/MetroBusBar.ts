@@ -1,4 +1,6 @@
-﻿import { ShapeBase } from "../ShapeBase";
+import { ShapeBase } from "../ShapeBase";
+import { baseBindableProps } from "../bindable";
+import type { ShapeCapability } from "../capability";
 import type { ShapeProps, Point, BoundingBox } from "../../types";
 
 // ============================================================
@@ -32,12 +34,10 @@ export class MetroBusBar extends ShapeBase {
 
   constructor(props?: Partial<MetroBusBarProps>) {
     super("metro-busbar", props);
-    this.width = props?.width ?? 300;
-    this.height = props?.height ?? 8;
     this.voltageLevel = props?.voltageLevel ?? "400V";
     this.energized = props?.energized ?? true;
     this.fill = "transparent";
-    this.strokeWidth = props?.strokeWidth ?? 4;
+    this.strokeWidth = props?.strokeWidth ?? 2;
     this.updateColor();
   }
 
@@ -122,3 +122,32 @@ export class MetroBusBar extends ShapeBase {
     };
   }
 }
+
+/** 母线能力条目（ADR-0007 切片 4）：恒等比 + 基础可绑定 */
+export const metroBusBarCapability: ShapeCapability = {
+  type: "metro-busbar",
+  editor: [
+    {
+      key: "voltageLevel",
+      label: "电压等级",
+      kind: "select",
+      options: [
+        { value: "35kV", label: "35kV" },
+        { value: "10kV", label: "10kV" },
+        { value: "400V", label: "400V" },
+        { value: "220V", label: "220V" },
+        { value: "DC1500V", label: "DC1500V" },
+        { value: "DC750V", label: "DC750V" },
+      ],
+      get: (s) => (s as MetroBusBar).voltageLevel,
+    },
+    {
+      key: "energized",
+      label: "带电",
+      kind: "boolean",
+      get: (s) => (s as MetroBusBar).energized,
+    },
+  ],
+  uniformOnly: true,
+  bindableProps: baseBindableProps(),
+};

@@ -48,27 +48,12 @@ const shapeItems: ShapeLibItem[] = [
 /** 内置图元的拖拽缩略图（与画布添加时的默认属性保持一致） */
 function builtinThumbProps(type: ShapeType): ShapeProps {
   return createShape(type, {
-    width: type === "circle" ? 80 : 120,
-    height: type === "circle" ? 80 : 80,
-    fill: type === "text" ? "#000000" : "#4A90D9",
-    stroke: "#333333",
-    strokeWidth: 2,
     text: type === "text" ? "文" : undefined,
-    fontSize: type === "text" ? 24 : undefined,
-    d: type === "path" ? "M15 10 L105 10 L105 70 L15 70 Z" : undefined,
-    src: type === "image" ? "" : undefined,
     breakerStatus: "closed",
     signalColor: type === "metro-signal" ? "green" : undefined,
     running: type === "metro-fan",
     speedPercent: 30,
     value: 65,
-    min: 0,
-    max: 100,
-    unit: "A",
-    primaryVoltage: "35kV",
-    secondaryVoltage: "400V",
-    voltageLevel: "400V",
-    energized: true,
   }).toJSON();
 }
 

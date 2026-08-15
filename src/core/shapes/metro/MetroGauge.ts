@@ -1,4 +1,6 @@
-﻿import { ShapeBase } from "../ShapeBase";
+import { ShapeBase } from "../ShapeBase";
+import { baseBindableProps, bindableNum } from "../bindable";
+import type { ShapeCapability } from "../capability";
 import type { ShapeProps, Point } from "../../types";
 
 // ============================================================
@@ -33,12 +35,10 @@ export class MetroGauge extends ShapeBase {
 
   constructor(props?: Partial<MetroGaugeProps>) {
     super("metro-gauge", props);
-    this.width = props?.width ?? 140;
-    this.height = props?.height ?? 140;
     this.value = props?.value ?? 0;
     this.min = props?.min ?? 0;
     this.max = props?.max ?? 100;
-    this.unit = props?.unit ?? "";
+    this.unit = props?.unit ?? "A";
     this.tickCount = props?.tickCount ?? 5;
     this.startAngle = props?.startAngle ?? 225;
     this.endAngle = props?.endAngle ?? 315;
@@ -210,3 +210,45 @@ export class MetroGauge extends ShapeBase {
     };
   }
 }
+
+/** 仪表能力条目（ADR-0007 切片 4）：恒等比 + 基础可绑定 + 示值 */
+export const metroGaugeCapability: ShapeCapability = {
+  type: "metro-gauge",
+  editor: [
+    {
+      key: "value",
+      label: "当前值",
+      kind: "number",
+      get: (s) => (s as MetroGauge).value,
+    },
+    {
+      key: "min",
+      label: "最小值",
+      kind: "number",
+      get: (s) => (s as MetroGauge).min,
+    },
+    {
+      key: "max",
+      label: "最大值",
+      kind: "number",
+      get: (s) => (s as MetroGauge).max,
+    },
+    {
+      key: "unit",
+      label: "单位",
+      kind: "text",
+      placeholder: "A, kV, ℃",
+      get: (s) => (s as MetroGauge).unit,
+    },
+  ],
+  uniformOnly: true,
+  bindableProps: {
+    ...baseBindableProps(),
+    value: bindableNum(
+      (s) => (s as MetroGauge).value,
+      (s, v) => {
+        (s as MetroGauge).value = v;
+      }
+    ),
+  },
+};

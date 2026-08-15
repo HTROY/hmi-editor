@@ -18,7 +18,7 @@ describe("旧 .hmi.json 自动升级", () => {
     expect(item.name).toBe("通风机组");
     expect(item.shape.type).toBe("rect");
     expect(item.shape.x).toBe(0);
-    expect(item.shape.width).toBe(100);
+    expect(item.shape.width).toBe(120);
     expect(typeof item.createdAt).toBe("string");
     expect(typeof item.updatedAt).toBe("string");
   });
@@ -83,14 +83,14 @@ describe("旧 .hmi.json 自动升级", () => {
     expect(shape.type).toBe("rect");
     expect(shape.x).toBe(0);
     expect(shape.y).toBe(0);
-    expect(shape.width).toBe(100);
-    expect(shape.height).toBe(100);
+    expect(shape.width).toBe(120);
+    expect(shape.height).toBe(80);
     expect(shape.opacity).toBe(1);
     expect(shape.visible).toBe(true);
     expect(shape.locked).toBe(false);
     expect(shape.zIndex).toBe(0);
-    expect(shape.fill).toBe("#CCCCCC");
-    expect(shape.stroke).toBe("#000000");
+    expect(shape.fill).toBe("#4A90D9");
+    expect(shape.stroke).toBe("#333333");
     expect(shape.bindings).toEqual([]);
     expect(shape.events).toEqual([]);
   });

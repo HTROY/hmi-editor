@@ -2,6 +2,7 @@ import { SceneGraph } from "../scene/SceneGraph";
 import { Renderer } from "../scene/Renderer";
 import { VariableManager } from "../variables/VariableManager";
 import { ShapeBase } from "../shapes/ShapeBase";
+import { capabilityOf } from "../shapes/capability";
 import { GroupShape } from "../shapes/GroupShape";
 import type { Binding } from "../types";
 import { applyValueMapping } from "./mapping";
@@ -42,6 +43,8 @@ export class BindingEngine {
   private transitions: Map<string, Transition> = new Map();
   private rafId: number | null = null;
   private now: () => number;
+  /** 已告警过的未注册绑定目标（防刷屏） */
+  private warnedProps = new Set<string>();
 
   constructor(
     scene: SceneGraph,
@@ -132,7 +135,12 @@ export class BindingEngine {
     rawValue: number | boolean
   ): void {
     const newValue = applyValueMapping(binding.mapping, rawValue);
-    const current = (shape as any)[binding.targetProp];
+    const bp = capabilityOf(shape).bindableProps?.[binding.targetProp];
+    if (!bp) {
+      this.warnUnregistered(shape, binding.targetProp);
+      return;
+    }
+    const current = bp.get(shape);
     const smooth = binding.smooth !== false;
 
     if (smooth && typeof current === "number" && typeof newValue === "number") {
@@ -148,8 +156,16 @@ export class BindingEngine {
 
     this.cancelTransition(shape.id, binding.targetProp);
     if (newValue !== undefined) {
-      (shape as any)[binding.targetProp] = newValue;
+      bp.set(shape, newValue);
     }
+  }
+
+  /** 绑定目标属性未在能力注册表登记：一次性告警并忽略写入（typo 不再静默 no-op） */
+  private warnUnregistered(shape: ShapeBase, prop: string): void {
+    const key = shape.type + ":" + prop;
+    if (this.warnedProps.has(key)) return;
+    this.warnedProps.add(key);
+    console.warn("绑定目标属性未在能力注册表登记，忽略写入: " + key);
   }
 
   private removeRecords(pred: (path: ShapePath) => boolean): void {
@@ -243,8 +259,11 @@ export class BindingEngine {
       const value = tr.from + (tr.to - tr.from) * eased;
       const shape = this.scene.get(shapeId);
       if (shape) {
-        (shape as any)[prop] = progress >= 1 ? tr.to : value;
-        changed.add(shapeId);
+        const bp = capabilityOf(shape).bindableProps?.[prop];
+        if (bp) {
+          bp.set(shape, progress >= 1 ? tr.to : value);
+          changed.add(shapeId);
+        }
       }
       if (progress >= 1) this.transitions.delete(key);
     }

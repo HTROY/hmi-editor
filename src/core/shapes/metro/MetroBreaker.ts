@@ -1,4 +1,6 @@
 import { ShapeBase } from "../ShapeBase";
+import { baseBindableProps } from "../bindable";
+import type { ShapeCapability } from "../capability";
 import type { ShapeProps, Point } from "../../types";
 
 // ============================================================
@@ -29,8 +31,6 @@ export class MetroBreaker extends ShapeBase {
 
   constructor(props?: Partial<MetroBreakerProps>) {
     super("metro-breaker", props);
-    this.width = props?.width ?? 40;
-    this.height = props?.height ?? 60;
     this.breakerStatus = props?.breakerStatus ?? "open";
     this.showLabel = props?.showLabel ?? true;
     this.fill =
@@ -127,3 +127,32 @@ export class MetroBreaker extends ShapeBase {
     };
   }
 }
+
+/** 断路器能力条目（ADR-0007 切片 4）：恒等比；填充为派生状态，不可绑定 */
+const metroBreakerBindable = baseBindableProps();
+delete metroBreakerBindable.fill;
+
+export const metroBreakerCapability: ShapeCapability = {
+  type: "metro-breaker",
+  editor: [
+    {
+      key: "breakerStatus",
+      label: "状态",
+      kind: "select",
+      options: [
+        { value: "open", label: "分闸 (灰色)" },
+        { value: "closed", label: "合闸 (绿色)" },
+        { value: "tripped", label: "跳闸 (红色)" },
+      ],
+      get: (s) => (s as MetroBreaker).breakerStatus,
+    },
+    {
+      key: "showLabel",
+      label: "标签",
+      kind: "boolean",
+      get: (s) => (s as MetroBreaker).showLabel,
+    },
+  ],
+  uniformOnly: true,
+  bindableProps: metroBreakerBindable,
+};

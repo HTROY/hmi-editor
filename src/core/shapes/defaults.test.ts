@@ -1,0 +1,448 @@
+import { describe, it, expect } from "vitest";
+import { createShape } from "./factory";
+import type { ShapeType } from "../types";
+
+/**
+ * 切片 0 契约（golden）：createShape(type) 构造器默认值 ≡ 工具栏 addShape 输出。
+ * 快照来自改动前的 store.addShape 逐类型输出（15 类型，x/y=200，剔除 id）。
+ * 改动任何默认值都会在此显式失败。
+ */
+const GOLDEN: Record<ShapeType, unknown> = {
+  "rect": {
+    "type": "rect",
+    "x": 200,
+    "y": 200,
+    "width": 120,
+    "height": 80,
+    "rotation": 0,
+    "opacity": 1,
+    "visible": true,
+    "locked": false,
+    "zIndex": 0,
+    "fill": "#4A90D9",
+    "stroke": "#333333",
+    "strokeWidth": 2,
+    "dashArray": [],
+    "name": "rect",
+    "bindings": [],
+    "animations": [],
+    "events": [],
+    "cornerRadius": 0
+  },
+  "circle": {
+    "type": "circle",
+    "x": 200,
+    "y": 200,
+    "width": 80,
+    "height": 80,
+    "rotation": 0,
+    "opacity": 1,
+    "visible": true,
+    "locked": false,
+    "zIndex": 0,
+    "fill": "#4A90D9",
+    "stroke": "#333333",
+    "strokeWidth": 2,
+    "dashArray": [],
+    "name": "circle",
+    "bindings": [],
+    "animations": [],
+    "events": []
+  },
+  "line": {
+    "type": "line",
+    "x": 200,
+    "y": 200,
+    "width": 120,
+    "height": 80,
+    "rotation": 0,
+    "opacity": 1,
+    "visible": true,
+    "locked": false,
+    "zIndex": 0,
+    "fill": "#4A90D9",
+    "stroke": "#333333",
+    "strokeWidth": 2,
+    "dashArray": [],
+    "name": "line",
+    "bindings": [],
+    "animations": [],
+    "events": [],
+    "startPoint": {
+      "x": 0,
+      "y": 0
+    },
+    "endPoint": {
+      "x": 100,
+      "y": 100
+    }
+  },
+  "polyline": {
+    "type": "polyline",
+    "x": 200,
+    "y": 200,
+    "width": 120,
+    "height": 80,
+    "rotation": 0,
+    "opacity": 1,
+    "visible": true,
+    "locked": false,
+    "zIndex": 0,
+    "fill": "#4A90D9",
+    "stroke": "#333333",
+    "strokeWidth": 2,
+    "dashArray": [],
+    "name": "polyline",
+    "bindings": [],
+    "animations": [],
+    "events": [],
+    "points": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 100,
+        "y": 0
+      },
+      {
+        "x": 100,
+        "y": 100
+      }
+    ]
+  },
+  "polygon": {
+    "type": "polygon",
+    "x": 200,
+    "y": 200,
+    "width": 120,
+    "height": 80,
+    "rotation": 0,
+    "opacity": 1,
+    "visible": true,
+    "locked": false,
+    "zIndex": 0,
+    "fill": "#4A90D9",
+    "stroke": "#333333",
+    "strokeWidth": 2,
+    "dashArray": [],
+    "name": "polygon",
+    "bindings": [],
+    "animations": [],
+    "events": [],
+    "points": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 100,
+        "y": 0
+      },
+      {
+        "x": 100,
+        "y": 100
+      },
+      {
+        "x": 0,
+        "y": 100
+      }
+    ]
+  },
+  "text": {
+    "type": "text",
+    "x": 200,
+    "y": 200,
+    "width": 120,
+    "height": 80,
+    "rotation": 0,
+    "opacity": 1,
+    "visible": true,
+    "locked": false,
+    "zIndex": 0,
+    "fill": "#000000",
+    "stroke": "#333333",
+    "strokeWidth": 2,
+    "dashArray": [],
+    "name": "text",
+    "bindings": [],
+    "animations": [],
+    "events": [],
+    "text": "双击编辑",
+    "fontSize": 24,
+    "fontFamily": "Microsoft YaHei, sans-serif",
+    "textAlign": "center",
+    "textBaseline": "middle"
+  },
+  "path": {
+    "type": "path",
+    "x": 200,
+    "y": 200,
+    "width": 120,
+    "height": 80,
+    "rotation": 0,
+    "opacity": 1,
+    "visible": true,
+    "locked": false,
+    "zIndex": 0,
+    "fill": "#4A90D9",
+    "stroke": "#333333",
+    "strokeWidth": 2,
+    "dashArray": [],
+    "name": "path",
+    "bindings": [],
+    "animations": [],
+    "events": [],
+    "d": "M15 10 L105 10 L105 70 L15 70 Z"
+  },
+  "image": {
+    "type": "image",
+    "x": 200,
+    "y": 200,
+    "width": 120,
+    "height": 80,
+    "rotation": 0,
+    "opacity": 1,
+    "visible": true,
+    "locked": false,
+    "zIndex": 0,
+    "fill": "#4A90D9",
+    "stroke": "#333333",
+    "strokeWidth": 2,
+    "dashArray": [],
+    "name": "image",
+    "bindings": [],
+    "animations": [],
+    "events": [],
+    "src": ""
+  },
+  "group": {
+    "type": "group",
+    "x": 200,
+    "y": 200,
+    "width": 120,
+    "height": 80,
+    "rotation": 0,
+    "opacity": 1,
+    "visible": true,
+    "locked": false,
+    "zIndex": 0,
+    "fill": "#4A90D9",
+    "stroke": "#333333",
+    "strokeWidth": 2,
+    "dashArray": [],
+    "name": "group",
+    "bindings": [],
+    "animations": [],
+    "events": [],
+    "children": [
+      {
+        "type": "rect",
+        "x": 0,
+        "y": 0,
+        "width": 70,
+        "height": 60,
+        "rotation": 0,
+        "opacity": 1,
+        "visible": true,
+        "locked": false,
+        "zIndex": 0,
+        "fill": "#4A90D9",
+        "stroke": "#333333",
+        "strokeWidth": 2,
+        "dashArray": [],
+        "name": "rect",
+        "bindings": [],
+        "animations": [],
+        "events": [],
+        "cornerRadius": 0
+      },
+      {
+        "type": "circle",
+        "x": 80,
+        "y": 5,
+        "width": 55,
+        "height": 55,
+        "rotation": 0,
+        "opacity": 1,
+        "visible": true,
+        "locked": false,
+        "zIndex": 0,
+        "fill": "#E67E22",
+        "stroke": "#333333",
+        "strokeWidth": 2,
+        "dashArray": [],
+        "name": "circle",
+        "bindings": [],
+        "animations": [],
+        "events": []
+      }
+    ]
+  },
+  "metro-breaker": {
+    "type": "metro-breaker",
+    "x": 200,
+    "y": 200,
+    "width": 120,
+    "height": 80,
+    "rotation": 0,
+    "opacity": 1,
+    "visible": true,
+    "locked": false,
+    "zIndex": 0,
+    "fill": "#808080",
+    "stroke": "#333333",
+    "strokeWidth": 2,
+    "dashArray": [],
+    "name": "metro-breaker",
+    "bindings": [],
+    "animations": [],
+    "events": [],
+    "breakerStatus": "open",
+    "showLabel": true
+  },
+  "metro-busbar": {
+    "type": "metro-busbar",
+    "x": 200,
+    "y": 200,
+    "width": 120,
+    "height": 80,
+    "rotation": 0,
+    "opacity": 1,
+    "visible": true,
+    "locked": false,
+    "zIndex": 0,
+    "fill": "transparent",
+    "stroke": "#00AA00",
+    "strokeWidth": 2,
+    "dashArray": [],
+    "name": "metro-busbar",
+    "bindings": [],
+    "animations": [],
+    "events": [],
+    "voltageLevel": "400V",
+    "energized": true
+  },
+  "metro-fan": {
+    "type": "metro-fan",
+    "x": 200,
+    "y": 200,
+    "width": 120,
+    "height": 80,
+    "rotation": 0,
+    "opacity": 1,
+    "visible": true,
+    "locked": false,
+    "zIndex": 0,
+    "fill": "transparent",
+    "stroke": "#333333",
+    "strokeWidth": 2,
+    "dashArray": [],
+    "name": "metro-fan",
+    "bindings": [],
+    "animations": [],
+    "events": [],
+    "speedPercent": 0,
+    "bladeColor": "#4A90D9",
+    "running": false,
+    "animAngle": 0
+  },
+  "metro-signal": {
+    "type": "metro-signal",
+    "x": 200,
+    "y": 200,
+    "width": 120,
+    "height": 80,
+    "rotation": 0,
+    "opacity": 1,
+    "visible": true,
+    "locked": false,
+    "zIndex": 0,
+    "fill": "transparent",
+    "stroke": "#333333",
+    "strokeWidth": 1,
+    "dashArray": [],
+    "name": "metro-signal",
+    "bindings": [],
+    "animations": [],
+    "events": [],
+    "signalColor": "gray",
+    "blinking": false,
+    "label": "",
+    "labelPosition": "bottom"
+  },
+  "metro-gauge": {
+    "type": "metro-gauge",
+    "x": 200,
+    "y": 200,
+    "width": 120,
+    "height": 80,
+    "rotation": 0,
+    "opacity": 1,
+    "visible": true,
+    "locked": false,
+    "zIndex": 0,
+    "fill": "transparent",
+    "stroke": "#333333",
+    "strokeWidth": 1.5,
+    "dashArray": [],
+    "name": "metro-gauge",
+    "bindings": [],
+    "animations": [],
+    "events": [],
+    "value": 0,
+    "min": 0,
+    "max": 100,
+    "unit": "A",
+    "tickCount": 5,
+    "startAngle": 225,
+    "endAngle": 315
+  },
+  "metro-transformer": {
+    "type": "metro-transformer",
+    "x": 200,
+    "y": 200,
+    "width": 120,
+    "height": 80,
+    "rotation": 0,
+    "opacity": 1,
+    "visible": true,
+    "locked": false,
+    "zIndex": 0,
+    "fill": "transparent",
+    "stroke": "#333333",
+    "strokeWidth": 2,
+    "dashArray": [],
+    "name": "metro-transformer",
+    "bindings": [],
+    "animations": [],
+    "events": [],
+    "primaryVoltage": "35kV",
+    "secondaryVoltage": "400V",
+    "ratedPower": "2000kVA",
+    "energized": true,
+    "windingCount": 2
+  }
+};
+
+function stripIds(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(stripIds);
+  if (v && typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if (k === "id") continue;
+      out[k] = stripIds(val);
+    }
+    return out;
+  }
+  return v;
+}
+
+describe("图元默认构造 golden（切片 0：构造器即默认值 seam）", () => {
+  for (const type of Object.keys(GOLDEN) as ShapeType[]) {
+    it(type, () => {
+      const actual = stripIds(createShape(type, { x: 200, y: 200 }).toJSON());
+      expect(actual).toEqual(GOLDEN[type]);
+    });
+  }
+});

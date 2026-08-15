@@ -524,61 +524,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
       s.renderer?.render();
     },
     addShape: (type, x, y) => {
-      const s = get();
       sceneEditor.addShape({
         type,
         x: x ?? 200,
         y: y ?? 200,
-        width: type === "circle" ? 80 : 120,
-        height: type === "circle" ? 80 : 80,
-        fill: type === "text" ? "#000000" : "#4A90D9",
-        stroke: "#333333",
-        strokeWidth: 2,
-        text: type === "text" ? "双击编辑" : undefined,
-        fontSize: type === "text" ? 24 : undefined,
-        d: type === "path" ? "M15 10 L105 10 L105 70 L15 70 Z" : undefined,
-        children:
-          type === "group"
-            ? ([
-                {
-                  id: generateId(),
-                  type: "rect",
-                  x: 0,
-                  y: 0,
-                  width: 70,
-                  height: 60,
-                  fill: "#4A90D9",
-                  stroke: "#333333",
-                  strokeWidth: 2,
-                },
-                {
-                  id: generateId(),
-                  type: "circle",
-                  x: 80,
-                  y: 5,
-                  width: 55,
-                  height: 55,
-                  fill: "#E67E22",
-                  stroke: "#333333",
-                  strokeWidth: 2,
-                },
-              ] as ShapeProps[])
-            : undefined,
-        src: type === "image" ? "" : undefined,
-        breakerStatus: "open",
-        signalColor: type === "metro-signal" ? "gray" : undefined,
-        running: false,
-        speedPercent: 0,
-        value: 0,
-        min: 0,
-        max: 100,
-        unit: "A",
-        primaryVoltage: "35kV",
-        secondaryVoltage: "400V",
-        voltageLevel: "400V",
-        energized: true,
-        label: "",
-        labelPosition: "bottom",
       });
     },
     deleteSelected: () => {

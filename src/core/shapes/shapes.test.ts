@@ -17,10 +17,10 @@ describe("createShape 新图元工厂", () => {
     expect(s.type).toBe("path");
     expect(s.id).toBe("p1");
     expect(s.name).toBe("轨道路径");
-    expect((s as PathShape).d).toBe("M10 10 L90 10 L90 90 L10 90 Z");
+    expect((s as PathShape).d).toBe("M15 10 L105 10 L105 70 L15 70 Z");
     expect(s.x).toBe(0);
-    expect(s.width).toBe(100);
-    expect(s.fill).toBe("#CCCCCC");
+    expect(s.width).toBe(120);
+    expect(s.fill).toBe("#4A90D9");
   });
 
   it("group 图元可创建并从 children 恢复子图元", () => {

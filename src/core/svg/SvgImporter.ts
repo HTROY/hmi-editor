@@ -22,6 +22,7 @@ import {
   transformPathDataMatrix,
 } from "../shapes/pathTransform";
 import { getRotatedAABB } from "../scene/resize";
+import { capabilityOf } from "../shapes/capability";
 import type { OutOfBoundsShape } from "../scene/scaling";
 import { normalizeColor, withAlpha } from "./color";
 import {
@@ -469,16 +470,12 @@ function finalizePath(
 }
 
 function translateShape(shape: ShapeBase, dx: number, dy: number): void {
-  if (shape.type === "line") {
-    const line = shape as LineShape;
-    line.startPoint = {
-      x: line.startPoint.x + dx,
-      y: line.startPoint.y + dy,
-    };
-    line.endPoint = { x: line.endPoint.x + dx, y: line.endPoint.y + dy };
-  } else if (shape.type === "polyline" || shape.type === "polygon") {
-    const poly = shape as PolylineShape | PolygonShape;
-    poly.points = poly.points.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+  const points = capabilityOf(shape).points;
+  if (points) {
+    points.set(
+      shape,
+      points.get(shape).map((p) => ({ x: p.x + dx, y: p.y + dy }))
+    );
   }
   shape.x += dx;
   shape.y += dy;

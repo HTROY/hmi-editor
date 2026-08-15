@@ -2,6 +2,10 @@ import { ShapeBase } from "./ShapeBase";
 import { getPaint } from "./paint";
 import type { ShapeProps, Point } from "../types";
 import { transformPathData } from "./pathTransform";
+import { applyBoxResize } from "./resizeCore";
+import type { ResizeHandle, ResizeInput } from "./resizeCore";
+import type { ShapeCapability } from "./capability";
+import { baseBindableProps } from "./bindable";
 
 // ============================================================
 // PathShape — 路径图元（SVG path 数据，矢量导入/编辑的基础）
@@ -12,7 +16,7 @@ export class PathShape extends ShapeBase {
 
   constructor(props?: Partial<ShapeProps>) {
     super("path", props);
-    this.d = props?.d ?? "M10 10 L90 10 L90 90 L10 90 Z";
+    this.d = props?.d ?? "M15 10 L105 10 L105 70 L15 70 Z";
   }
 
   hitTest(point: Point): boolean {
@@ -54,3 +58,33 @@ export class PathShape extends ShapeBase {
     return { ...super.toJSON(), d: this.d };
   }
 }
+
+/** 路径的手柄 resize：盒式缩放 + d 随宽高比重写（能力条目，ADR-0007 切片 2） */
+function applyPathResize(
+  shape: PathShape,
+  handle: ResizeHandle,
+  pointer: Point,
+  o: ResizeInput
+): void {
+  const r = applyBoxResize(shape, handle, pointer, o);
+  shape.d = transformPathData(
+    shape.d,
+    shape.width / r.oldWidth,
+    shape.height / r.oldHeight
+  );
+}
+
+export const pathCapability: ShapeCapability = {
+  type: "path",
+  // 窄类型入参经能力接口桥接（strict 逆变）：分发正确性由 capabilityOf 按类型保证
+  editor: [
+    {
+      key: "d",
+      label: "路径 d",
+      kind: "textarea",
+      get: (s) => (s as PathShape).d,
+    },
+  ],
+  bindableProps: baseBindableProps(),
+  resize: applyPathResize as ShapeCapability["resize"],
+};

@@ -1,4 +1,6 @@
-﻿import { ShapeBase } from "../ShapeBase";
+import { ShapeBase } from "../ShapeBase";
+import { baseBindableProps, bindableNum } from "../bindable";
+import type { ShapeCapability } from "../capability";
 import type { ShapeProps, Point } from "../../types";
 
 // ============================================================
@@ -25,8 +27,6 @@ export class MetroFan extends ShapeBase {
 
   constructor(props?: Partial<MetroFanProps>) {
     super("metro-fan", props);
-    this.width = props?.width ?? 80;
-    this.height = props?.height ?? 80;
     this.speedPercent = props?.speedPercent ?? 0;
     this.bladeColor = props?.bladeColor ?? "#4A90D9";
     this.running = props?.running ?? false;
@@ -140,3 +140,54 @@ export class MetroFan extends ShapeBase {
     };
   }
 }
+
+/** 风机能力条目（ADR-0007 切片 4）：恒等比；填充为派生状态不可绑定；转速百分比可绑定 */
+const metroFanBindable = baseBindableProps();
+delete metroFanBindable.fill;
+metroFanBindable.speedPercent = bindableNum(
+  (s) => (s as MetroFan).speedPercent,
+  (s, v) => {
+    (s as MetroFan).speedPercent = v;
+  }
+);
+
+export const metroFanCapability: ShapeCapability = {
+  type: "metro-fan",
+  editor: [
+    {
+      key: "running",
+      label: "运行",
+      kind: "boolean",
+      get: (s) => (s as MetroFan).running,
+      sideEffects: (s, v, setProp) => {
+        if (!v) setProp("speedPercent", 0);
+      },
+    },
+    {
+      key: "speedPercent",
+      label: "转速",
+      kind: "range",
+      min: 0,
+      max: 100,
+      unit: "%",
+      get: (s) => (s as MetroFan).speedPercent,
+      sideEffects: (s, v, setProp) => {
+        if ((v as number) > 0) setProp("running", true);
+      },
+    },
+    {
+      key: "bladeColor",
+      label: "叶片色",
+      kind: "color",
+      get: (s) => (s as MetroFan).bladeColor,
+    },
+  ],
+  uniformOnly: true,
+  bindableProps: metroFanBindable,
+  advanceAnimation: (s, dt) => {
+    const f = s as MetroFan;
+    if (!f.running) return false;
+    f.updateAnimation(dt);
+    return true;
+  },
+};

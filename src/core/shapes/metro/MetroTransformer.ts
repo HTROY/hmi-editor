@@ -1,4 +1,6 @@
-﻿import { ShapeBase } from "../ShapeBase";
+import { ShapeBase } from "../ShapeBase";
+import { baseBindableProps } from "../bindable";
+import type { ShapeCapability } from "../capability";
 import type { ShapeProps, Point } from "../../types";
 
 // ============================================================
@@ -28,8 +30,6 @@ export class MetroTransformer extends ShapeBase {
 
   constructor(props?: Partial<MetroTransformerProps>) {
     super("metro-transformer", props);
-    this.width = props?.width ?? 70;
-    this.height = props?.height ?? 90;
     this.primaryVoltage = props?.primaryVoltage ?? "35kV";
     this.secondaryVoltage = props?.secondaryVoltage ?? "400V";
     this.ratedPower = props?.ratedPower ?? "2000kVA";
@@ -131,3 +131,39 @@ export class MetroTransformer extends ShapeBase {
     };
   }
 }
+
+/** 变压器能力条目（ADR-0007 切片 4）：恒等比 + 基础可绑定 */
+export const metroTransformerCapability: ShapeCapability = {
+  type: "metro-transformer",
+  editor: [
+    {
+      key: "primaryVoltage",
+      label: "一次侧",
+      kind: "text",
+      placeholder: "35kV",
+      get: (s) => (s as MetroTransformer).primaryVoltage,
+    },
+    {
+      key: "secondaryVoltage",
+      label: "二次侧",
+      kind: "text",
+      placeholder: "400V",
+      get: (s) => (s as MetroTransformer).secondaryVoltage,
+    },
+    {
+      key: "ratedPower",
+      label: "容量",
+      kind: "text",
+      placeholder: "2000kVA",
+      get: (s) => (s as MetroTransformer).ratedPower,
+    },
+    {
+      key: "energized",
+      label: "带电",
+      kind: "boolean",
+      get: (s) => (s as MetroTransformer).energized,
+    },
+  ],
+  uniformOnly: true,
+  bindableProps: baseBindableProps(),
+};

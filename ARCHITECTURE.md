@@ -113,6 +113,7 @@ io-backend/                       # Rust/WASM I/O 后端（Cargo workspace）
 
 - **组（GroupShape）**：子图元坐标相对组原点，整体移动/缩放/旋转保持相对布局；画布命中与变换以组为原子单位。
 - **图元库**：工程级 `ProjectData.library` 数据，条目是任意单个图元（含组）的序列化定义；放置时深拷贝并重新生成 ID，之后与库项无关；支持覆盖更新与显式重新同步。内置图元只读，自定义图元可放入用户自定义分组。
+- **图元能力（Shape Capability，ADR-0007）**：`src/core/shapes/capability.ts` 是「图元类型 = 行为包」的多态 seam——类型键控能力表 `Record<ShapeType, ShapeCapability>`（编译期穷尽、运行期 throw 防御），全部 15 个条目按类型就近定义（R3）；调用方经 `capabilityOf(shapeOrType)` 获取，不再按字符串/instanceof 自行分发。字段：`resize`（逐类型手柄缩放覆盖，机制在 `resizeCore.ts`，`scene/resize.ts` 为薄入口）、`uniformOnly`（metro 恒等比）、`points`（绝对点集几何读写，供 library/groupOps/SvgImporter）、`boundsFromProps`、`bindableProps`（类型化可绑定属性读写器，BindingEngine 经其读写、两个面板的常量集删除）、`advanceAnimation`（MetroFan 叶片推进）、`editor`（检查器 SEM 描述符驱动 PropertyPanel）。默认构造的权威是各类型构造器（`createShape(type)` 即完整默认图元，golden 契约见 `defaults.test.ts`）。
 - **导入**：SVG 导入器解析 shape/transform/gradient/path 等并转换为原生图元（含组）；栅格导入器把 PNG/JPG 转成 `ImageShape`（data URL 随工程持久化，打包时抽到 assets/）。
 - **检查器/图元树**：右栏顶部按 z 序（最上层优先）递归展示顶层与组内子图元；组内子图元只能在树中选中编辑，画布只画只读高亮；支持同父拖拽换序、可见/锁定、重命名、删除（仅顶层）。
 - **图元编辑事务（Shape Edit Transaction）**：`SceneEditor`（`src/core/scene/SceneEditor.ts`）是图元编辑的统一入口，动词接口（`updateShapeAt`/`addShape`/`deleteShape`/`group`/`ungroup`/`reorder`/`beginShapeEdit`/`endShapeEdit`/`applyShapeResize`/`applyBatch`）统一完成「变更场景 → 记录命令 → 重建绑定索引 → 重绘 → 通知」的收尾语义（`finishEdit`），撤销/重做与正向编辑共用同一收尾，避免语义漂移；store 的编辑动作退化为薄委托，消除逐动作重复的编辑仪式。依赖全部注入（scene/bindingEngine/renderer/回调），不接触 React 与 store。
@@ -121,7 +122,7 @@ io-backend/                       # Rust/WASM I/O 后端（Cargo workspace）
 ### 3.3 场景、画布与视图
 
 - `SceneGraph` 用 `Map<id, Shape>` 存图元，脏标记延迟排序；命中测试按 zIndex 从高到低反查；支持区域查询（框选）。
-- `Renderer` 绑定 Canvas，绘制网格背景 → 图元 → 选中包围框与 8 个手柄；`resize`/`scaling` 模块处理物理像素与图元缩放（文字等特殊图元按角点规则缩放）。
+- `Renderer` 绑定 Canvas，绘制网格背景 → 图元 → 选中包围框与 8 个手柄；`resizeCore`（通用手柄几何）+ 图元能力条目的逐类型 resize 覆盖处理物理像素与图元缩放（文字等特殊图元按角点规则缩放），`scene/resize.ts` 为薄入口；`scaling` 处理页面分辨率等比缩放。
 - `Viewport` 管理编辑视图变换（zoom 10%–800%、pan、锚点缩放、适配页面），只影响显示，不改图元坐标；每个页面的视图状态随自动保存持久化。
 - 页面拥有独立分辨率（逻辑宽高）与背景色；`EditorCanvas` 支持选择/框选/拖拽、工具创建、缩放平移、吸附（snap）、键盘快捷键（Delete、Ctrl+C/V、Ctrl+G 成组、Ctrl+Shift+G 取消成组、Ctrl+Z/Y 等）；画布编辑动作全部经 `SceneEditor` 事务落盘撤销历史（拖拽移动/缩放以 `beginShapeEdit`/`endShapeEdit` 配对记录单条命令，删除/成组/换序为原子操作）。
 

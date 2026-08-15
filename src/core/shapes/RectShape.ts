@@ -1,4 +1,6 @@
-﻿import { ShapeBase } from "./ShapeBase";
+import { ShapeBase } from "./ShapeBase";
+import { baseBindableProps, bindableNum } from "./bindable";
+import type { ShapeCapability } from "./capability";
 import type { ShapeProps, Point } from "../types";
 import { getPaint } from "./paint";
 
@@ -61,3 +63,27 @@ export class RectShape extends ShapeBase {
     return { ...super.toJSON(), cornerRadius: this.cornerRadius };
   }
 }
+
+/** 矩形能力条目（ADR-0007 切片 4）：基础可绑定 + 圆角 */
+export const rectCapability: ShapeCapability = {
+  type: "rect",
+  editor: [
+    {
+      key: "cornerRadius",
+      label: "圆角",
+      kind: "number",
+      min: 0,
+      max: 50,
+      get: (s) => (s as RectShape).cornerRadius,
+    },
+  ],
+  bindableProps: {
+    ...baseBindableProps(),
+    cornerRadius: bindableNum(
+      (s) => (s as RectShape).cornerRadius,
+      (s, v) => {
+        (s as RectShape).cornerRadius = v;
+      }
+    ),
+  },
+};

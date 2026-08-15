@@ -1,7 +1,7 @@
-﻿import { ShapeBase } from "../shapes/ShapeBase";
+import { ShapeBase } from "../shapes/ShapeBase";
 import type { BoundingBox } from "../types";
 import type { AnimationFrameState } from "../bindings/animation";
-import { inverseAnimationToStatic } from "./animationGeometry";
+import { inverseAnimationToStatic } from "../shapes/animationGeometry";
 
 // ============================================================
 // SceneGraph — 场景图：管理所有图元、zIndex 排序、增删改查

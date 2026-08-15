@@ -4,7 +4,7 @@ import {
   applyAnimationToPoint,
   inverseAnimationToStatic,
 } from "./animationGeometry";
-import { getAnimatedAABB } from "./resize";
+import { getAnimatedAABB } from "./resizeCore";
 
 describe("animationGeometry 动画几何变换", () => {
   it("正向与逆向互为反变换（位移 + 旋转 + 缩放）", () => {

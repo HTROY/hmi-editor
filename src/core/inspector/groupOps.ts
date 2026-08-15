@@ -1,11 +1,6 @@
 import { SceneGraph } from "../scene/SceneGraph";
-import {
-  GroupShape,
-  LineShape,
-  PolygonShape,
-  PolylineShape,
-  ShapeBase,
-} from "../shapes";
+import { GroupShape, ShapeBase } from "../shapes";
+import { capabilityOf } from "../shapes/capability";
 import { generateId } from "../shapes/ShapeBase";
 import {
   cloneShapeWithNewIds,
@@ -77,15 +72,11 @@ export function unwrapGroup(group: GroupShape): ShapeBase[] {
     child.zIndex = group.zIndex + i;
     child.opacity = (child.opacity ?? 1) * group.opacity;
     child.visible = (child.visible ?? true) && group.visible;
-    if (child instanceof LineShape) {
-      child.startPoint = transformPoint(child.startPoint, group, cos, sin);
-      child.endPoint = transformPoint(child.endPoint, group, cos, sin);
-    } else if (
-      child instanceof PolylineShape ||
-      child instanceof PolygonShape
-    ) {
-      child.points = child.points.map((p) =>
-        transformPoint(p, group, cos, sin)
+    const points = capabilityOf(child).points;
+    if (points) {
+      points.set(
+        child,
+        points.get(child).map((p) => transformPoint(p, group, cos, sin))
       );
     }
     return child;

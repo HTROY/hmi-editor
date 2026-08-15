@@ -1,6 +1,8 @@
-﻿import { ShapeBase } from "./ShapeBase";
+import { ShapeBase } from "./ShapeBase";
 import type { ShapeProps, Point } from "../types";
 import { getPaint } from "./paint";
+import { baseBindableProps } from "./bindable";
+import type { ShapeCapability } from "./capability";
 
 // ============================================================
 // CircleShape — 圆形/椭圆
@@ -9,6 +11,8 @@ import { getPaint } from "./paint";
 export class CircleShape extends ShapeBase {
   constructor(props?: Partial<ShapeProps>) {
     super("circle", props);
+    this.width = props?.width ?? 80;
+    this.height = props?.height ?? 80;
     // 保证宽高一致为正圆，但允许椭圆
   }
 
@@ -53,3 +57,9 @@ export class CircleShape extends ShapeBase {
     return new CircleShape(this.toJSON());
   }
 }
+
+/** 圆形能力条目（ADR-0007 切片 4）：基础可绑定 */
+export const circleCapability: ShapeCapability = {
+  type: "circle",
+  bindableProps: baseBindableProps(),
+};

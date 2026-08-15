@@ -1,4 +1,6 @@
-﻿import { ShapeBase } from "../ShapeBase";
+import { ShapeBase } from "../ShapeBase";
+import { baseBindableProps } from "../bindable";
+import type { ShapeCapability } from "../capability";
 import type { ShapeProps, Point } from "../../types";
 
 // ============================================================
@@ -40,8 +42,6 @@ export class MetroSignal extends ShapeBase {
 
   constructor(props?: Partial<MetroSignalProps>) {
     super("metro-signal", props);
-    this.width = props?.width ?? 40;
-    this.height = props?.height ?? 40;
     this.signalColor = props?.signalColor ?? "gray";
     this.blinking = props?.blinking ?? false;
     this.label = props?.label ?? "";
@@ -157,3 +157,54 @@ export class MetroSignal extends ShapeBase {
     };
   }
 }
+
+/** 信号灯能力条目（ADR-0007 切片 4）：恒等比；填充为派生状态，不可绑定 */
+const metroSignalBindable = baseBindableProps();
+delete metroSignalBindable.fill;
+
+export const metroSignalCapability: ShapeCapability = {
+  type: "metro-signal",
+  editor: [
+    {
+      key: "signalColor",
+      label: "信号色",
+      kind: "select",
+      options: [
+        { value: "red", label: "红色 (故障)" },
+        { value: "green", label: "绿色 (运行)" },
+        { value: "yellow", label: "黄色 (预警)" },
+        { value: "blue", label: "蓝色 (待机)" },
+        { value: "gray", label: "灰色 (离线)" },
+      ],
+      get: (s) => (s as MetroSignal).signalColor,
+    },
+    {
+      key: "blinking",
+      label: "闪烁",
+      kind: "boolean",
+      get: (s) => (s as MetroSignal).blinking,
+    },
+    {
+      key: "label",
+      label: "标签文字",
+      kind: "text",
+      placeholder: "留空使用默认",
+      get: (s) => (s as MetroSignal).label,
+    },
+    {
+      key: "labelPosition",
+      label: "标签位置",
+      kind: "select",
+      options: [
+        { value: "bottom", label: "下方" },
+        { value: "top", label: "上方" },
+        { value: "right", label: "右侧" },
+        { value: "left", label: "左侧" },
+        { value: "none", label: "隐藏" },
+      ],
+      get: (s) => (s as MetroSignal).labelPosition,
+    },
+  ],
+  uniformOnly: true,
+  bindableProps: metroSignalBindable,
+};

@@ -1,7 +1,7 @@
 import { SceneGraph } from "../scene/SceneGraph";
 import { Renderer } from "../scene/Renderer";
 import { VariableManager } from "../variables/VariableManager";
-import { MetroFan } from "../shapes/metro/MetroFan";
+import { capabilityOf } from "../shapes/capability";
 import { forEachShape } from "../inspector/tree";
 import {
   computeAnimationFrame,
@@ -78,9 +78,9 @@ export class AnimationEngine {
     forEachShape(this.scene, (shape) => {
       let merged: AnimationFrameState | null = null;
 
-      // 保留 MetroFan 自带的叶片旋转驱动
-      if (shape instanceof MetroFan && shape.running) {
-        shape.updateAnimation(deltaMs);
+      // 逐类型动画推进（能力条目 advanceAnimation，如 MetroFan 叶片旋转）
+      const advance = capabilityOf(shape).advanceAnimation;
+      if (advance && advance(shape, deltaMs)) {
         merged = merged ?? {};
         changed.add(shape.id);
       }

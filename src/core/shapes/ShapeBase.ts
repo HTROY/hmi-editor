@@ -50,16 +50,16 @@ export abstract class ShapeBase {
     this.type = type;
     this.x = props?.x ?? 0;
     this.y = props?.y ?? 0;
-    this.width = props?.width ?? 100;
-    this.height = props?.height ?? 100;
+    this.width = props?.width ?? 120;
+    this.height = props?.height ?? 80;
     this.rotation = props?.rotation ?? 0;
     this.opacity = props?.opacity ?? 1;
     this.visible = props?.visible ?? true;
     this.locked = props?.locked ?? false;
     this.zIndex = props?.zIndex ?? 0;
-    this.fill = props?.fill ?? "#CCCCCC";
-    this.stroke = props?.stroke ?? "#000000";
-    this.strokeWidth = props?.strokeWidth ?? 1;
+    this.fill = props?.fill ?? "#4A90D9";
+    this.stroke = props?.stroke ?? "#333333";
+    this.strokeWidth = props?.strokeWidth ?? 2;
     this.dashArray = props?.dashArray ?? [];
     this.name = props?.name ?? type;
 
