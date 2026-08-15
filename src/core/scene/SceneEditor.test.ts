@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { SceneGraph, SceneEditor } from "./index";
-import type { ShapeCommand } from "../history";
 import { createShape, GroupShape, MetroBreaker } from "../shapes";
 import { VariableManager } from "../variables";
 import { BindingEngine } from "../bindings";
@@ -27,13 +26,6 @@ const indexOf = (bindingEngine: BindingEngine) =>
 
 const rect = (id: string, x = 0) =>
   createShape("rect", { id, x, y: 0, width: 100, height: 50 });
-
-const addCommand = (id: string, index = 0): ShapeCommand => ({
-  id,
-  before: null,
-  after: rect(id).toJSON(),
-  index,
-});
 
 describe("SceneEditor 撤销/重做", () => {
   it("属性修改命令：undo 恢复快照并选中，redo 重新应用", () => {
@@ -107,20 +99,14 @@ describe("SceneEditor 撤销/重做", () => {
     });
   });
 
-  it("批量命令：undo 整体回退并清除选中", () => {
+  it("addShapes 批量新增：undo 整体回退并清除选中", () => {
     const { scene, editor } = makeEditor();
-    const a = rect("a");
-    const b = rect("b");
-    scene.add(a);
-    scene.add(b);
     editor.activatePage("p1");
-    editor.applyBatch([
-      { id: "a", before: a.toJSON(), after: null, index: 0 },
-      { id: "b", before: b.toJSON(), after: null, index: 1 },
-    ]);
+    editor.addShapes([rect("a"), rect("b")]);
 
-    const u = editor.undo();
     expect(scene.count).toBe(2);
+    const u = editor.undo();
+    expect(scene.count).toBe(0);
     expect(u!.selected).toBeNull();
   });
 
@@ -355,13 +341,64 @@ describe("SceneEditor 图元编辑动词", () => {
     expect(editor.undo()).toBeNull();
   });
 
-  it("applyBatch 统一记录批量命令并可整体撤销", () => {
+  it("addShapes 批量新增可整体撤销", () => {
     const { scene, editor } = makeEditor();
     editor.activatePage("p1");
-    const sh = rect("a");
-    scene.add(sh);
-    editor.applyBatch([addCommand("a", 0)]);
+    editor.addShapes([rect("a")]);
     expect(editor.undo()).not.toBeNull();
     expect(scene.count).toBe(0);
+  });
+
+  it("replaceShape 原位替换：undo 恢复旧图元且保持 z 序", () => {
+    const { scene, editor } = makeEditor();
+    const a = rect("a");
+    const b = rect("b");
+    scene.add(a);
+    scene.add(b);
+    editor.activatePage("p1");
+    const replacement = rect("a2", 99);
+    const placed = editor.replaceShape("a", replacement);
+    expect(placed).toBe(replacement);
+    expect(scene.get("a")).toBeUndefined();
+    expect(scene.get("a2")).toBe(replacement);
+    expect(scene.getAll().map((s) => s.id)).toEqual(["a2", "b"]);
+
+    const u = editor.undo();
+    expect(scene.get("a")).toBeDefined();
+    expect(scene.get("a2")).toBeUndefined();
+    expect(scene.getAll().map((s) => s.id)).toEqual(["a", "b"]);
+    expect(u!.selected).toBeNull();
+  });
+
+  it("replaceShape 目标不存在时返回 null 且不记录", () => {
+    const { scene, editor } = makeEditor();
+    editor.activatePage("p1");
+    expect(editor.replaceShape("missing", rect("n"))).toBeNull();
+    expect(editor.undo()).toBeNull();
+  });
+
+  it("scaleAll 等比缩放全部图元：undo 整体恢复", () => {
+    const { scene, editor } = makeEditor();
+    const a = rect("a");
+    const b = rect("b", 10);
+    scene.add(a);
+    scene.add(b);
+    editor.activatePage("p1");
+    editor.scaleAll(2);
+    expect(scene.get("a")!.width).toBe(200);
+    expect(scene.get("b")!.width).toBe(200);
+
+    editor.undo();
+    expect(scene.get("a")!.width).toBe(100);
+    expect(scene.get("b")!.x).toBe(10);
+    expect(editor.undo()).toBeNull(); // 只有一条命令
+  });
+
+  it("scaleAll(factor=1) 不记录命令", () => {
+    const { scene, editor } = makeEditor();
+    scene.add(rect("a"));
+    editor.activatePage("p1");
+    editor.scaleAll(1);
+    expect(editor.undo()).toBeNull();
   });
 });

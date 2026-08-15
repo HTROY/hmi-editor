@@ -7,6 +7,7 @@ import { createShape, GroupShape, ShapeBase } from "../shapes";
 import { SceneGraph } from "./SceneGraph";
 import type { Renderer } from "./Renderer";
 import { applyResize, type ResizeHandle, type ResizeOptions } from "./resize";
+import { scaleShape } from "./scaling";
 import type { Point, ShapeProps, ShapeType } from "../types";
 
 /** 撤销/重做后应恢复的选中结果 */
@@ -321,13 +322,63 @@ export class SceneEditor {
   }
 
   /**
-   * 低层批量入口：调用方已自行完成场景变更并构造好命令，
-   * 这里统一记录 + 收尾（重建受影响图元的绑定索引、重绘、通知）。
+   * 批量新增图元：命令构造（快照/index 捕获）与收尾都在本模块完成，
+   * 一次撤销整体恢复（SVG/栅格导入、库项放置共用）。
    */
-  applyBatch(commands: ShapeCommand[]): void {
+  addShapes(shapes: ShapeBase[]): ShapeBase[] {
+    if (shapes.length === 0) return shapes;
+    const commands: ShapeCommand[] = [];
+    for (const shape of shapes) {
+      this.scene.add(shape);
+      commands.push({
+        id: shape.id,
+        before: null,
+        after: shape.toJSON(),
+        index: this.scene.getAll().indexOf(shape),
+      });
+    }
+    this.pushBatchCommand(commands);
+    this.finishEdit(shapes.map((sh) => [sh.id]));
+    return shapes;
+  }
+
+  /** 原位替换图元（库项重新同步）：删除旧图元 + 同位插入新图元，一次撤销 */
+  replaceShape(id: string, replacement: ShapeBase): ShapeBase | null {
+    const old = this.scene.get(id);
+    if (!old) return null;
+    const index = this.scene.getAll().indexOf(old);
+    const commands: ShapeCommand[] = [
+      { id, before: old.toJSON(), after: null, index },
+      { id: replacement.id, before: null, after: replacement.toJSON(), index },
+    ];
+    this.scene.remove(id);
+    this.scene.insertAt(replacement, index);
+    this.bindingEngine.reindexShape(id);
+    this.pushBatchCommand(commands);
+    this.finishEdit([[replacement.id]]);
+    return replacement;
+  }
+
+  /** 全部图元等比缩放（页面分辨率变更）：仅记录有变化的图元，一次撤销 */
+  scaleAll(factor: number): void {
+    if (factor === 1) return;
+    const commands: ShapeCommand[] = [];
+    for (const shape of this.scene.getAll()) {
+      const before = shape.toJSON();
+      scaleShape(shape, factor);
+      const after = shape.toJSON();
+      if (JSON.stringify(before) !== JSON.stringify(after)) {
+        commands.push({
+          id: shape.id,
+          before,
+          after,
+          index: this.scene.getAll().indexOf(shape),
+        });
+      }
+    }
     if (commands.length === 0) return;
     this.pushBatchCommand(commands);
-    this.finishEdit(commands.map((c) => [c.id]));
+    this.finishEdit([]);
   }
 
   /** 编辑收尾：重建受影响路径的绑定索引 → 重绘 → 通知 */

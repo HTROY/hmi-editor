@@ -166,6 +166,26 @@ export function toggleCollapsed(
   return { ...state, collapsed };
 }
 
+/**
+ * 合并工程文件与 localStorage 的折叠状态：工程优先，localStorage 兜底。
+ * 只保留合法 key（内置分类 / 未分组 / 现存分组 id）。
+ */
+export function mergeCollapsed(
+  projectKeys: string[],
+  storageKeys: string[],
+  validGroupIds: string[]
+): string[] {
+  const projectSet = new Set(projectKeys);
+  const valid = new Set(validGroupIds);
+  const merged = [...projectKeys];
+  for (const key of storageKeys) {
+    if (isBuiltinSectionKey(key) || key === UNGROUPED_KEY || valid.has(key)) {
+      if (!projectSet.has(key)) merged.push(key);
+    }
+  }
+  return [...new Set(merged)];
+}
+
 /** 工程数据归一化：分组 id/名称去重、丢弃无效条目、清理失效归属与折叠记录 */
 export function normalizeGrouping(
   items: LibraryItem[],

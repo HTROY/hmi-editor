@@ -7,6 +7,11 @@ export type {
   PageControllerOptions,
   PageSwapOptions,
 } from "./PageController";
+export { LibraryController } from "./LibraryController";
+export type {
+  LibraryCommitState,
+  LibraryControllerOptions,
+} from "./LibraryController";
 export * from "./background";
 export * from "./upgrade";
 export * from "./package";

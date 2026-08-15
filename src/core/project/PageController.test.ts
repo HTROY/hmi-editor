@@ -246,4 +246,32 @@ describe("PageController 页面加载路径", () => {
     ).index;
     expect(index.get("VAR_X")?.length).toBe(1);
   });
+
+  it("importShapes：整体替换活动页场景、重置历史、重建索引并适配视口", () => {
+    const { controller, projectManager, scene, sceneEditor, bindingEngine, events } =
+      make();
+    const p = projectManager.createPage("P").meta;
+    controller.loadProject({ ...projectData(), pages: [{ meta: p, shapes: [] }] });
+    // 先有内容 + 历史
+    sceneEditor.addShape({ type: "rect", id: "old" });
+    expect(scene.count).toBe(1);
+    events.length = 0;
+
+    controller.importShapes([
+      createShape("rect", { id: "n1", x: 1, y: 2 }).toJSON(),
+      createShape("circle", { id: "n2", x: 3, y: 4 }).toJSON(),
+    ]);
+
+    expect(scene.getAll().map((s) => s.id)).toEqual(["n1", "n2"]);
+    expect(sceneEditor.undo()).toBeNull(); // 历史已重置
+    const index = (
+      bindingEngine as unknown as { index: Map<string, unknown[]> }
+    ).index;
+    expect(index.size).toBe(0);
+    expect(events).toEqual([
+      `swapped:${p.id}:page`,
+      `viewport:${p.id}`,
+      "flush",
+    ]);
+  });
 });

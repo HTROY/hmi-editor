@@ -4,6 +4,8 @@ import type { BindingEngine } from "../bindings";
 import { Viewport } from "../view";
 import { defaultPageViews, normalizePageView } from "../autosave";
 import type { PageViewState } from "../autosave";
+import { createShape } from "../shapes";
+import type { ShapeProps } from "../types";
 import { ProjectManager } from "./ProjectManager";
 import type { PageMeta, ProjectData } from "./types";
 
@@ -90,6 +92,29 @@ export class PageController {
   /** 加载 projectManager 当前活动页（会话恢复：快照已应用） */
   loadActivePage(opts: PageSwapOptions = {}): void {
     this.swapToActive(opts);
+  }
+
+  /**
+   * 导入裸图元数组：整体替换当前活动页场景（旧 .json 场景导入路径）。
+   * 与 swapToActive 共用同一加载语义：场景替换 → 历史重置 → 镜像刷新 →
+   * 重建绑定索引 → 视口适配 → 自动保存。
+   */
+  importShapes(shapes: ShapeProps[]): void {
+    const page = this.projectManager.activePage;
+    if (!page) return;
+    this.scene.clear();
+    for (const sp of shapes) {
+      try {
+        this.scene.add(createShape(sp.type, sp));
+      } catch (e) {
+        console.warn("导入图元失败:", sp.type, e);
+      }
+    }
+    this.sceneEditor.resetHistories(page.meta.id);
+    this.callbacks.onPageSwapped?.(page.meta, {});
+    this.bindingEngine.rebuildIndex();
+    this.activateViewport(page.meta.id, true);
+    this.callbacks.onFlushAutosave?.();
   }
 
   /** 切换页面：先同步当前场景到工程，保留每页历史与视图 */
