@@ -3,8 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { usePolling } from "./usePolling";
 
-function Harness({ fetcher }: { fetcher: () => Promise<string> }) {
-  const { data, error, loading, refresh } = usePolling(fetcher, 100);
+function Harness({
+  fetcher,
+  interval = 100,
+}: {
+  fetcher: () => Promise<string>;
+  interval?: number;
+}) {
+  const { data, error, loading, refresh } = usePolling(fetcher, interval);
   return (
     <div>
       <span data-testid="state">
@@ -88,7 +94,9 @@ describe("usePolling", () => {
   it("refresh 手动触发一次拉取", async () => {
     vi.useRealTimers();
     const fetcher = vi.fn<() => Promise<string>>().mockResolvedValue("v");
-    render(<Harness fetcher={fetcher} />);
+    // 用长轮询间隔：本用例使用真实定时器，慢速 CI 上 100ms 间隔可能在
+    // 点击断言前多触发一次拉取（竞态），10s 窗口内保证只有初始拉取 + refresh。
+    render(<Harness fetcher={fetcher} interval={10000} />);
     await act(async () => {
       await Promise.resolve();
     });
