@@ -169,7 +169,7 @@ describe("RemoteAuthClient", () => {
   });
 
   it("logs out and clears storage when a refresh is rejected", async () => {
-    const { client, storage } = makeClient(async (url, init) => {
+    const { client, storage } = makeClient(async (url, _init) => {
       if (url.endsWith("/api/auth/login")) return jsonResponse(LOGIN_PAYLOAD);
       if (url.endsWith("/api/auth/refresh")) {
         return jsonResponse({ error: "unauthorized" }, 401);
@@ -230,7 +230,7 @@ describe("RemoteAuthClient", () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000_000_000_000);
     let refreshCalls = 0;
-    const { client } = makeClient(async (url, init) => {
+    const { client } = makeClient(async (url, _init) => {
       if (url.endsWith("/api/auth/login")) {
         return jsonResponse({
           ...LOGIN_PAYLOAD,

@@ -1,4 +1,3 @@
-import React from "react";
 import type {
   AlarmOccurrence,
   AlarmSeverity,
@@ -94,7 +93,8 @@ export function ActiveAlarmRow({
         <span className="alarm-time">{formatTime(alarm.triggeredAt)}</span>
       </div>
       <div className="alarm-row-detail">
-        {alarm.message} · 触发值: {String(alarm.value)} / 阈值: {alarm.threshold}
+        {alarm.message} · 触发值: {String(alarm.value)} / 阈值:{" "}
+        {alarm.threshold}
         {liveValue !== undefined && (
           <span className="alarm-live">
             {" "}
@@ -106,7 +106,8 @@ export function ActiveAlarmRow({
         <span
           className="alarm-status"
           style={{
-            color: alarm.status === "active" ? sc.color : "var(--text-secondary)",
+            color:
+              alarm.status === "active" ? sc.color : "var(--text-secondary)",
           }}
         >
           {alarm.status === "active" ? "未确认" : "已确认"}
@@ -179,7 +180,9 @@ export function HistoryAlarmRow({
       </div>
       {expanded && events && (
         <div className="alarm-events">
-          {events.length === 0 && <div className="panel-hint">暂无明细事件</div>}
+          {events.length === 0 && (
+            <div className="panel-hint">暂无明细事件</div>
+          )}
           {events.map((ev) => (
             <div key={ev.id} className="alarm-event-row">
               <span className="alarm-event-time">{formatTime(ev.atMs)}</span>

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useEditorStore } from "../../../store/editorStore";
 import { TrendChart } from "./TrendChart";
 import type { HistoryPoint, TrendConfig } from "../../../core/historian/types";
@@ -10,7 +10,7 @@ import type { HistoryPoint, TrendConfig } from "../../../core/historian/types";
 import { Icon } from "../../icons";
 
 export function TrendPanel() {
-  const { historian, varManager, simRunning } = useEditorStore();
+  const { historian, varManager } = useEditorStore();
   const [, forceUpdate] = useState(0);
   const [selectedVars, setSelectedVars] = useState<string[]>([
     "STA1_211_IA",
@@ -40,8 +40,6 @@ export function TrendPanel() {
   const handleRemove = (id: string) => {
     setSelectedVars(selectedVars.filter((v) => v !== id));
   };
-
-  const now = Date.now();
 
   return (
     <div className="panel trend-panel">

@@ -99,7 +99,7 @@ export const createSceneSlice = (
   services: EditorServices,
   hooks: AutosaveHooks
 ): SceneSliceState => {
-  const { scene, sceneEditor, projectManager, initialViewport } = services;
+  const { scene, sceneEditor, initialViewport } = services;
 
   const syncView = (s: ReturnType<StoreGet>) => {
     const view = normalizePageView(s.viewport.toJSON());

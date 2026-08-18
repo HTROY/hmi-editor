@@ -10,7 +10,6 @@ import type {
   RemoteDialog,
   StoreSet,
   StoreGet,
-  AutosaveHooks,
 } from "../editorStoreTypes";
 import type { EditorServices } from "../editorServices";
 
@@ -56,13 +55,7 @@ export const createRemoteSlice = (
   get: StoreGet,
   services: EditorServices
 ): RemoteSliceState => {
-  const {
-    remoteAuth,
-    remoteProjects,
-    draftBackupStore,
-    projectManager,
-    loadProjectData,
-  } = services;
+  const { projectManager, loadProjectData } = services;
 
   return {
     remoteUser: null,

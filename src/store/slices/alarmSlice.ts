@@ -1,6 +1,5 @@
 import type { AlarmRule } from "../../core/alarm/types";
-import type { StoreSet, StoreGet, AutosaveHooks } from "../editorStoreTypes";
-import type { EditorServices } from "../editorServices";
+import type { StoreSet, StoreGet } from "../editorStoreTypes";
 
 /** 报警领域的状态与动作（精确类型）。 */
 export interface AlarmSliceState {
@@ -14,7 +13,7 @@ export interface AlarmSliceState {
  * 报警领域：报警确认与规则保存（本地引擎或远端客户端由 AlarmManager 处理）。
  */
 export const createAlarmSlice = (
-  set: StoreSet,
+  _set: StoreSet,
   get: StoreGet
 ): AlarmSliceState => {
   return {

@@ -1,11 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import {
-  Renderer,
-  SceneGraph,
-  hitTestResizeHandle,
-  isRasterFile,
-} from "../../core";
-import type { ResizeHandle } from "../../core";
+import { Renderer, hitTestResizeHandle, isRasterFile } from "../../core";
+import type { ResizeHandle, ShapeType } from "../../core";
 import { useEditorStore } from "../../store/editorStore";
 import type { ToolMode } from "../../store/editorStore";
 
@@ -209,7 +204,7 @@ export function EditorCanvas() {
       } else {
         // 工具模式：在点击位置创建图元（世界坐标）
         const world = store.viewport.screenToWorld(pos.x, pos.y);
-        const typeMap: Record<ToolMode, string> = {
+        const typeMap: Record<ToolMode, ShapeType | ""> = {
           select: "",
           rect: "rect",
           circle: "circle",
@@ -218,7 +213,7 @@ export function EditorCanvas() {
         };
         const shapeType = typeMap[mode];
         if (shapeType) {
-          addShape(shapeType as any, world.x - 50, world.y - 40);
+          addShape(shapeType, world.x - 50, world.y - 40);
           useEditorStore.getState().setMode("select");
         }
       }
@@ -242,7 +237,11 @@ export function EditorCanvas() {
       const pos = getCanvasPos(e.clientX, e.clientY);
 
       // 手柄拖拽调整大小
-      if (isResizing.current && resizeHandleRef.current && selection.primaryId) {
+      if (
+        isResizing.current &&
+        resizeHandleRef.current &&
+        selection.primaryId
+      ) {
         const world = store.viewport.screenToWorld(pos.x, pos.y);
         const selected = scene.get(selection.primaryId);
         // 栅格图元默认等比锁，按住 Shift 临时解锁；其余图元 Shift 等比
@@ -374,12 +373,12 @@ export function EditorCanvas() {
         const payload = JSON.parse(shapePayload) as {
           kind?: string;
           id?: string;
-          type?: string;
+          type?: ShapeType;
         };
         if (payload?.kind === "library" && payload.id) {
           store.placeLibraryItem(payload.id, world.x, world.y);
         } else if (payload?.kind === "builtin" && payload.type) {
-          store.addShape(payload.type as any, world.x - 60, world.y - 40);
+          store.addShape(payload.type, world.x - 60, world.y - 40);
           store.setMode("select");
         }
       } catch {

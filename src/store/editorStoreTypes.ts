@@ -1,9 +1,6 @@
 import type {
   SceneGraph,
   Renderer,
-  SceneEditor,
-  PageController,
-  LibraryController,
   Selection,
   ShapeBase,
   CommandHistory,

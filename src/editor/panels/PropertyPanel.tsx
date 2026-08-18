@@ -197,10 +197,7 @@ function EditorRow({
     return (
       <div className="prop-row">
         <span className="prop-label">{descriptor.label}</span>
-        <select
-          value={String(value)}
-          onChange={(e) => commit(e.target.value)}
-        >
+        <select value={String(value)} onChange={(e) => commit(e.target.value)}>
           {(descriptor.options ?? []).map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
@@ -269,9 +266,11 @@ export function PropertyPanel({
   const selectedIds = selection.multiIds;
   const shape = getSelectedShape(scene, selection);
 
-  const setProp = (key: string, value: any) => {
-    if (selection.primaryPath) updateShapeAt(selection.primaryPath, { [key]: value });
-    else if (selection.primaryId) updateShape(selection.primaryId, { [key]: value });
+  const setProp = (key: string, value: unknown) => {
+    if (selection.primaryPath)
+      updateShapeAt(selection.primaryPath, { [key]: value });
+    else if (selection.primaryId)
+      updateShape(selection.primaryId, { [key]: value });
   };
 
   if (!shape) {
@@ -296,7 +295,7 @@ export function PropertyPanel({
     const selected = selectedIds
       .map((id) => scene.get(id))
       .filter((s): s is ShapeBase => !!s);
-    const apply = (key: string, value: any) => {
+    const apply = (key: string, value: unknown) => {
       for (const id of selectedIds) updateShape(id, { [key]: value });
     };
     const first = selected[0];
@@ -533,7 +532,7 @@ export function PropertyPanel({
         {terminal("visible")}
       </div>
 
-            <Section code="SEM" title="类型属性" />
+      <Section code="SEM" title="类型属性" />
       {(capabilityOf(shape).editor ?? []).map((d) => (
         <EditorRow
           key={d.key}

@@ -1,5 +1,5 @@
-﻿import { DataSource } from "./DataSource";
-import type { DataSourceConfig, DataPoint } from "./types";
+import { DataSource } from "./DataSource";
+import type { DataSourceConfig } from "./types";
 
 // ============================================================
 // IEC104Simulator — IEC 60870-5-104 协议数据模拟器
@@ -18,9 +18,6 @@ interface IEC104Point {
 
 /** 地铁 ISCS 典型数据点模板 */
 function createMetroPoints(): IEC104Point[] {
-  const now = Date.now();
-  const t = () => now;
-
   // 辅助：正弦波发生器
   const sineWave = (center: number, amp: number, period: number) => {
     const phase = Math.random() * Math.PI * 2;
@@ -236,13 +233,13 @@ export class IEC104Simulator extends DataSource {
     this.emitStatus("disconnected");
   }
 
-  send(command: string, value?: any): void {
+  send(command: string, value?: unknown): void {
     // IEC 104 控制命令 (C_SC_NA_1 / C_SE_NA_1)
     const point = this.points.find((p) => p.variableId === command);
     if (point) {
       this.emitData({
         id: point.variableId,
-        value: value ?? 0,
+        value: typeof value === "number" ? value : 0,
         quality: "good",
         timestamp: Date.now(),
       });

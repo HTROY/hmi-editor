@@ -24,19 +24,17 @@ export function MappingEditor({
         <label>映射</label>
         <select
           value={mapping.type}
-          onChange={(e) =>
-            onChange({
-              type: e.target.value as ValueMapping["type"],
-              ...(e.target.value === "range"
-                ? {
-                    from: [0, 100] as [number, number],
-                    to: [0, 1] as [number, number],
-                  }
-                : e.target.value === "enum"
-                  ? { map: { "0": "", "1": "" } }
-                  : {}),
-            } as ValueMapping)
-          }
+          onChange={(e) => {
+            const type = e.target.value as ValueMapping["type"];
+            if (type === "range") {
+              onChange({ type: "range", from: [0, 100], to: [0, 1] });
+            } else if (type === "enum") {
+              onChange({ type: "enum", map: { "0": "", "1": "" } });
+            } else if (type === "direct" || type === "stateColor") {
+              onChange({ type });
+            }
+            // type "bitmask" 不在选择器中表达，无需处理
+          }}
         >
           <option value="direct">直接值</option>
           <option value="range">范围映射</option>
@@ -52,14 +50,14 @@ export function MappingEditor({
             <input
               type="number"
               style={{ width: "45%" }}
-              value={(mapping as any).from?.[0] ?? 0}
+              value={mapping.from[0] ?? 0}
               onChange={(e) =>
                 onChange({
                   ...mapping,
-                  from: [
-                    Number(e.target.value),
-                    (mapping as any).from?.[1] ?? 100,
-                  ] as [number, number],
+                  from: [Number(e.target.value), mapping.from[1]] as [
+                    number,
+                    number,
+                  ],
                 })
               }
             />
@@ -67,14 +65,14 @@ export function MappingEditor({
             <input
               type="number"
               style={{ width: "45%" }}
-              value={(mapping as any).from?.[1] ?? 100}
+              value={mapping.from[1] ?? 100}
               onChange={(e) =>
                 onChange({
                   ...mapping,
-                  from: [
-                    (mapping as any).from?.[0] ?? 0,
-                    Number(e.target.value),
-                  ] as [number, number],
+                  from: [mapping.from[0], Number(e.target.value)] as [
+                    number,
+                    number,
+                  ],
                 })
               }
             />
@@ -85,14 +83,14 @@ export function MappingEditor({
               type="number"
               step={0.1}
               style={{ width: "45%" }}
-              value={(mapping as any).to?.[0] ?? 0}
+              value={mapping.to[0] ?? 0}
               onChange={(e) =>
                 onChange({
                   ...mapping,
-                  to: [
-                    Number(e.target.value),
-                    (mapping as any).to?.[1] ?? 1,
-                  ] as [number, number],
+                  to: [Number(e.target.value), mapping.to[1]] as [
+                    number,
+                    number,
+                  ],
                 })
               }
             />
@@ -101,14 +99,14 @@ export function MappingEditor({
               type="number"
               step={0.1}
               style={{ width: "45%" }}
-              value={(mapping as any).to?.[1] ?? 1}
+              value={mapping.to[1] ?? 1}
               onChange={(e) =>
                 onChange({
                   ...mapping,
-                  to: [
-                    (mapping as any).to?.[0] ?? 0,
-                    Number(e.target.value),
-                  ] as [number, number],
+                  to: [mapping.to[0], Number(e.target.value)] as [
+                    number,
+                    number,
+                  ],
                 })
               }
             />
@@ -121,11 +119,11 @@ export function MappingEditor({
           <div className="prop-group">
             <label>0→</label>
             <input
-              value={(mapping as any).map?.["0"] ?? ""}
+              value={mapping.map["0"] ?? ""}
               onChange={(e) =>
                 onChange({
                   ...mapping,
-                  map: { ...(mapping as any).map, "0": e.target.value },
+                  map: { ...mapping.map, "0": e.target.value },
                 })
               }
               placeholder={enumPlaceholders[0]}
@@ -133,11 +131,11 @@ export function MappingEditor({
             {colorPickers && (
               <input
                 type="color"
-                value={((mapping as any).map?.["0"] as string) || "#808080"}
+                value={mapping.map["0"] || "#808080"}
                 onChange={(e) =>
                   onChange({
                     ...mapping,
-                    map: { ...(mapping as any).map, "0": e.target.value },
+                    map: { ...mapping.map, "0": e.target.value },
                   })
                 }
               />
@@ -146,11 +144,11 @@ export function MappingEditor({
           <div className="prop-group">
             <label>1→</label>
             <input
-              value={(mapping as any).map?.["1"] ?? ""}
+              value={mapping.map["1"] ?? ""}
               onChange={(e) =>
                 onChange({
                   ...mapping,
-                  map: { ...(mapping as any).map, "1": e.target.value },
+                  map: { ...mapping.map, "1": e.target.value },
                 })
               }
               placeholder={enumPlaceholders[1]}
@@ -158,11 +156,11 @@ export function MappingEditor({
             {colorPickers && (
               <input
                 type="color"
-                value={((mapping as any).map?.["1"] as string) || "#00FF00"}
+                value={mapping.map["1"] || "#00FF00"}
                 onChange={(e) =>
                   onChange({
                     ...mapping,
-                    map: { ...(mapping as any).map, "1": e.target.value },
+                    map: { ...mapping.map, "1": e.target.value },
                   })
                 }
               />

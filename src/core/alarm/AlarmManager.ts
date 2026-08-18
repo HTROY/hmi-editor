@@ -70,7 +70,6 @@ function toNumber(value: number | boolean): number {
 export class AlarmManager {
   private mode: AlarmMode = "local";
   private varManager: VariableManager;
-  private wsClient: WebSocketClient | null = null;
   private apiBaseUrl = "http://localhost:8081";
   private wsUnsub: (() => void) | null = null;
   private wsStatusUnsub: (() => void) | null = null;
@@ -136,7 +135,6 @@ export class AlarmManager {
 
   /** 接入后端：WebSocket 推送 + REST API 地址 */
   setRemote(wsClient: WebSocketClient, apiBaseUrl: string): void {
-    this.wsClient = wsClient;
     this.apiBaseUrl = apiBaseUrl || this.apiBaseUrl;
     this.wsUnsub?.();
     this.wsUnsub = wsClient.onAlarmMessage((msg) =>

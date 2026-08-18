@@ -1,7 +1,5 @@
-﻿import { VariableManager } from "../variables/VariableManager";
-import { AlarmManager } from "../alarm/AlarmManager";
-import { SceneGraph } from "../scene/SceneGraph";
-import type { ScriptDef, ScriptTrigger, ExecutionResult } from "./types";
+import { VariableManager } from "../variables/VariableManager";
+import type { ScriptDef, ExecutionResult } from "./types";
 
 // ============================================================
 // ScriptEngine — 脚本引擎
@@ -15,9 +13,9 @@ export interface ScriptSandbox {
   /** 设置变量值 */
   setVar: (id: string, value: number | boolean) => void;
   /** 输出日志 */
-  log: (...args: any[]) => void;
+  log: (...args: unknown[]) => void;
   /** 告警 */
-  warn: (...args: any[]) => void;
+  warn: (...args: unknown[]) => void;
   /** 获取当前时间戳 */
   now: () => number;
   /** 延迟 */
@@ -34,8 +32,6 @@ export class ScriptEngine {
   private running = false;
 
   private varManager: VariableManager;
-  private alarmManager: AlarmManager | null = null;
-  private scene: SceneGraph | null = null;
   private unsubVar: (() => void) | null = null;
 
   private listeners: Set<(id: string, result: ExecutionResult) => void> =
@@ -43,13 +39,6 @@ export class ScriptEngine {
 
   constructor(varManager: VariableManager) {
     this.varManager = varManager;
-  }
-
-  setAlarmManager(am: AlarmManager): void {
-    this.alarmManager = am;
-  }
-  setScene(scene: SceneGraph): void {
-    this.scene = scene;
   }
 
   onResult(cb: (id: string, result: ExecutionResult) => void): () => void {
@@ -154,15 +143,16 @@ export class ScriptEngine {
       };
       this.emit(def.id, execResult);
       return execResult;
-    } catch (err: any) {
+    } catch (err) {
       const duration = Date.now() - start;
+      const message = err instanceof Error ? err.message : String(err);
       def.lastRun = Date.now();
-      def.lastError = err.message;
+      def.lastError = message;
       const execResult: ExecutionResult = {
         success: false,
         output: "",
         duration,
-        error: err.message,
+        error: message,
       };
       this.emit(def.id, execResult);
       return execResult;
@@ -184,7 +174,7 @@ export class ScriptEngine {
         if (def.triggerConfig?.intervalMs) {
           const timer = setInterval(
             () => this.runScriptAsync(def),
-            def.triggerConfig.intervalMs,
+            def.triggerConfig.intervalMs
           );
           this.timers.set(def.id, timer);
         }

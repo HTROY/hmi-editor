@@ -1,7 +1,7 @@
 import type { ShapeBase, LibraryItem, LibraryGroup } from "../../core";
 import { importSvg } from "../../core/svg";
 import { libraryItemToShape } from "../../core/shapes/library";
-import type { StoreSet, StoreGet, AutosaveHooks } from "../editorStoreTypes";
+import type { StoreSet, StoreGet } from "../editorStoreTypes";
 import type { EditorServices } from "../editorServices";
 
 /** 图元库领域的状态与动作（精确类型）。 */
@@ -32,7 +32,7 @@ export interface LibrarySliceState {
  * 图元库领域：库项/分组的增删改、放置与回写。
  */
 export const createLibrarySlice = (
-  set: StoreSet,
+  _set: StoreSet,
   get: StoreGet,
   services: EditorServices
 ): LibrarySliceState => {

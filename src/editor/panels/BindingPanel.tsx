@@ -27,13 +27,14 @@ export function BindingPanel() {
   // 兼容旧绑定：目标属性不在当前类型注册表时仍保留该选项，避免下拉显示空白。
   const bindableOptionProps = (() => {
     const props = new Set<string>(
-      Object.keys(shape ? capabilityOf(shape.type).bindableProps ?? {} : {})
+      Object.keys(shape ? (capabilityOf(shape.type).bindableProps ?? {}) : {})
     );
     for (const b of shape?.bindings ?? []) props.add(b.targetProp);
     return [...props];
   })();
   const isNumericProp = (prop: string): boolean =>
-    !!shape && capabilityOf(shape.type).bindableProps?.[prop]?.kind === "number";
+    !!shape &&
+    capabilityOf(shape.type).bindableProps?.[prop]?.kind === "number";
 
   // 订阅变量值变化，让「手动测试」区域的值实时刷新
   const [, forceUpdate] = useState(0);
@@ -188,7 +189,7 @@ export function BindingPanel() {
                       const v = allVars.find((x) => x.id === e.target.value);
                       updateBinding(idx, {
                         variableId: e.target.value,
-                        variableType: (v?.type ?? "DI") as any,
+                        variableType: v?.type ?? "DI",
                       });
                     }}
                   >

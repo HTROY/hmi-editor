@@ -1,4 +1,4 @@
-﻿export type ShapeId = string;
+export type ShapeId = string;
 
 export type ShapeType =
   | "rect"
@@ -88,7 +88,7 @@ export interface Binding {
 export interface EventHandler {
   trigger: "click" | "dblclick" | "mousedown" | "mouseup";
   action: string;
-  params: Record<string, any>;
+  params: Record<string, unknown>;
 }
 
 /** 五类动画的可调参数（按类型取用） */

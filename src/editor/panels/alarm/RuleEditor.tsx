@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import type {
   AlarmCondition,
   AlarmRule,
@@ -48,8 +48,8 @@ export function RuleEditor({
     try {
       await onSave(rule);
       onCancel();
-    } catch (err: any) {
-      alert("保存失败: " + (err?.message ?? "未知错误"));
+    } catch (err) {
+      alert("保存失败: " + (err instanceof Error ? err.message : "未知错误"));
     } finally {
       setSaving(false);
     }
@@ -113,7 +113,9 @@ export function RuleEditor({
             <span>条件</span>
             <select
               value={rule.condition}
-              onChange={(e) => set("condition", e.target.value as AlarmCondition)}
+              onChange={(e) =>
+                set("condition", e.target.value as AlarmCondition)
+              }
             >
               <option value="high">高于阈值</option>
               <option value="low">低于阈值</option>

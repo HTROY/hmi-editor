@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import type { PushResult } from "../../store/editorStore";
 import type { RemoteProject } from "../../core/project/remote";
@@ -14,7 +14,6 @@ export function PushDialog() {
     projectManager,
     remoteList,
     pendingConflict,
-    remoteBusy,
     pushProject,
     pushOverwriteRemote,
     refreshRemoteList,

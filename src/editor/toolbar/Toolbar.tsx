@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import { ProjectToolbar } from "./ProjectToolbar";
 import { Icon, type IconName } from "../icons";

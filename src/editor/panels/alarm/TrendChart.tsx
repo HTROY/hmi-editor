@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { HistoryPoint, TrendConfig } from "../../../core/historian/types";
 
 // ============================================================
@@ -149,7 +149,7 @@ export function TrendChart({
           hour12: false,
         }),
         pad.left,
-        pad.top + chartH + 4,
+        pad.top + chartH + 4
       );
     }
 

@@ -118,7 +118,6 @@ export const createPageSlice = (
       }
     },
     importScene: (json) => {
-      const s = get();
       try {
         const d = JSON.parse(json);
         if (d.pages) {

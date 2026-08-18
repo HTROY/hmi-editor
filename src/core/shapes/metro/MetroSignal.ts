@@ -38,7 +38,6 @@ export class MetroSignal extends ShapeBase {
 
   // 闪烁状态（由渲染器或动画引擎控制）
   blinkOn: boolean;
-  private blinkTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(props?: Partial<MetroSignalProps>) {
     super("metro-signal", props);

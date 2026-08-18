@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import { useState } from "react";
 import { useEditorStore } from "../../../store/editorStore";
 
 // ============================================================
@@ -21,8 +21,10 @@ export function ReportPanel() {
       setReportOutput(
         "已生成: " + data.config.name + " (" + data.rows.length + " 行)"
       );
-    } catch (err: any) {
-      setReportOutput("错误: " + err.message);
+    } catch (err) {
+      setReportOutput(
+        "错误: " + (err instanceof Error ? err.message : String(err))
+      );
     }
   };
 

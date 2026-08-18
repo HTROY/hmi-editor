@@ -1,4 +1,4 @@
-﻿import type { User, UserRole, AuditEntry } from "./types";
+import type { User, AuditEntry } from "./types";
 import { ROLE_PERMISSIONS } from "./types";
 
 // ============================================================
@@ -83,7 +83,7 @@ export class AuthManager {
 
   login(username: string): User | null {
     const user = this.getAllUsers().find(
-      (u) => u.username === username && u.enabled,
+      (u) => u.username === username && u.enabled
     );
     if (user) {
       user.lastLogin = Date.now();
@@ -94,7 +94,7 @@ export class AuthManager {
         "login",
         "系统",
         "登录成功",
-        "success",
+        "success"
       );
       this.notify();
       return user;
@@ -105,7 +105,7 @@ export class AuthManager {
       "login",
       "系统",
       "登录失败: 用户不存在或已禁用",
-      "failure",
+      "failure"
     );
     return null;
   }
@@ -118,7 +118,7 @@ export class AuthManager {
         "logout",
         "系统",
         "登出",
-        "success",
+        "success"
       );
       this.currentUser = null;
       this.notify();
@@ -151,7 +151,7 @@ export class AuthManager {
         "denied",
         permission,
         "权限不足",
-        "failure",
+        "failure"
       );
     }
     return ok;
@@ -165,7 +165,7 @@ export class AuthManager {
     action: string,
     target: string,
     detail: string,
-    result: "success" | "failure",
+    result: "success" | "failure"
   ): void {
     this.auditLog.unshift({
       id: "audit_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
@@ -186,7 +186,7 @@ export class AuthManager {
     action: string,
     target: string,
     detail: string,
-    result: "success" | "failure" = "success",
+    result: "success" | "failure" = "success"
   ): void {
     this.addAudit(
       this.currentUser?.id ?? "",
@@ -194,7 +194,7 @@ export class AuthManager {
       action,
       target,
       detail,
-      result,
+      result
     );
   }
 

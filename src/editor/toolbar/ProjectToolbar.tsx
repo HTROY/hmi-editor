@@ -151,8 +151,8 @@ export function ProjectToolbar() {
           const input = document.createElement("input");
           input.type = "file";
           input.accept = ".hmi.json,.hmi.zip,.json,.zip";
-          input.onchange = (e: any) => {
-            const file = e.target?.files?.[0];
+          input.onchange = (e: Event) => {
+            const file = (e.target as HTMLInputElement)?.files?.[0];
             if (!file) return;
             if (isProjectPackageFile(file)) {
               openProject(file);

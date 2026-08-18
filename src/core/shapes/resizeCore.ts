@@ -45,7 +45,10 @@ export interface BoxResizeResult {
   dir: { x: number; y: number };
 }
 
-export const HANDLE_DIR: Record<ResizeHandle, { x: -1 | 0 | 1; y: -1 | 0 | 1 }> = {
+export const HANDLE_DIR: Record<
+  ResizeHandle,
+  { x: -1 | 0 | 1; y: -1 | 0 | 1 }
+> = {
   nw: { x: -1, y: -1 },
   n: { x: 0, y: -1 },
   ne: { x: 1, y: -1 },
@@ -266,7 +269,7 @@ export function buildUniformTarget(
  * 可逆解得 w/h；在 |cosθ|≈|sinθ| 或解无效时回退等比。
  */
 function solveRotatedDims(
-  aabb: BoundingBox,
+  _aabb: BoundingBox,
   target: BoundingBox,
   rotationDeg: number,
   minSize: number

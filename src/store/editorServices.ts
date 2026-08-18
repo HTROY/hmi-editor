@@ -170,8 +170,6 @@ export function createEditorServices(
   const reportEngine = new ReportEngine(historian, {
     download: browserDownload,
   });
-  scriptEngine.setAlarmManager(alarmManager);
-  scriptEngine.setScene(scene);
   const { meta: dp } = projectManager.createPage("主画面");
   projectManager.activePageId = dp.id;
   sceneEditor.activatePage(dp.id);

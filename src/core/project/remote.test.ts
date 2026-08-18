@@ -113,7 +113,7 @@ describe("RemoteProjectStore", () => {
 
   it("pushes with an optimistic-lock version query", async () => {
     const store = await makeStore({
-      "http://localhost:8081/api/projects/alpha?version=3": (url, init) => {
+      "http://localhost:8081/api/projects/alpha?version=3": (_url, init) => {
         expect(init?.method).toBe("PUT");
         expect(new Headers(init?.headers).get("Content-Type")).toBe(
           "application/zip"

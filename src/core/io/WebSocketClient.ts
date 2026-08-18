@@ -102,7 +102,8 @@ export class WebSocketClient extends DataSource {
           logger.error("Connection error:", err);
           this.emitError(
             new Error(
-              "WebSocket 连接错误: " + ((err as any)?.message ?? "未知")
+              "WebSocket 连接错误: " +
+                (err instanceof Error ? err.message : String(err))
             )
           );
           reject(err);

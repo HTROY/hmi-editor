@@ -371,7 +371,7 @@ describe("SceneEditor 图元编辑动词", () => {
   });
 
   it("replaceShape 目标不存在时返回 null 且不记录", () => {
-    const { scene, editor } = makeEditor();
+    const { editor } = makeEditor();
     editor.activatePage("p1");
     expect(editor.replaceShape("missing", rect("n"))).toBeNull();
     expect(editor.undo()).toBeNull();

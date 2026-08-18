@@ -4,8 +4,7 @@ import {
   saveConnectionConfig,
 } from "../../core";
 import type { ConnectionConfig } from "../../core";
-import type { StoreSet, StoreGet, AutosaveHooks } from "../editorStoreTypes";
-import type { EditorServices } from "../editorServices";
+import type { StoreSet, StoreGet } from "../editorStoreTypes";
 
 /** 连接/运行领域的状态与动作（精确类型）。 */
 export interface ConnectionSliceState {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useEditorStore } from "../store/editorStore";
 
 const MODE_LABEL: Record<string, string> = {

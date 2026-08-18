@@ -1,5 +1,5 @@
 import { SceneGraph } from "../scene/SceneGraph";
-import { createShape, ShapeBase } from "../shapes";
+import { createShape } from "../shapes";
 import type { LibraryItem } from "../shapes/library";
 import type { LibraryGroup, LibraryUi } from "../shapes/libraryGroups";
 import type { PageMeta, ProjectMeta, ProjectData, RecentFile } from "./types";
@@ -359,7 +359,7 @@ export class ProjectManager {
     this.meta = this.createDefaultMeta();
     this.currentFilePath = "";
     this.setRemoteLink(null);
-    const { meta, scene } = this.createPage("主画面");
+    const { meta } = this.createPage("主画面");
     this.activePageId = meta.id;
     this.dirty = false;
   }

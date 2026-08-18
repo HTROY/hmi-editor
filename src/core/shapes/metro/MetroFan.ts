@@ -88,7 +88,7 @@ export class MetroFan extends ShapeBase {
         bladeW / 2,
         0,
         0,
-        Math.PI * 2,
+        Math.PI * 2
       );
       ctx.fill();
       ctx.stroke();
@@ -159,7 +159,7 @@ export const metroFanCapability: ShapeCapability = {
       label: "运行",
       kind: "boolean",
       get: (s) => (s as MetroFan).running,
-      sideEffects: (s, v, setProp) => {
+      sideEffects: (_s, v, setProp) => {
         if (!v) setProp("speedPercent", 0);
       },
     },
@@ -171,7 +171,7 @@ export const metroFanCapability: ShapeCapability = {
       max: 100,
       unit: "%",
       get: (s) => (s as MetroFan).speedPercent,
-      sideEffects: (s, v, setProp) => {
+      sideEffects: (_s, v, setProp) => {
         if ((v as number) > 0) setProp("running", true);
       },
     },

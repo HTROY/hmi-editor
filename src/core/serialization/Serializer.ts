@@ -1,5 +1,5 @@
-﻿import type { ShapeProps } from "../types";
-import { createShape, ShapeBase } from "../shapes";
+import type { ShapeProps } from "../types";
+import { createShape } from "../shapes";
 import { SceneGraph } from "../scene";
 
 export interface PageData {

@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   DataSourceConfig,
   DataSourceCallback,
   ConnectionStatus,
@@ -21,7 +21,7 @@ export abstract class DataSource {
 
   abstract connect(): Promise<void>;
   abstract disconnect(): void;
-  abstract send(command: string, value?: any): void;
+  abstract send(command: string, value?: unknown): void;
 
   get connectionStatus(): ConnectionStatus {
     return this.status;

@@ -1,7 +1,7 @@
 import { ShapeBase } from "../ShapeBase";
 import { baseBindableProps } from "../bindable";
 import type { ShapeCapability } from "../capability";
-import type { ShapeProps, Point, BoundingBox } from "../../types";
+import type { ShapeProps, Point } from "../../types";
 
 // ============================================================
 // MetroBusBar — 母线
@@ -100,7 +100,7 @@ export class MetroBusBar extends ShapeBase {
       ctx.fillText(
         vc.label + (this.energized ? "" : " (失电)"),
         this.width / 2,
-        this.height / 2 - 4,
+        this.height / 2 - 4
       );
     }
 

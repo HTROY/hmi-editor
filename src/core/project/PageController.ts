@@ -2,7 +2,7 @@ import { SceneGraph } from "../scene";
 import type { Renderer, SceneEditor } from "../scene";
 import type { BindingEngine } from "../bindings";
 import { Viewport } from "../view";
-import { defaultPageViews, normalizePageView } from "../autosave";
+import { normalizePageView } from "../autosave";
 import type { PageViewState } from "../autosave";
 import { createShape } from "../shapes";
 import type { ShapeProps } from "../types";

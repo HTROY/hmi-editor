@@ -55,11 +55,7 @@ export type DataSourceCallback = {
 
 // 监控 DTO 单一契约源（F13）：与 web-ui 共用 packages/contracts，
 // 字段名与后端 monitor/types.rs 一致，禁止在本文件手写镜像。
-import type {
-  PluginStatus,
-  LivePointInfo,
-  MonitorSnapshot,
-} from "@hmi/contracts";
+import type { PluginStatus } from "@hmi/contracts";
 
 export type {
   PluginStatus,

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import type { AnimationDef, AnimationParams } from "../../core/types";
 import { getSelectedShape } from "../../core";

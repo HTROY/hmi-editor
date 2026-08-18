@@ -3,12 +3,7 @@ import type { VariableType } from "../variables/types";
 import { DataSource } from "./DataSource";
 import { WebSocketClient } from "./WebSocketClient";
 import { IEC104Simulator } from "./IEC104Simulator";
-import type {
-  ConnectionStatus,
-  DataPoint,
-  DataSourceType,
-  MonitorSnapshot,
-} from "./types";
+import type { ConnectionStatus, DataPoint, MonitorSnapshot } from "./types";
 import type { PointRow } from "@hmi/contracts";
 import { createLogger } from "../platform/logger";
 
@@ -48,8 +43,6 @@ export class DataBridge {
 
   /** config_change 防抖定时器 */
   private configRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-  /** config_change 监听解除函数 */
-  private configChangeUnsub: (() => void) | null = null;
   /** 外部刷新回调（用于通知 UI 更新变量列表） */
   private onVarsRefreshed: (() => void) | null = null;
 
@@ -152,7 +145,7 @@ export class DataBridge {
             this.variableManager.setValue(point.id, point.value, point.quality);
           }
         },
-        onStatus: (status) => {},
+        onStatus: () => {},
         onError: (err) => logger.warn(err.message),
       });
     }
@@ -292,7 +285,6 @@ export class DataBridge {
   // ---- 底层 ----
 
   private sourceUnsubscribers: Map<string, () => void> = new Map();
-  private snapshotReceived = false;
 
   private connectSource(name: string): void {
     const source = this.sources.get(name);
@@ -302,8 +294,6 @@ export class DataBridge {
     const oldUnsub = this.sourceUnsubscribers.get(name);
     if (oldUnsub) oldUnsub();
     this.sourceUnsubscribers.delete(name);
-
-    this.snapshotReceived = false;
 
     const unsub = source.subscribe({
       onData: (point) => {
@@ -316,9 +306,6 @@ export class DataBridge {
         this.variableManager.setValue(varId, point.value, point.quality);
       },
       onStatus: (status) => {
-        if (status === "connected") {
-          this.snapshotReceived = false; // Reset for new connection
-        }
         this.notifyStatus(name, status);
       },
       onError: (err) => {
@@ -334,7 +321,7 @@ export class DataBridge {
 
   /** 监听 WebSocket 的 config_change 事件，自动刷新变量列表 */
   private setupConfigChangeWatcher(): void {
-    this.configChangeUnsub = this.wsClient.onConfigChange((event) => {
+    this.wsClient.onConfigChange((event) => {
       logger.info("Config change detected:", event.action, event.variableId);
       // 防抖：2 秒内的多次变更合并为一次刷新
       if (this.configRefreshTimer) {

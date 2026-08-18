@@ -1,9 +1,4 @@
-import type {
-  AnimationControl,
-  AnimationDef,
-  AnimationParams,
-  ValueMapping,
-} from "../types";
+import type { AnimationControl, AnimationDef, AnimationParams } from "../types";
 import { applyValueMapping, type MappedValue } from "./mapping";
 
 // ============================================================
