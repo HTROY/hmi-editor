@@ -1,4 +1,4 @@
-﻿# HMI I/O Backend Build Script
+# HMI I/O Backend Build Script
 # =============================
 # Builds WASM plugins (wasip2 components), the Rust backend service and the
 # management Web UI (React/Vite).
@@ -18,6 +18,22 @@ $PluginDir = Join-Path $BackendDir "crates\plugins"
 $OutputDir = Join-Path $BackendDir "plugins"
 $WasmTarget = "wasm32-wasip2"
 
+# Unified native-command runner: fails fast with a labelled, actionable
+# message whenever a child process exits non-zero. Callers that want to
+# tolerate per-item failures (e.g. build every plugin and report each one)
+# should wrap this helper in try/catch and aggregate the failures.
+function Invoke-NativeCommand {
+    param(
+        [string]$Label,
+        [string]$Command,
+        [string[]]$Arguments = @()
+    )
+    & $Command @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "FAILED [$Label]: '$Command' exited with code $LASTEXITCODE"
+    }
+}
+
 Write-Host "=== HMI I/O Backend Build ===" -ForegroundColor Cyan
 
 # Check for wasm target.
@@ -31,9 +47,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 if (($targets -join "`n") -notmatch "wasm32-wasip2") {
     Write-Host "Installing wasm32-wasip2 target..." -ForegroundColor Yellow
-    rustup target add wasm32-wasip2
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: could not install wasm32-wasip2 target" -ForegroundColor Red
+    try {
+        Invoke-NativeCommand -Label "install wasm32-wasip2 target" -Command "rustup" -Arguments @("target", "add", "wasm32-wasip2")
+    }
+    catch {
+        Write-Host "ERROR: could not install wasm32-wasip2 target: $($_.Exception.Message)" -ForegroundColor Red
         exit 1
     }
 }
@@ -49,6 +67,7 @@ $backendArgs = @()
 if ($Release) { $backendArgs += "--release" }
 
 # Build WASM plugins
+$failedPlugins = @()
 if (-not $BackendOnly) {
     Write-Host "`n[1/3] Building WASM plugins (wasip2 components)..." -ForegroundColor Yellow
 
@@ -57,14 +76,13 @@ if (-not $BackendOnly) {
         Write-Host "  Building $plugin (target: $WasmTarget)..." -ForegroundColor Gray
         Push-Location $BackendDir
         try {
-            cargo build @pluginArgs @("-p", $plugin)
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "    ERROR: Build failed for $plugin" -ForegroundColor Red
-                continue
-            }
+            Invoke-NativeCommand -Label "plugin build ($plugin)" -Command "cargo" -Arguments (@("build") + $pluginArgs + @("-p", $plugin))
             $profile = if ($Release) { "release" } else { "debug" }
             $crateName = $plugin.Replace("-plugin", "").Replace("-", "_")
             $meta = cargo metadata --format-version 1 | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) {
+                throw "cargo metadata failed with code $LASTEXITCODE"
+            }
             $targetDir = $meta.target_directory
             $wasmSrc = Join-Path $targetDir ("{0}\{1}\{2}_plugin.wasm" -f $WasmTarget, $profile, $crateName)
             $wasmDst = Join-Path $OutputDir "${crateName}.wasm"
@@ -72,9 +90,14 @@ if (-not $BackendOnly) {
                 Copy-Item $wasmSrc $wasmDst -Force
                 $size = (Get-Item $wasmDst).Length
                 Write-Host "    -> $wasmDst ($([math]::Round($size/1KB, 1)) KB)" -ForegroundColor Green
-            } else {
-                Write-Host "    WARNING: $wasmSrc not found" -ForegroundColor Yellow
             }
+            else {
+                throw "expected wasm artifact not found: $wasmSrc"
+            }
+        }
+        catch {
+            Write-Host "    ERROR: Build failed for $plugin - $($_.Exception.Message)" -ForegroundColor Red
+            $failedPlugins += $plugin
         }
         finally {
             Pop-Location
@@ -87,14 +110,14 @@ if (-not $PluginsOnly) {
     Write-Host "`n[2/3] Building Rust backend (wasmtime runtime)..." -ForegroundColor Yellow
     Push-Location $BackendDir
     try {
-        cargo build @backendArgs
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "ERROR: Backend build failed" -ForegroundColor Red
-            exit 1
-        }
+        Invoke-NativeCommand -Label "backend build" -Command "cargo" -Arguments (@("build") + $backendArgs)
         Write-Host "  Backend built successfully!" -ForegroundColor Green
         $exePath = if ($Release) { "target\release\hmi-io-backend.exe" } else { "target\debug\hmi-io-backend.exe" }
         Write-Host "  Binary: $(Join-Path $BackendDir $exePath)" -ForegroundColor Gray
+    }
+    catch {
+        Write-Host "ERROR: Backend build failed - $($_.Exception.Message)" -ForegroundColor Red
+        exit 1
     }
     finally {
         Pop-Location
@@ -109,23 +132,24 @@ if (-not ($PluginsOnly -or $SkipFrontend)) {
     try {
         if (-not (Test-Path "node_modules")) {
             Write-Host "  Installing npm dependencies..." -ForegroundColor Gray
-            npm install
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "ERROR: npm install failed" -ForegroundColor Red
-                exit 1
-            }
+            Invoke-NativeCommand -Label "npm install" -Command "npm" -Arguments @("install")
         }
-        npm run build
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "ERROR: Web UI build failed" -ForegroundColor Red
-            exit 1
-        }
+        Invoke-NativeCommand -Label "web-ui build" -Command "npm" -Arguments @("run", "build")
         $distDir = Join-Path $WebUiDir "dist"
         Write-Host "  Web UI built successfully: $distDir" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "ERROR: Web UI build failed - $($_.Exception.Message)" -ForegroundColor Red
+        exit 1
     }
     finally {
         Pop-Location
     }
+}
+
+if ($failedPlugins.Count -gt 0) {
+    Write-Host "`n=== Build FAILED (failed plugins: $($failedPlugins -join ', ')) ===" -ForegroundColor Red
+    exit 1
 }
 
 Write-Host "`n=== Build Complete ===" -ForegroundColor Cyan
