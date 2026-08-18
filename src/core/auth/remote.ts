@@ -1,4 +1,5 @@
 import type { StorageLike } from "../settings/connectionConfig";
+import { Emitter } from "../platform/Emitter";
 
 // ============================================================
 // remote.ts — 后端鉴权客户端（io-backend JWT 认证）
@@ -167,7 +168,7 @@ async function readResponse(res: Response): Promise<unknown> {
 
 export class RemoteAuthClient {
   private sessionValue: RemoteSession | null = null;
-  private listeners = new Set<() => void>();
+  private emitter = new Emitter<void>();
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private memoryBaseUrl: string;
   private readonly fetchImpl: typeof fetch;
@@ -263,12 +264,11 @@ export class RemoteAuthClient {
   }
 
   onChange(cb: () => void): () => void {
-    this.listeners.add(cb);
-    return () => this.listeners.delete(cb);
+    return this.emitter.onChange(cb);
   }
 
   private notify(): void {
-    for (const cb of this.listeners) cb();
+    this.emitter.emit();
   }
 
   /** 从 localStorage 恢复会话并安排续期；返回是否恢复成功 */

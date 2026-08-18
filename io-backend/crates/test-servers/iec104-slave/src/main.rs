@@ -1,6 +1,7 @@
 //! IEC 60870-5-104 slave simulator for end-to-end testing.
 //!
-//! Listens on 127.0.0.1:2404, answers STARTDT/TESTFR U-frames, replies to
+//! Listens on 127.0.0.1:2404 (override with the first CLI arg, e.g.
+//! `iec104-slave 2405`), answers STARTDT/TESTFR U-frames, replies to
 //! general interrogation (C_IC_NA_1) and clock sync (C_CS_NA_1), executes
 //! single/float commands (C_SC_NA_1 / C_SE_NC_1) with ACT_CON/ACT_TERM, and
 //! pushes spontaneous measurements (COT_SPONTANEOUS) once per second.
@@ -348,8 +349,12 @@ fn handle_client(mut stream: TcpStream) {
 }
 
 fn main() {
-    println!("IEC104 slave listening on 127.0.0.1:{}", PORT);
-    let listener = TcpListener::bind(("127.0.0.1", PORT)).expect("bind 2404");
+    let port: u16 = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(PORT);
+    println!("IEC104 slave listening on 127.0.0.1:{}", port);
+    let listener = TcpListener::bind(("127.0.0.1", port)).expect("bind iec104 port");
     for conn in listener.incoming() {
         match conn {
             Ok(stream) => {

@@ -12,6 +12,9 @@ use std::sync::{Arc, Mutex, RwLock};
 use sync_util::{MutexExt, RwLockExt};
 use tokio::sync::mpsc;
 
+#[cfg(test)]
+mod parity;
+
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

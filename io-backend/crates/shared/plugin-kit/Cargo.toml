@@ -1,0 +1,11 @@
+[package]
+name = "plugin-kit"
+version = "0.1.0"
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+sync-util = { workspace = true, default-features = false }

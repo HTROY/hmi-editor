@@ -414,7 +414,7 @@ pub(super) fn resolve_write_target(
 
 #[cfg(test)]
 mod tests {
-    use super::super::{actor, PluginRegistry};
+    use super::super::PluginRegistry;
     use super::*;
     use hmi_io_config::PointMapping;
 

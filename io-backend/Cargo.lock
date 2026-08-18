@@ -1443,6 +1443,7 @@ name = "iec104-plugin"
 version = "0.3.0"
 dependencies = [
  "iec104-core",
+ "plugin-kit",
  "serde",
  "serde_json",
  "sync-util",
@@ -1756,9 +1757,9 @@ dependencies = [
 name = "modbus-tcp-plugin"
 version = "0.3.0"
 dependencies = [
+ "plugin-kit",
  "serde",
  "serde_json",
- "sync-util",
  "wit-bindgen 0.58.0",
 ]
 
@@ -1841,9 +1842,9 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 name = "opc-ua-plugin"
 version = "0.3.0"
 dependencies = [
+ "plugin-kit",
  "serde",
  "serde_json",
- "sync-util",
  "ua-core",
  "wit-bindgen 0.58.0",
 ]
@@ -1903,6 +1904,14 @@ name = "pkg-config"
 version = "0.3.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
+
+[[package]]
+name = "plugin-kit"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "sync-util",
+]
 
 [[package]]
 name = "portable-atomic"

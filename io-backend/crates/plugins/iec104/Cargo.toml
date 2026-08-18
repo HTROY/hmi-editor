@@ -14,4 +14,5 @@ wit-bindgen.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 iec104-core.workspace = true
+plugin-kit.workspace = true
 sync-util = { workspace = true, default-features = false }

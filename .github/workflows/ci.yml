@@ -50,6 +50,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
+          targets: wasm32-wasip2
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: io-backend
@@ -57,3 +58,30 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Test
         run: cargo test --workspace --locked
+
+  e2e:
+    name: Backend E2E smoke (plugins + WS push)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: io-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: io-backend
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build plugins
+        run: |
+          cargo build --target wasm32-wasip2 -p modbus-tcp-plugin -p opc-ua-plugin -p iec104-plugin --locked
+          mkdir -p plugins
+          cp target/wasm32-wasip2/debug/{modbus_tcp_plugin,opc_ua_plugin,iec104_plugin}.wasm plugins/{modbus_tcp,opc_ua,iec104}.wasm
+      - name: Build backend + test servers
+        run: cargo build -p hmi-io-backend -p iec104-slave -p opcua-server --locked
+      - name: Run E2E smoke
+        run: node e2e/smoke-test.mjs

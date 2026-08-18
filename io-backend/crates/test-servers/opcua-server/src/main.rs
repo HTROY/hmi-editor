@@ -1,6 +1,7 @@
 //! Minimal OPC UA server (SecurityPolicy None) for end-to-end testing.
 //!
-//! Listens on 127.0.0.1:4840, serves the HEL/ACK + OPN handshake, session
+//! Listens on 127.0.0.1:4840 (override with the first CLI arg, e.g.
+//! `opcua-server 4841`), serves the HEL/ACK + OPN handshake, session
 //! management (CreateSession / ActivateSession, anonymous or username),
 //! batched Read / Write on a small address space, and CloseSession /
 //! CloseSecureChannel. Values are simulated with sine/cosine signals.
@@ -499,8 +500,12 @@ fn read_message(stream: &mut TcpStream, rx: &mut Vec<u8>) -> Result<Vec<u8>, Str
 }
 
 fn main() {
-    println!("OPC UA server listening on 127.0.0.1:{}", PORT);
-    let listener = TcpListener::bind(("127.0.0.1", PORT)).expect("bind 4840");
+    let port: u16 = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(PORT);
+    println!("OPC UA server listening on 127.0.0.1:{}", port);
+    let listener = TcpListener::bind(("127.0.0.1", port)).expect("bind opcua port");
     for conn in listener.incoming() {
         match conn {
             Ok(stream) => handle_client(stream),

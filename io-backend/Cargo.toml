@@ -17,6 +17,7 @@ members = [
     "crates/plugins/modbus-tcp",
     "crates/plugins/opc-ua",
     "crates/shared/iec104-core",
+    "crates/shared/plugin-kit",
     "crates/shared/sync-util",
     "crates/shared/ua-core",
     "crates/test-servers/iec104-slave",
@@ -72,6 +73,7 @@ hmi-io-point = { path = "crates/point" }
 hmi-io-server = { path = "crates/server" }
 hmi-io-web = { path = "crates/web" }
 iec104-core = { path = "crates/shared/iec104-core" }
+plugin-kit = { path = "crates/shared/plugin-kit" }
 sync-util = { path = "crates/shared/sync-util", default-features = false }
 ua-core = { path = "crates/shared/ua-core" }
 

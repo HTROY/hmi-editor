@@ -1,5 +1,6 @@
 import type { User, AuditEntry } from "./types";
 import { ROLE_PERMISSIONS } from "./types";
+import { Emitter } from "../platform/Emitter";
 
 // ============================================================
 // AuthManager — 用户权限与审计管理
@@ -11,19 +12,18 @@ export class AuthManager {
   private currentUser: User | null = null;
   private maxAudit = 5000;
 
-  private listeners: Set<() => void> = new Set();
+  private emitter = new Emitter<void>();
 
   constructor() {
     this.loadDefaults();
   }
 
   onChange(cb: () => void): () => void {
-    this.listeners.add(cb);
-    return () => this.listeners.delete(cb);
+    return this.emitter.onChange(cb);
   }
 
   private notify(): void {
-    this.listeners.forEach((cb) => cb());
+    this.emitter.emit();
   }
 
   // ---- 用户管理 ----

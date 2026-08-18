@@ -5,19 +5,24 @@
 //! (anonymous or username/password), batched Read per scan, Write requests,
 //! CloseSession + CloseSecureChannel on disconnect. MSG chunk reassembly
 //! (C chunks accumulated until F) is supported on the receive path.
+//!
+//! 结构（F18）：协议编解码在 ua-core，状态在 state.rs；生命周期骨架用
+//! plugin_kit::Kit，流经 take/put 模式跨 `await` 不持锁。
 wit_bindgen::generate!({
     world: "hmi-plugin",
     path: "../../../wit",
 });
 
+mod state;
+
 use crate::exports::hmi::plugin::lifecycle::Guest;
+use crate::state::{PluginConfig, PluginState};
 use hmi::plugin::events;
-use serde::{Deserialize, Serialize};
+use plugin_kit::events::PluginEvents;
+use plugin_kit::{hex, now_ms, Kit};
 use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::sync::Mutex;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use sync_util::MutexExt;
+use std::time::Duration;
 use ua_core::{
     build_activate_session_body, build_close_channel_body, build_close_session_body,
     build_create_session_body, build_opn_body, build_read_body, build_write_body, now_unix_ms,
@@ -31,77 +36,38 @@ use ua_core::{
 const READ_TIMEOUT_MS: u64 = 3_000;
 const MAX_BUF: usize = 1 << 20;
 
+static KIT: Kit<PluginState, TcpStream> = Kit::new();
+
+/// 把宿主 import 的 `events::*` 转发给 plugin-kit 的错误策略助手。
+struct Events;
+
+impl PluginEvents for Events {
+    async fn log(&self, level: u32, msg: String) {
+        events::log(level, msg).await;
+    }
+
+    async fn on_point(&self, name: String, value: f64, quality: String, ts: u64) {
+        events::on_point(name, value, quality, ts).await;
+    }
+
+    async fn on_packet(&self, dir: String, proto: String, hex: String, summary: String) {
+        events::on_packet(dir, proto, hex, summary).await;
+    }
+}
+
 async fn lm(l: u32, m: &str) {
-    events::log(l, m.to_string()).await;
+    Events.log(l, m.to_string()).await;
 }
 
 async fn rp(n: &str, v: f64, q: &str, ts: u64) {
-    events::on_point(n.to_string(), v, q.to_string(), ts).await;
+    Events.on_point(n.to_string(), v, q.to_string(), ts).await;
 }
 
 async fn rpt(dir: &str, p: &str, h: &str, s: &str) {
-    events::on_packet(dir.to_string(), p.to_string(), h.to_string(), s.to_string()).await;
+    Events
+        .on_packet(dir.to_string(), p.to_string(), h.to_string(), s.to_string())
+        .await;
 }
-
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
-}
-
-fn hex(b: &[u8]) -> String {
-    b.iter()
-        .map(|x| format!("{:02X}", x))
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Pc {
-    variable_id: String,
-    address: String,
-    var_type: String,
-    #[serde(default)]
-    data_type: String,
-    #[serde(default)]
-    byte_order: String,
-    #[serde(default)]
-    scale: f64,
-    #[serde(default)]
-    offset: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct PluginConfig {
-    endpoint: String,
-    #[serde(default)]
-    username: Option<String>,
-    #[serde(default)]
-    password: Option<String>,
-    #[serde(default)]
-    points: Vec<Pc>,
-}
-
-#[derive(Debug, Clone)]
-struct PluginState {
-    host: String,
-    port: u16,
-    endpoint: String,
-    username: Option<String>,
-    password: Option<String>,
-    connected: bool,
-    session_active: bool,
-    channel_id: u32,
-    token_id: u32,
-    seq: u32,
-    handle: u32,
-    auth_token: NodeId,
-    points: Vec<Pc>,
-}
-
-static STATE: Mutex<Option<PluginState>> = Mutex::new(None);
-static STREAM: Mutex<Option<TcpStream>> = Mutex::new(None);
 
 /// Parse `opc.tcp://host[:port]` into (host, port).
 fn parse_endpoint(endpoint: &str) -> Result<(String, u16), String> {
@@ -281,7 +247,7 @@ impl Guest for Plugin {
             ),
         )
         .await;
-        *STATE.lock_recover() = Some(PluginState {
+        KIT.commit(PluginState {
             host,
             port,
             endpoint: cfg.endpoint,
@@ -294,13 +260,14 @@ impl Guest for Plugin {
             seq: 0,
             handle: 0,
             auth_token: NodeId::null(),
+            scan_count: 0,
             points: cfg.points,
         });
         0
     }
 
     async fn connect() -> u32 {
-        let mut s = match STATE.lock_recover().as_ref() {
+        let mut s = match KIT.state().as_ref() {
             Some(s) => s.clone(),
             None => {
                 lm(1, "not initialized").await;
@@ -316,7 +283,7 @@ impl Guest for Plugin {
         lm(2, &format!("OPC UA connecting {}:{}...", s.host, s.port)).await;
 
         let addr = format!("{}:{}", s.host, s.port);
-        let stream = match TcpStream::connect_timeout(
+        let mut stream = match TcpStream::connect_timeout(
             &addr
                 .parse()
                 .unwrap_or_else(|_| "127.0.0.1:4840".parse().unwrap()),
@@ -325,77 +292,80 @@ impl Guest for Plugin {
             Ok(st) => st,
             Err(e) => {
                 lm(1, &format!("connect failed: {}", e)).await;
-                s.connected = false;
-                *STATE.lock_recover() = Some(s);
+                KIT.mark_connected(false);
                 return 1;
             }
         };
         let _ = stream.set_read_timeout(Some(Duration::from_millis(300)));
-        *STREAM.lock_recover() = Some(stream);
 
-        let mut guard = STREAM.lock_recover();
-        let stream = guard.as_mut().unwrap();
-        if let Err(e) = connect_handshake(stream, &mut s).await {
+        // 握手期间流为本地所有权：整个握手（含跨 await 的 rpt/lm）不持锁，
+        // 成功后再放回。
+        let result = connect_handshake(&mut stream, &mut s).await;
+        if let Err(e) = result {
             lm(1, &format!("handshake failed: {}", e)).await;
-            *guard = None;
-            drop(guard);
-            s.connected = false;
-            *STATE.lock_recover() = Some(s);
+            drop(stream);
+            KIT.link_lost();
             return 1;
         }
+        KIT.put_stream(stream);
         s.connected = true;
-        *STATE.lock_recover() = Some(s);
+        KIT.commit(s);
         lm(2, "OPC UA connected").await;
         0
     }
 
     async fn disconnect() -> u32 {
-        let mut guard = STREAM.lock_recover();
-        if let Some(st) = guard.as_mut() {
-            let mut s = match STATE.lock_recover().as_ref() {
-                Some(s) => s.clone(),
-                None => return 0,
-            };
-            if s.connected {
-                s.seq += 1;
-                s.handle += 1;
-                let hid = s.handle;
-                // CloseSession then CloseSecureChannel; best effort.
-                let body = build_close_session_body(now_unix_ms(), hid, &s.auth_token);
-                let frame = wrap_secure(b"MSG", s.channel_id, s.token_id, s.seq, hid, &body);
-                let _ = send_all(st, &frame);
-                if let Ok(m) = read_message(st) {
-                    if let Ok((_, b)) = parse_secure_message(&m) {
-                        if let Ok((tid, _)) = parse_service_body(&b) {
-                            lm(2, &format!("CloseSession ack tid={}", tid)).await;
+        let mut ack_tid: Option<u32> = None;
+        {
+            let mut guard = KIT.stream();
+            if let Some(st) = guard.as_mut() {
+                let mut s = match KIT.state().as_ref() {
+                    Some(s) => s.clone(),
+                    None => return 0,
+                };
+                if s.connected {
+                    s.seq += 1;
+                    s.handle += 1;
+                    let hid = s.handle;
+                    // CloseSession then CloseSecureChannel; best effort.
+                    let body = build_close_session_body(now_unix_ms(), hid, &s.auth_token);
+                    let frame = wrap_secure(b"MSG", s.channel_id, s.token_id, s.seq, hid, &body);
+                    let _ = send_all(st, &frame);
+                    if let Ok(m) = read_message(st) {
+                        if let Ok((_, b)) = parse_secure_message(&m) {
+                            if let Ok((tid, _)) = parse_service_body(&b) {
+                                ack_tid = Some(tid);
+                            }
                         }
                     }
+                    s.seq += 1;
+                    s.handle += 1;
+                    let hid = s.handle;
+                    let body = build_close_channel_body(now_unix_ms(), hid);
+                    let frame = wrap_secure(b"CLO", s.channel_id, s.token_id, s.seq, hid, &body);
+                    let _ = send_all(st, &frame);
                 }
-                s.seq += 1;
-                s.handle += 1;
-                let hid = s.handle;
-                let body = build_close_channel_body(now_unix_ms(), hid);
-                let frame = wrap_secure(b"CLO", s.channel_id, s.token_id, s.seq, hid, &body);
-                let _ = send_all(st, &frame);
+                let _ = st.shutdown(std::net::Shutdown::Both);
             }
-            let _ = st.shutdown(std::net::Shutdown::Both);
+            *guard = None;
         }
-        *guard = None;
-        drop(guard);
-        if let Some(mut s) = STATE.lock_recover().as_ref().map(|s| s.clone()) {
-            s.connected = false;
+        if let Some(tid) = ack_tid {
+            lm(2, &format!("CloseSession ack tid={}", tid)).await;
+        }
+        KIT.mark_connected(false);
+        if let Some(mut s) = KIT.state().as_ref().map(|s| s.clone()) {
             s.session_active = false;
-            *STATE.lock_recover() = Some(s);
+            KIT.commit(s);
         }
         0
     }
 
     async fn scan_points() -> u32 {
-        let mut s = match STATE.lock_recover().as_ref() {
-            Some(s) => s.clone(),
+        let mut s = match KIT.begin_scan() {
+            Some(s) => s,
             None => return 1,
         };
-        if !s.connected || !s.session_active {
+        if !s.session_active {
             return 1;
         }
         let nodes: Vec<ReadValueId> = s
@@ -411,8 +381,8 @@ impl Guest for Plugin {
         if nodes.is_empty() {
             return 1;
         }
-        let mut guard = STREAM.lock_recover();
-        let stream = match guard.as_mut() {
+        // 流从锁中取出：整个 Read 往返（含跨 await 的 rpt）不持锁。
+        let mut stream = match KIT.take_stream() {
             Some(st) => st,
             None => return 1,
         };
@@ -422,30 +392,24 @@ impl Guest for Plugin {
         let body = build_read_body(now_unix_ms(), hid, &s.auth_token, &nodes);
         let frame = wrap_secure(b"MSG", s.channel_id, s.token_id, s.seq, hid, &body);
         let hexstr = hex(&frame);
-        match send_all(stream, &frame) {
-            Ok(_) => {
-                rpt(
-                    "tx",
-                    "opc-ua",
-                    &hexstr,
-                    &format!("ReadRequest {} nodes", nodes.len()),
-                )
-                .await
-            }
-            Err(e) => {
-                lm(1, &format!("read send failed: {}", e)).await;
-                *guard = None;
-                drop(guard);
-                s.connected = false;
-                *STATE.lock_recover() = Some(s);
-                return 1;
-            }
+        if let Err(e) = send_all(&mut stream, &frame) {
+            lm(1, &format!("read send failed: {}", e)).await;
+            drop(stream);
+            KIT.link_lost();
+            return 1;
         }
+        rpt(
+            "tx",
+            "opc-ua",
+            &hexstr,
+            &format!("ReadRequest {} nodes", nodes.len()),
+        )
+        .await;
         // Drain pending messages until our ReadResponse arrives.
         let mut reported = 0usize;
         let deadline = now_ms() + 10_000;
         while now_ms() < deadline {
-            let msg = match read_message(stream) {
+            let msg = match read_message(&mut stream) {
                 Ok(m) => m,
                 Err(e) => {
                     lm(2, &format!("read failed: {}", e)).await;
@@ -500,12 +464,13 @@ impl Guest for Plugin {
             }
         }
         lm(2, &format!("Read round-trip: {} point(s)", reported)).await;
-        *STATE.lock_recover() = Some(s);
+        KIT.put_stream(stream);
+        KIT.commit(s);
         0
     }
 
     async fn write_point(name: String, value: f64) -> u32 {
-        let mut s = match STATE.lock_recover().as_ref() {
+        let mut s = match KIT.state().as_ref() {
             Some(s) => s.clone(),
             None => return 2,
         };
@@ -536,8 +501,8 @@ impl Guest for Plugin {
             attribute_id: ATTR_VALUE,
             value: Some(val),
         }];
-        let mut guard = STREAM.lock_recover();
-        let stream = match guard.as_mut() {
+        // 流从锁中取出：Write 往返不持锁。
+        let mut stream = match KIT.take_stream() {
             Some(st) => st,
             None => return 2,
         };
@@ -547,22 +512,21 @@ impl Guest for Plugin {
         let body = build_write_body(now_unix_ms(), hid, &s.auth_token, &writes);
         let frame = wrap_secure(b"MSG", s.channel_id, s.token_id, s.seq, hid, &body);
         let hexstr = hex(&frame);
-        if let Err(e) = send_all(stream, &frame) {
+        if let Err(e) = send_all(&mut stream, &frame) {
             lm(1, &format!("write send failed: {}", e)).await;
-            *guard = None;
-            drop(guard);
-            s.connected = false;
-            *STATE.lock_recover() = Some(s);
+            drop(stream);
+            KIT.link_lost();
             return 2;
         }
         rpt("tx", "opc-ua", &hexstr, "WriteRequest").await;
         let mut status = 0u32;
         let deadline = now_ms() + 10_000;
         while now_ms() < deadline {
-            let msg = match read_message(stream) {
+            let msg = match read_message(&mut stream) {
                 Ok(m) => m,
                 Err(e) => {
                     lm(2, &format!("read failed: {}", e)).await;
+                    drop(stream);
                     return 2;
                 }
             };
@@ -595,12 +559,13 @@ impl Guest for Plugin {
                 continue; // stale scan response
             }
         }
+        KIT.put_stream(stream);
         if status == 0 {
             lm(2, &format!("write {} = {} ok", name, value)).await;
         } else {
             lm(2, &format!("write {} failed: 0x{:08x}", name, status)).await;
         }
-        *STATE.lock_recover() = Some(s);
+        KIT.commit(s);
         if status == 0 {
             0
         } else {
@@ -613,10 +578,7 @@ impl Guest for Plugin {
     }
 
     async fn get_status() -> u32 {
-        match STATE.lock_recover().as_ref() {
-            Some(s) if s.connected => 2,
-            _ => 0,
-        }
+        KIT.status()
     }
 }
 

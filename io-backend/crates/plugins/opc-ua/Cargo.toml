@@ -14,4 +14,4 @@ wit-bindgen.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ua-core.workspace = true
-sync-util = { workspace = true, default-features = false }
+plugin-kit.workspace = true

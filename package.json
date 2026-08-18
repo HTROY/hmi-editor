@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "test:alarm": "tsc -p scripts/alarm-remote-test/tsconfig.json && node scripts/alarm-remote-test/out/scripts/alarm-remote-test/repro.js",
+    "test:e2e": "node e2e/smoke-test.mjs",
     "preview": "vite preview",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

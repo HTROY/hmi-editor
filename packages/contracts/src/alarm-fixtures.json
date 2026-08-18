@@ -1,0 +1,160 @@
+{
+  "schema": 1,
+  "description": "报警引擎关键用例共享夹具（F12 ④）：前后端各自驱动本机引擎（Rust alarm/engine.rs 与前端 LocalAlarmEngine），按 steps 逐点喂数并断言 observable 状态（active 活跃数 / recoveredUnacked 已恢复未确认数）。steps 语义：point=喂入点位值；tick=推进虚拟时钟越过确认延时并执行 tick；ack=确认第一条活跃报警。",
+  "cases": [
+    {
+      "name": "high-trigger-and-recover",
+      "rule": {
+        "id": "r1",
+        "variableId": "P1",
+        "name": "高限",
+        "description": "",
+        "severity": "major",
+        "group": "测试",
+        "condition": "high",
+        "threshold": 100,
+        "hysteresis": 0,
+        "confirmMs": 0,
+        "enabled": true
+      },
+      "steps": [
+        { "point": { "value": 50, "quality": "good" } },
+        { "point": { "value": 120, "quality": "good" } },
+        { "point": { "value": 90, "quality": "good" } }
+      ],
+      "expect": [
+        { "active": 0, "recoveredUnacked": 0 },
+        { "active": 1, "recoveredUnacked": 0 },
+        { "active": 0, "recoveredUnacked": 1 }
+      ]
+    },
+    {
+      "name": "hysteresis-keeps-alarm-in-band",
+      "rule": {
+        "id": "r1",
+        "variableId": "P1",
+        "name": "高限滞回",
+        "description": "",
+        "severity": "major",
+        "group": "测试",
+        "condition": "high",
+        "threshold": 100,
+        "hysteresis": 10,
+        "confirmMs": 0,
+        "enabled": true
+      },
+      "steps": [
+        { "point": { "value": 120, "quality": "good" } },
+        { "point": { "value": 95, "quality": "good" } },
+        { "point": { "value": 85, "quality": "good" } }
+      ],
+      "expect": [
+        { "active": 1, "recoveredUnacked": 0 },
+        { "active": 1, "recoveredUnacked": 0 },
+        { "active": 0, "recoveredUnacked": 1 }
+      ]
+    },
+    {
+      "name": "confirm-delay-fires-after-deadline",
+      "rule": {
+        "id": "r1",
+        "variableId": "P1",
+        "name": "确认延时",
+        "description": "",
+        "severity": "major",
+        "group": "测试",
+        "condition": "high",
+        "threshold": 100,
+        "hysteresis": 0,
+        "confirmMs": 1000,
+        "enabled": true
+      },
+      "steps": [
+        { "point": { "value": 120, "quality": "good" } },
+        { "tick": {} },
+        { "point": { "value": 90, "quality": "good" } }
+      ],
+      "expect": [
+        { "active": 0, "recoveredUnacked": 0 },
+        { "active": 1, "recoveredUnacked": 0 },
+        { "active": 0, "recoveredUnacked": 1 }
+      ]
+    },
+    {
+      "name": "change-condition-is-transient",
+      "rule": {
+        "id": "r1",
+        "variableId": "P1",
+        "name": "变位",
+        "description": "",
+        "severity": "minor",
+        "group": "测试",
+        "condition": "change",
+        "threshold": 0,
+        "hysteresis": 0,
+        "confirmMs": 0,
+        "enabled": true
+      },
+      "steps": [
+        { "point": { "value": 1, "quality": "good" } },
+        { "point": { "value": 0, "quality": "good" } }
+      ],
+      "expect": [
+        { "active": 0, "recoveredUnacked": 1 },
+        { "active": 0, "recoveredUnacked": 2 }
+      ]
+    },
+    {
+      "name": "quality-hold-skips-recovery",
+      "rule": {
+        "id": "r1",
+        "variableId": "P1",
+        "name": "质量保持",
+        "description": "",
+        "severity": "major",
+        "group": "测试",
+        "condition": "high",
+        "threshold": 100,
+        "hysteresis": 0,
+        "confirmMs": 0,
+        "enabled": true
+      },
+      "steps": [
+        { "point": { "value": 120, "quality": "good" } },
+        { "point": { "value": 90, "quality": "bad" } },
+        { "point": { "value": 90, "quality": "good" } }
+      ],
+      "expect": [
+        { "active": 1, "recoveredUnacked": 0 },
+        { "active": 1, "recoveredUnacked": 0 },
+        { "active": 0, "recoveredUnacked": 1 }
+      ]
+    },
+    {
+      "name": "ack-active-occurrence",
+      "rule": {
+        "id": "r1",
+        "variableId": "P1",
+        "name": "确认",
+        "description": "",
+        "severity": "major",
+        "group": "测试",
+        "condition": "high",
+        "threshold": 100,
+        "hysteresis": 0,
+        "confirmMs": 0,
+        "enabled": true
+      },
+      "steps": [
+        { "point": { "value": 120, "quality": "good" } },
+        { "ack": {} },
+        { "point": { "value": 90, "quality": "good" } }
+      ],
+      "expect": [
+        { "active": 1, "recoveredUnacked": 0 },
+        { "active": 0, "recoveredUnacked": 0 },
+        { "active": 0, "recoveredUnacked": 0 }
+      ]
+    }
+  ]
+}

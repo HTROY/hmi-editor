@@ -1,4 +1,5 @@
 import { VariableManager } from "../variables/VariableManager";
+import { Emitter } from "../platform/Emitter";
 import type { HistoryPoint, TrendConfig } from "./types";
 
 // ============================================================
@@ -14,19 +15,18 @@ export class Historian {
   private varManager: VariableManager;
   private variableIds: string[] = [];
 
-  private listeners: Set<() => void> = new Set();
+  private emitter = new Emitter<void>();
 
   constructor(varManager: VariableManager) {
     this.varManager = varManager;
   }
 
   onChange(cb: () => void): () => void {
-    this.listeners.add(cb);
-    return () => this.listeners.delete(cb);
+    return this.emitter.onChange(cb);
   }
 
   private notify(): void {
-    this.listeners.forEach((cb) => cb());
+    this.emitter.emit();
   }
 
   /** 设置要记录的变量列表 */

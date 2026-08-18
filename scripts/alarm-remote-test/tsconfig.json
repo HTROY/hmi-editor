@@ -7,13 +7,24 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "outDir": "out",
-    "rootDir": "../.."
+    "rootDir": "../..",
+    "baseUrl": "../..",
+    "paths": {
+      "@hmi/contracts": ["packages/contracts/src/index.ts"]
+    }
   },
   "include": [
     "../../src/core/alarm/AlarmManager.ts",
+    "../../src/core/alarm/RemoteAlarmClient.ts",
+    "../../src/core/alarm/LocalAlarmEngine.ts",
+    "../../src/core/alarm/AlarmRepository.ts",
+    "../../src/core/alarm/alarmLogic.ts",
     "../../src/core/alarm/types.ts",
+    "../../src/core/platform/Emitter.ts",
     "../../src/core/variables/VariableManager.ts",
     "../../src/core/variables/types.ts",
+    "../../src/core/io/WebSocketClient.ts",
+    "../../src/core/io/types.ts",
     "repro.ts"
   ]
 }
