@@ -8,6 +8,7 @@ use hmi_io_plugin::registry::PluginRegistry;
 use hmi_io_point::manager::PointManager;
 use hmi_io_point::redundancy::{NodeState, RedundancyEngine, RoleCommand};
 use std::sync::{Arc, Mutex};
+use sync_util::MutexExt;
 use tokio::sync::mpsc;
 
 fn main() -> anyhow::Result<()> {
@@ -178,7 +179,7 @@ fn main() -> anyhow::Result<()> {
         }
         if initial_state == NodeState::Active {
             registry.start_instances(&app_config).await?;
-            alarm_engine.rebuild(&point_manager.lock().unwrap().get_all_values());
+            alarm_engine.rebuild(&point_manager.lock_recover().get_all_values());
         } else {
             log::info!("Node starts as STANDBY, plugins deferred until promotion");
         }
@@ -219,7 +220,7 @@ fn main() -> anyhow::Result<()> {
                                     .unwrap_or_default();
                                 alarm_for_roles.replace_rules(rules);
                                 alarm_for_roles
-                                    .rebuild(&pm_for_roles.lock().unwrap().get_all_values());
+                                    .rebuild(&pm_for_roles.lock_recover().get_all_values());
                             }
                             Err(e) => {
                                 log::error!("Failed to start plugins after promotion: {}", e)

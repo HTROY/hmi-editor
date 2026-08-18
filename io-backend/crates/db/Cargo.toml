@@ -3,6 +3,9 @@ name = "hmi-io-db"
 version.workspace = true
 edition.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 rusqlite.workspace = true
 tokio-rusqlite.workspace = true
@@ -12,4 +15,4 @@ anyhow.workspace = true
 log.workspace = true
 
 [dev-dependencies]
-tokio.workspace = true
+tokio = { workspace = true, features = ["macros", "rt"] }

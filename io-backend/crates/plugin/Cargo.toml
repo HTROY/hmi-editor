@@ -3,6 +3,9 @@ name = "hmi-io-plugin"
 version.workspace = true
 edition.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 hmi-io-config.workspace = true
 hmi-io-monitor.workspace = true
@@ -10,7 +13,8 @@ hmi-io-point.workspace = true
 wasmtime.workspace = true
 wasmtime-wasi.workspace = true
 wit-bindgen.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["sync", "time", "rt", "macros"] }
+sync-util = { workspace = true, features = ["task"] }
 anyhow.workspace = true
 log.workspace = true
 serde.workspace = true

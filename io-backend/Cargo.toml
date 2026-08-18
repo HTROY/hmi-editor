@@ -17,6 +17,7 @@ members = [
     "crates/plugins/modbus-tcp",
     "crates/plugins/opc-ua",
     "crates/shared/iec104-core",
+    "crates/shared/sync-util",
     "crates/shared/ua-core",
     "crates/test-servers/iec104-slave",
     "crates/test-servers/opcua-server",
@@ -41,7 +42,7 @@ version = "0.3.0"
 edition = "2021"
 
 [workspace.dependencies]
-tokio = { version = "1", features = ["full"] }
+tokio = "1"
 tokio-tungstenite = "0.24"
 futures-util = "0.3"
 axum = { version = "0.8", features = ["ws", "multipart"] }
@@ -71,7 +72,13 @@ hmi-io-point = { path = "crates/point" }
 hmi-io-server = { path = "crates/server" }
 hmi-io-web = { path = "crates/web" }
 iec104-core = { path = "crates/shared/iec104-core" }
+sync-util = { path = "crates/shared/sync-util", default-features = false }
 ua-core = { path = "crates/shared/ua-core" }
+
+# 统一 lint 门禁：各 crate 通过 `[lints] workspace = true` 继承，
+# 避免 lint 级别因 crate 而异。
+[workspace.lints.clippy]
+all = "warn"
 
 [profile.release]
 opt-level = "s"

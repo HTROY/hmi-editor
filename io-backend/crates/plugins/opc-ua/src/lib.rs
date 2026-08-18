@@ -17,6 +17,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use sync_util::MutexExt;
 use ua_core::{
     build_activate_session_body, build_close_channel_body, build_close_session_body,
     build_create_session_body, build_opn_body, build_read_body, build_write_body, now_unix_ms,
@@ -280,7 +281,7 @@ impl Guest for Plugin {
             ),
         )
         .await;
-        *STATE.lock().unwrap() = Some(PluginState {
+        *STATE.lock_recover() = Some(PluginState {
             host,
             port,
             endpoint: cfg.endpoint,
@@ -299,7 +300,7 @@ impl Guest for Plugin {
     }
 
     async fn connect() -> u32 {
-        let mut s = match STATE.lock().unwrap().as_ref() {
+        let mut s = match STATE.lock_recover().as_ref() {
             Some(s) => s.clone(),
             None => {
                 lm(1, "not initialized").await;
@@ -325,33 +326,33 @@ impl Guest for Plugin {
             Err(e) => {
                 lm(1, &format!("connect failed: {}", e)).await;
                 s.connected = false;
-                *STATE.lock().unwrap() = Some(s);
+                *STATE.lock_recover() = Some(s);
                 return 1;
             }
         };
         let _ = stream.set_read_timeout(Some(Duration::from_millis(300)));
-        *STREAM.lock().unwrap() = Some(stream);
+        *STREAM.lock_recover() = Some(stream);
 
-        let mut guard = STREAM.lock().unwrap();
+        let mut guard = STREAM.lock_recover();
         let stream = guard.as_mut().unwrap();
         if let Err(e) = connect_handshake(stream, &mut s).await {
             lm(1, &format!("handshake failed: {}", e)).await;
             *guard = None;
             drop(guard);
             s.connected = false;
-            *STATE.lock().unwrap() = Some(s);
+            *STATE.lock_recover() = Some(s);
             return 1;
         }
         s.connected = true;
-        *STATE.lock().unwrap() = Some(s);
+        *STATE.lock_recover() = Some(s);
         lm(2, "OPC UA connected").await;
         0
     }
 
     async fn disconnect() -> u32 {
-        let mut guard = STREAM.lock().unwrap();
+        let mut guard = STREAM.lock_recover();
         if let Some(st) = guard.as_mut() {
-            let mut s = match STATE.lock().unwrap().as_ref() {
+            let mut s = match STATE.lock_recover().as_ref() {
                 Some(s) => s.clone(),
                 None => return 0,
             };
@@ -381,16 +382,16 @@ impl Guest for Plugin {
         }
         *guard = None;
         drop(guard);
-        if let Some(mut s) = STATE.lock().unwrap().as_ref().map(|s| s.clone()) {
+        if let Some(mut s) = STATE.lock_recover().as_ref().map(|s| s.clone()) {
             s.connected = false;
             s.session_active = false;
-            *STATE.lock().unwrap() = Some(s);
+            *STATE.lock_recover() = Some(s);
         }
         0
     }
 
     async fn scan_points() -> u32 {
-        let mut s = match STATE.lock().unwrap().as_ref() {
+        let mut s = match STATE.lock_recover().as_ref() {
             Some(s) => s.clone(),
             None => return 1,
         };
@@ -410,7 +411,7 @@ impl Guest for Plugin {
         if nodes.is_empty() {
             return 1;
         }
-        let mut guard = STREAM.lock().unwrap();
+        let mut guard = STREAM.lock_recover();
         let stream = match guard.as_mut() {
             Some(st) => st,
             None => return 1,
@@ -436,7 +437,7 @@ impl Guest for Plugin {
                 *guard = None;
                 drop(guard);
                 s.connected = false;
-                *STATE.lock().unwrap() = Some(s);
+                *STATE.lock_recover() = Some(s);
                 return 1;
             }
         }
@@ -499,12 +500,12 @@ impl Guest for Plugin {
             }
         }
         lm(2, &format!("Read round-trip: {} point(s)", reported)).await;
-        *STATE.lock().unwrap() = Some(s);
+        *STATE.lock_recover() = Some(s);
         0
     }
 
     async fn write_point(name: String, value: f64) -> u32 {
-        let mut s = match STATE.lock().unwrap().as_ref() {
+        let mut s = match STATE.lock_recover().as_ref() {
             Some(s) => s.clone(),
             None => return 2,
         };
@@ -535,7 +536,7 @@ impl Guest for Plugin {
             attribute_id: ATTR_VALUE,
             value: Some(val),
         }];
-        let mut guard = STREAM.lock().unwrap();
+        let mut guard = STREAM.lock_recover();
         let stream = match guard.as_mut() {
             Some(st) => st,
             None => return 2,
@@ -551,7 +552,7 @@ impl Guest for Plugin {
             *guard = None;
             drop(guard);
             s.connected = false;
-            *STATE.lock().unwrap() = Some(s);
+            *STATE.lock_recover() = Some(s);
             return 2;
         }
         rpt("tx", "opc-ua", &hexstr, "WriteRequest").await;
@@ -599,7 +600,7 @@ impl Guest for Plugin {
         } else {
             lm(2, &format!("write {} failed: 0x{:08x}", name, status)).await;
         }
-        *STATE.lock().unwrap() = Some(s);
+        *STATE.lock_recover() = Some(s);
         if status == 0 {
             0
         } else {
@@ -612,7 +613,7 @@ impl Guest for Plugin {
     }
 
     async fn get_status() -> u32 {
-        match STATE.lock().unwrap().as_ref() {
+        match STATE.lock_recover().as_ref() {
             Some(s) if s.connected => 2,
             _ => 0,
         }

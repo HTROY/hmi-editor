@@ -3,6 +3,9 @@ name = "hmi-io-server"
 version.workspace = true
 edition.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 hmi-io-alarm.workspace = true
 hmi-io-config.workspace = true
@@ -10,7 +13,8 @@ hmi-io-monitor.workspace = true
 hmi-io-plugin.workspace = true
 hmi-io-point.workspace = true
 futures-util.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["net", "sync", "rt", "macros"] }
+sync-util.workspace = true
 tokio-tungstenite.workspace = true
 anyhow.workspace = true
 log.workspace = true

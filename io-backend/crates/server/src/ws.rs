@@ -10,6 +10,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex, RwLock};
+use sync_util::{MutexExt, RwLockExt};
 use tokio::net::TcpStream;
 use tokio::sync::broadcast;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
@@ -99,7 +100,7 @@ pub async fn run_server(
         };
         log::info!("New connection from {}", peer);
         // 冗余模式下 Standby 节点拒绝 WS 服务（HMI 前端会尝试下一个地址）
-        if !point_manager.lock().unwrap().is_active() {
+        if !point_manager.lock_recover().is_active() {
             log::info!("Rejecting WS connection from {}: node is standby", peer);
             continue;
         }
@@ -135,7 +136,7 @@ async fn handle_connection(
     // Send initial snapshot of all known point values
     // Lock held only in this block, dropped before the await below
     let snapshot_json: Option<String> = {
-        let pm = point_manager.lock().unwrap();
+        let pm = point_manager.lock_recover();
         let values = pm.get_all_values();
         if !values.is_empty() {
             let msg = WsDataMessage {
@@ -199,7 +200,7 @@ async fn handle_connection(
                         // read guard lives only inside this block, so it is
                         // released before any await below.
                         let (forward_all, points): (bool, Vec<PointValue>) = {
-                            let sub = sub_ids.read().unwrap();
+                            let sub = sub_ids.read_recover();
                             if sub.is_empty() {
                                 (true, Vec::new())
                             } else {
@@ -280,7 +281,7 @@ async fn handle_client_message(
         }
         ClientCommand::Subscribe { variable_ids } => {
             // Update per-connection subscription filter
-            let mut sub = subscribed_ids.write().unwrap();
+            let mut sub = subscribed_ids.write_recover();
             sub.clear();
             if variable_ids.is_empty() {
                 log::info!("Client unsubscribed filter - receiving all points");

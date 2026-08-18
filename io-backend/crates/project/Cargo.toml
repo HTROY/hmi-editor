@@ -3,6 +3,9 @@ name = "hmi-io-project"
 version.workspace = true
 edition.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 hmi-io-db.workspace = true
 serde.workspace = true
@@ -10,4 +13,7 @@ serde_json.workspace = true
 zip = { version = "2", default-features = false, features = ["deflate"] }
 anyhow.workspace = true
 log.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["fs"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "time"] }

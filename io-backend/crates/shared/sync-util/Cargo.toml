@@ -1,0 +1,18 @@
+[package]
+name = "sync-util"
+version = "0.1.0"
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+log.workspace = true
+tokio = { workspace = true, optional = true, features = ["rt"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "time"] }
+
+[features]
+default = ["task"]
+task = ["dep:tokio"]

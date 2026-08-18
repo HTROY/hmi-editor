@@ -3,7 +3,11 @@ name = "hmi-io-monitor"
 version.workspace = true
 edition.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 hmi-io-point.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sync-util.workspace = true

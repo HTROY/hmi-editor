@@ -23,6 +23,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use sync_util::MutexExt;
 
 const T3: u64 = 35_000; // watchdog: send TESTFR when silent for this long
 const T3_DISCONNECT: u64 = 70_000; // drop the connection if still silent
@@ -124,7 +125,7 @@ fn drain(stream: &mut TcpStream) -> Result<usize, String> {
             Ok(0) => break,
             Ok(n) => {
                 total += n;
-                RX_BUF.lock().unwrap().extend(&buf[..n]);
+                RX_BUF.lock_recover().extend(&buf[..n]);
                 if n < buf.len() {
                     break;
                 }
@@ -170,7 +171,7 @@ impl Guest for Plugin {
             ),
         )
         .await;
-        *STATE.lock().unwrap() = Some(PluginState {
+        *STATE.lock_recover() = Some(PluginState {
             host: cfg.host,
             port: cfg.port,
             common_address: cfg.common_address,
@@ -188,7 +189,7 @@ impl Guest for Plugin {
     }
 
     async fn connect() -> u32 {
-        let mut s = match STATE.lock().unwrap().as_ref() {
+        let mut s = match STATE.lock_recover().as_ref() {
             Some(s) => s.clone(),
             None => {
                 lm(1, "not initialized").await;
@@ -212,19 +213,19 @@ impl Guest for Plugin {
             Err(e) => {
                 lm(1, &format!("connect failed: {}", e)).await;
                 s.connected = false;
-                *STATE.lock().unwrap() = Some(s);
+                *STATE.lock_recover() = Some(s);
                 return 1;
             }
         };
         let _ = stream.set_read_timeout(Some(Duration::from_millis(DRAIN_READ_TIMEOUT_MS)));
         let _ = stream.set_nonblocking(false);
-        *STREAM.lock().unwrap() = Some(stream);
-        RX_BUF.lock().unwrap().clear();
+        *STREAM.lock_recover() = Some(stream);
+        RX_BUF.lock_recover().clear();
 
         let sd = encode_u(UFrame::StartDt, false);
         let hexstr = hex(&sd);
         {
-            let mut guard = STREAM.lock().unwrap();
+            let mut guard = STREAM.lock_recover();
             let st = guard.as_mut().unwrap();
             match st.write_all(&sd).and_then(|_| st.flush()) {
                 Ok(_) => (),
@@ -241,13 +242,13 @@ impl Guest for Plugin {
         let deadline = now_ms() + 5_000;
         let mut started = false;
         while now_ms() < deadline && !started {
-            let mut guard = STREAM.lock().unwrap();
+            let mut guard = STREAM.lock_recover();
             let st = guard.as_mut().unwrap();
             if drain(st).is_err() {
                 break;
             }
             drop(guard);
-            let mut buf = RX_BUF.lock().unwrap();
+            let mut buf = RX_BUF.lock_recover();
             let mut sent_testfr_reply = false;
             while let Some(flen) = frame_len(&buf) {
                 let frame: Vec<u8> = buf.drain(..flen).collect();
@@ -288,13 +289,13 @@ impl Guest for Plugin {
         }
         if !started {
             lm(1, "no STARTDT_CON within 5s").await;
-            let mut guard = STREAM.lock().unwrap();
+            let mut guard = STREAM.lock_recover();
             let _ = guard
                 .as_mut()
                 .map(|st| st.shutdown(std::net::Shutdown::Both));
             *guard = None;
             s.connected = false;
-            *STATE.lock().unwrap() = Some(s);
+            *STATE.lock_recover() = Some(s);
             return 1;
         }
 
@@ -305,27 +306,27 @@ impl Guest for Plugin {
         s.interrogation_sent = true;
         let hexstr = hex(&frame);
         {
-            let mut guard = STREAM.lock().unwrap();
+            let mut guard = STREAM.lock_recover();
             let st = guard.as_mut().unwrap();
             if let Err(e) = st.write_all(&frame) {
                 lm(1, &format!("C_IC send failed: {}", e)).await;
                 *guard = None;
                 s.connected = false;
-                *STATE.lock().unwrap() = Some(s);
+                *STATE.lock_recover() = Some(s);
                 return 1;
             }
         }
         rpt("tx", "iec104", &hexstr, "C_IC_NA_1 interrogation").await;
 
         s.connected = true;
-        *STATE.lock().unwrap() = Some(s);
+        *STATE.lock_recover() = Some(s);
         lm(2, "IEC104 connected").await;
         0
     }
 
     async fn disconnect() -> u32 {
         let stopdt = encode_u(UFrame::StopDt, false);
-        let mut guard = STREAM.lock().unwrap();
+        let mut guard = STREAM.lock_recover();
         if let Some(st) = guard.as_mut() {
             let hexstr = hex(&stopdt);
             rpt("tx", "iec104", &hexstr, "STOPDT").await;
@@ -334,15 +335,15 @@ impl Guest for Plugin {
         }
         *guard = None;
         drop(guard);
-        if let Some(mut s) = STATE.lock().unwrap().as_ref().map(|s| s.clone()) {
+        if let Some(mut s) = STATE.lock_recover().as_ref().map(|s| s.clone()) {
             s.connected = false;
-            *STATE.lock().unwrap() = Some(s);
+            *STATE.lock_recover() = Some(s);
         }
         0
     }
 
     async fn scan_points() -> u32 {
-        let mut s = match STATE.lock().unwrap().as_ref() {
+        let mut s = match STATE.lock_recover().as_ref() {
             Some(s) => s.clone(),
             None => return 1,
         };
@@ -355,7 +356,7 @@ impl Guest for Plugin {
         // 1) Drain and process everything the server sent.
         let mut got_i = false;
         {
-            let mut guard = STREAM.lock().unwrap();
+            let mut guard = STREAM.lock_recover();
             let stream = match guard.as_mut() {
                 Some(st) => st,
                 None => return 1,
@@ -365,13 +366,13 @@ impl Guest for Plugin {
                 *guard = None;
                 drop(guard);
                 s.connected = false;
-                *STATE.lock().unwrap() = Some(s);
+                *STATE.lock_recover() = Some(s);
                 return 1;
             }
             drop(guard);
         }
         let frames: Vec<Vec<u8>> = {
-            let mut buf = RX_BUF.lock().unwrap();
+            let mut buf = RX_BUF.lock_recover();
             let mut out = Vec::new();
             while let Some(flen) = frame_len(&buf) {
                 let frame: Vec<u8> = buf.drain(..flen).collect();
@@ -393,7 +394,7 @@ impl Guest for Plugin {
                         s.send_seq = s.send_seq.wrapping_add(1);
                         s.interrogation_sent = true;
                         rpt("tx", "iec104", &hex(&f), "C_IC_NA_1 interrogation").await;
-                        let mut guard = STREAM.lock().unwrap();
+                        let mut guard = STREAM.lock_recover();
                         if let Some(st) = guard.as_mut() {
                             let _ = st.write_all(&f);
                         }
@@ -422,7 +423,7 @@ impl Guest for Plugin {
                     s.last_rx = now;
                     let reply = encode_u(UFrame::TestFr, true);
                     rpt("tx", "iec104", &hex(&reply), "TESTFR_CON").await;
-                    let mut guard = STREAM.lock().unwrap();
+                    let mut guard = STREAM.lock_recover();
                     if let Some(st) = guard.as_mut() {
                         let _ = st.write_all(&reply);
                     }
@@ -541,7 +542,7 @@ impl Guest for Plugin {
         if got_i {
             let sf = encode_s(s.recv_seq);
             rpt("tx", "iec104", &hex(&sf), "S-frame ack").await;
-            let mut guard = STREAM.lock().unwrap();
+            let mut guard = STREAM.lock_recover();
             if let Some(st) = guard.as_mut() {
                 let _ = st.write_all(&sf);
             }
@@ -553,7 +554,7 @@ impl Guest for Plugin {
             let f = encode_i(s.send_seq, s.recv_seq, &cs);
             s.send_seq = s.send_seq.wrapping_add(1);
             rpt("tx", "iec104", &hex(&f), "C_CS_NA_1 clock sync").await;
-            let mut guard = STREAM.lock().unwrap();
+            let mut guard = STREAM.lock_recover();
             if let Some(st) = guard.as_mut() {
                 let _ = st.write_all(&f);
             }
@@ -571,7 +572,7 @@ impl Guest for Plugin {
         if since_rx > T3 && !s.testfr_pending {
             let tf = encode_u(UFrame::TestFr, false);
             rpt("tx", "iec104", &hex(&tf), "TESTFR").await;
-            let mut guard = STREAM.lock().unwrap();
+            let mut guard = STREAM.lock_recover();
             if let Some(st) = guard.as_mut() {
                 let _ = st.write_all(&tf);
             }
@@ -579,26 +580,26 @@ impl Guest for Plugin {
         }
         if since_rx > T3_DISCONNECT {
             lm(1, "T3 timeout: no data for 70s, dropping link").await;
-            let mut guard = STREAM.lock().unwrap();
+            let mut guard = STREAM.lock_recover();
             if let Some(st) = guard.as_mut() {
                 let _ = st.shutdown(std::net::Shutdown::Both);
             }
             *guard = None;
             drop(guard);
             s.connected = false;
-            *STATE.lock().unwrap() = Some(s);
+            *STATE.lock_recover() = Some(s);
             return 0;
         }
 
         // 5) Forgive stale pending commands (older than 30s).
         s.pending.retain(|p| now.saturating_sub(p.at) < 30_000);
 
-        *STATE.lock().unwrap() = Some(s);
+        *STATE.lock_recover() = Some(s);
         0
     }
 
     async fn write_point(name: String, value: f64) -> u32 {
-        let mut s = match STATE.lock().unwrap().as_ref() {
+        let mut s = match STATE.lock_recover().as_ref() {
             Some(s) => s.clone(),
             None => return 2,
         };
@@ -639,7 +640,7 @@ impl Guest for Plugin {
             at: now_ms(),
         });
         rpt("tx", "iec104", &hex(&frame), desc).await;
-        let mut guard = STREAM.lock().unwrap();
+        let mut guard = STREAM.lock_recover();
         match guard.as_mut() {
             Some(st) => {
                 if let Err(e) = st.write_all(&frame) {
@@ -647,14 +648,14 @@ impl Guest for Plugin {
                     *guard = None;
                     drop(guard);
                     s.connected = false;
-                    *STATE.lock().unwrap() = Some(s);
+                    *STATE.lock_recover() = Some(s);
                     return 2;
                 }
             }
             None => return 2,
         }
         lm(2, &format!("{} {} = {}", desc, name, value)).await;
-        *STATE.lock().unwrap() = Some(s);
+        *STATE.lock_recover() = Some(s);
         0
     }
 
@@ -663,7 +664,7 @@ impl Guest for Plugin {
     }
 
     async fn get_status() -> u32 {
-        match STATE.lock().unwrap().as_ref() {
+        match STATE.lock_recover().as_ref() {
             Some(s) if s.connected => 2,
             _ => 0,
         }

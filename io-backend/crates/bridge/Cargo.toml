@@ -3,9 +3,13 @@ name = "hmi-io-bridge"
 version.workspace = true
 edition.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 hmi-io-alarm.workspace = true
 hmi-io-point.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["sync", "time", "macros"] }
+sync-util.workspace = true
 serde_json.workspace = true
 log.workspace = true

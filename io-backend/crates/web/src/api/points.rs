@@ -11,6 +11,7 @@ use hmi_io_point::manager::PointManager;
 use hmi_io_point::redundancy::RedundancyEngine;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
+use sync_util::MutexExt;
 use tokio::sync::broadcast;
 
 #[derive(Deserialize)]
@@ -73,7 +74,7 @@ pub async fn list_points(
     let all_points = repo.list_points(q.plugin_id).await.map_err(api_error)?;
     let total_in_db = all_points.len();
     // 以 PointManager 为准：只返回实际在管理范围内的点位
-    let pm = point_manager.lock().unwrap();
+    let pm = point_manager.lock_recover();
     let filtered: Vec<PointView> = all_points
         .into_iter()
         .filter(|p| pm.has_point(&hmi_id_for_point(p)))

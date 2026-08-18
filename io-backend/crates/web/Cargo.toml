@@ -3,6 +3,9 @@ name = "hmi-io-web"
 version.workspace = true
 edition.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 hmi-io-alarm.workspace = true
 hmi-io-auth.workspace = true
@@ -14,7 +17,8 @@ hmi-io-plugin.workspace = true
 hmi-io-point.workspace = true
 axum.workspace = true
 tower-http.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["sync", "time", "net", "rt"] }
+sync-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 calamine.workspace = true
@@ -26,4 +30,5 @@ log.workspace = true
 zip = { version = "2", default-features = false, features = ["deflate"] }
 tower = "0.5"
 http-body-util = "0.1"
+tokio = { workspace = true, features = ["macros", "rt"] }
 

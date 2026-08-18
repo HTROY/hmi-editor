@@ -8,6 +8,7 @@ use hmi_io_config::{NodeRole, RedundancyConfig};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use sync_util::MutexExt;
 use tokio::sync::{broadcast, mpsc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,12 +96,12 @@ impl RedundancyEngine {
     }
 
     pub fn set_role_tx(&self, tx: mpsc::UnboundedSender<RoleCommand>) {
-        *self.role_tx.lock().unwrap() = Some(tx);
+        *self.role_tx.lock_recover() = Some(tx);
     }
 
     /// 注入本机插件健康评估闭包：(总实例数, 已连接数, data_healthy)。
     pub fn set_health_provider(&self, f: Box<dyn Fn() -> (usize, usize, bool) + Send + Sync>) {
-        *self.health_provider.lock().unwrap() = Some(f);
+        *self.health_provider.lock_recover() = Some(f);
     }
 
     fn data_health(&self) -> (usize, usize, bool) {
@@ -284,8 +285,8 @@ impl RedundancyEngine {
         self.state.increment_failover_count();
         self.state
             .record_event("promoted", "standby promoted to active");
-        self.point_manager.lock().unwrap().set_active(true);
-        if let Some(tx) = self.role_tx.lock().unwrap().as_ref() {
+        self.point_manager.lock_recover().set_active(true);
+        if let Some(tx) = self.role_tx.lock_recover().as_ref() {
             let _ = tx.send(RoleCommand::Promote);
         }
         log::warn!(
@@ -296,7 +297,7 @@ impl RedundancyEngine {
 
     /// 回切前探测本机插件能否取到数据（由 bin 启动插件验证并回执）。
     async fn probe_local_data(&self) -> bool {
-        let tx = { self.role_tx.lock().unwrap().clone() };
+        let tx = { self.role_tx.lock_recover().clone() };
         let Some(tx) = tx else {
             return false;
         };
@@ -313,11 +314,11 @@ impl RedundancyEngine {
     fn demote(&self, reason: &str) {
         self.state.set_state(NodeState::Standby);
         self.state.record_event("demoted", reason.to_string());
-        self.point_manager.lock().unwrap().set_active(false);
+        self.point_manager.lock_recover().set_active(false);
         // 让本机 WS 客户端立即断开并切到对端
         let msg = serde_json::json!({"type": "role", "state": "standby"}).to_string();
         let _ = self.broadcast_tx.send(msg);
-        if let Some(tx) = self.role_tx.lock().unwrap().as_ref() {
+        if let Some(tx) = self.role_tx.lock_recover().as_ref() {
             let _ = tx.send(RoleCommand::Demote);
         }
         log::warn!(
@@ -437,7 +438,7 @@ impl RedundancyEngine {
     /// Active 节点应答备机启动/降级后的全量快照拉取。
     pub fn snapshot_for_peer(&self) -> SyncBody {
         let points = if self.is_active() {
-            self.point_manager.lock().unwrap().get_all_values()
+            self.point_manager.lock_recover().get_all_values()
         } else {
             Vec::new()
         };
@@ -485,7 +486,7 @@ impl RedundancyEngine {
     }
 
     async fn forward_loop(self: Arc<Self>) {
-        let mut rx = match self.broadcast_rx.lock().unwrap().take() {
+        let mut rx = match self.broadcast_rx.lock_recover().take() {
             Some(rx) => rx,
             None => return,
         };
@@ -520,7 +521,7 @@ impl RedundancyEngine {
         if !self.config.enabled || self.state.state() != NodeState::Active {
             return;
         }
-        let points = self.point_manager.lock().unwrap().get_all_values();
+        let points = self.point_manager.lock_recover().get_all_values();
         if points.is_empty() {
             return;
         }
@@ -613,7 +614,7 @@ mod tests {
         e.handle_sync(&body).unwrap();
         let status = e.state().get_status();
         assert_eq!(status.sync.points_received, 1);
-        assert_eq!(pm.lock().unwrap().get_all_values().len(), 1);
+        assert_eq!(pm.lock_recover().get_all_values().len(), 1);
     }
 
     #[test]
@@ -630,21 +631,21 @@ mod tests {
             points: vec![PointValue::new("mb1:P1", 5.0, "good", 1000)],
         };
         e.handle_sync(&body).unwrap();
-        assert_eq!(pm.lock().unwrap().get_all_values().len(), 0);
+        assert_eq!(pm.lock_recover().get_all_values().len(), 0);
     }
 
     #[test]
     fn claim_demotes_active_node() {
         let (e, pm) = engine(true, NodeRole::Backup);
         e.state().set_state(NodeState::Active);
-        pm.lock().unwrap().set_active(true);
+        pm.lock_recover().set_active(true);
         let res = e.handle_claim(&ClaimBody {
             node_id: "node-b".into(),
             role: "primary".into(),
         });
         assert!(res.accepted);
         assert_eq!(e.state().state(), NodeState::Standby);
-        assert!(!pm.lock().unwrap().is_active());
+        assert!(!pm.lock_recover().is_active());
     }
 
     #[test]
@@ -663,7 +664,7 @@ mod tests {
     fn claim_rejected_when_active_healthy_and_claimant_backup() {
         let (e, pm) = engine(true, NodeRole::Primary);
         e.state().set_state(NodeState::Active);
-        pm.lock().unwrap().set_active(true);
+        pm.lock_recover().set_active(true);
         let res = e.handle_claim(&ClaimBody {
             node_id: "node-b".into(),
             role: "backup".into(),
@@ -677,7 +678,7 @@ mod tests {
         let (e, pm) = engine(true, NodeRole::Primary);
         e.set_health_provider(Box::new(|| (1, 0, false)));
         e.state().set_state(NodeState::Active);
-        pm.lock().unwrap().set_active(true);
+        pm.lock_recover().set_active(true);
         let res = e.handle_claim(&ClaimBody {
             node_id: "node-b".into(),
             role: "backup".into(),
@@ -690,7 +691,7 @@ mod tests {
     fn claim_from_primary_accepted_when_healthy() {
         let (e, pm) = engine(true, NodeRole::Backup);
         e.state().set_state(NodeState::Active);
-        pm.lock().unwrap().set_active(true);
+        pm.lock_recover().set_active(true);
         let res = e.handle_claim(&ClaimBody {
             node_id: "node-b".into(),
             role: "primary".into(),

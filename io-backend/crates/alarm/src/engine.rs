@@ -9,6 +9,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
+use sync_util::{MutexExt, RwLockExt};
 use tokio::sync::mpsc;
 
 fn now_ms() -> u64 {
@@ -89,7 +90,7 @@ impl AlarmEngine {
     pub fn load_rules(&self, rules: Vec<AlarmRule>) {
         let map: HashMap<String, AlarmRule> =
             rules.into_iter().map(|r| (r.id.clone(), r)).collect();
-        *self.rules.write().unwrap() = map;
+        *self.rules.write_recover() = map;
     }
 
     /// Replace the rule set after a config push / CRUD change. Recovers active
@@ -98,7 +99,7 @@ impl AlarmEngine {
         let new_map: HashMap<String, AlarmRule> =
             rules.into_iter().map(|r| (r.id.clone(), r)).collect();
         {
-            let old = self.rules.read().unwrap();
+            let old = self.rules.read_recover();
             for (id, rule) in old.iter() {
                 match new_map.get(id) {
                     None => self.recover_rule(id, "规则删除"),
@@ -111,15 +112,15 @@ impl AlarmEngine {
                 }
             }
         }
-        *self.rules.write().unwrap() = new_map;
-        self.confirm.lock().unwrap().clear();
+        *self.rules.write_recover() = new_map;
+        self.confirm.lock_recover().clear();
         let _ = self.out_tx.send(OutEvent::RulesChanged);
     }
 
     /// Upsert a single rule (used by CRUD APIs). Disabling recovers active alarms.
     pub fn set_rule(&self, rule: AlarmRule) {
         {
-            let mut map = self.rules.write().unwrap();
+            let mut map = self.rules.write_recover();
             if rule.enabled {
                 map.insert(rule.id.clone(), rule.clone());
             } else {
@@ -134,13 +135,13 @@ impl AlarmEngine {
 
     pub fn remove_rule(&self, id: &str) {
         self.recover_rule(id, "规则删除");
-        self.rules.write().unwrap().remove(id);
-        self.confirm.lock().unwrap().remove(id);
+        self.rules.write_recover().remove(id);
+        self.confirm.lock_recover().remove(id);
         let _ = self.out_tx.send(OutEvent::RulesChanged);
     }
 
     pub fn rules(&self) -> Vec<AlarmRule> {
-        let mut v: Vec<AlarmRule> = self.rules.read().unwrap().values().cloned().collect();
+        let mut v: Vec<AlarmRule> = self.rules.read_recover().values().cloned().collect();
         v.sort_by(|a, b| a.id.cmp(&b.id));
         v
     }
@@ -152,8 +153,8 @@ impl AlarmEngine {
         active: Vec<AlarmOccurrence>,
         recovered_unacked: Vec<AlarmOccurrence>,
     ) {
-        *self.active.lock().unwrap() = active.into_iter().map(|o| (o.id.clone(), o)).collect();
-        *self.recovered_unacked.lock().unwrap() = recovered_unacked
+        *self.active.lock_recover() = active.into_iter().map(|o| (o.id.clone(), o)).collect();
+        *self.recovered_unacked.lock_recover() = recovered_unacked
             .into_iter()
             .map(|o| (o.id.clone(), o))
             .collect();
@@ -163,7 +164,7 @@ impl AlarmEngine {
 
     pub fn on_point(&self, pv: &PointValue) {
         let now = now_ms();
-        let mut last = self.last_values.lock().unwrap();
+        let mut last = self.last_values.lock_recover();
         let prev = last.get(&pv.id).cloned();
         let value_changed = prev.as_ref().map(|p| p.value != pv.value).unwrap_or(true);
         let quality_changed = prev
@@ -182,7 +183,7 @@ impl AlarmEngine {
         }
 
         let num = pv.numeric_value();
-        let rules = self.rules.read().unwrap();
+        let rules = self.rules.read_recover();
         for rule in rules
             .values()
             .filter(|r| r.enabled && r.variable_id == pv.id)
@@ -217,7 +218,7 @@ impl AlarmEngine {
         let now = now_ms();
         let mut expired: Vec<(String, u64)> = Vec::new();
         {
-            let confirm = self.confirm.lock().unwrap();
+            let confirm = self.confirm.lock_recover();
             for (id, c) in confirm.iter() {
                 if now.saturating_sub(c.since_ms) >= self.rule_confirm_ms(id) {
                     expired.push((id.clone(), c.since_ms));
@@ -227,7 +228,7 @@ impl AlarmEngine {
         if expired.is_empty() {
             return;
         }
-        let rules = self.rules.read().unwrap();
+        let rules = self.rules.read_recover();
         for (rule_id, _since) in expired {
             let Some(rule) = rules.get(&rule_id).cloned() else {
                 self.clear_candidate(&rule_id);
@@ -261,15 +262,15 @@ impl AlarmEngine {
     pub fn rebuild(&self, values: &[PointValue]) {
         let now = now_ms();
         {
-            let mut last = self.last_values.lock().unwrap();
+            let mut last = self.last_values.lock_recover();
             for pv in values {
                 last.insert(pv.id.clone(), pv.clone());
             }
         }
-        let active_ids: Vec<String> = self.active.lock().unwrap().keys().cloned().collect();
-        let rules = self.rules.read().unwrap();
+        let active_ids: Vec<String> = self.active.lock_recover().keys().cloned().collect();
+        let rules = self.rules.read_recover();
         for occ_id in active_ids {
-            let occ = self.active.lock().unwrap().get(&occ_id).cloned();
+            let occ = self.active.lock_recover().get(&occ_id).cloned();
             let Some(occ) = occ else { continue };
             let rule = rules.get(&occ.rule_id).cloned();
             match rule {
@@ -294,7 +295,7 @@ impl AlarmEngine {
                 }
             }
         }
-        self.confirm.lock().unwrap().clear();
+        self.confirm.lock_recover().clear();
     }
 
     // ---- Acknowledgement ----
@@ -303,7 +304,7 @@ impl AlarmEngine {
         let now = now_ms();
         let mut updated: Option<AlarmOccurrence> = None;
         {
-            let mut active = self.active.lock().unwrap();
+            let mut active = self.active.lock_recover();
             if let Some(occ) = active.get_mut(occurrence_id) {
                 if occ.status == OccurrenceStatus::Active {
                     occ.status = OccurrenceStatus::Acknowledged;
@@ -314,7 +315,7 @@ impl AlarmEngine {
             }
         }
         if updated.is_none() {
-            let mut ru = self.recovered_unacked.lock().unwrap();
+            let mut ru = self.recovered_unacked.lock_recover();
             if ru.contains_key(occurrence_id) {
                 let mut occ = ru.remove(occurrence_id).unwrap();
                 occ.status = OccurrenceStatus::Acknowledged;
@@ -352,7 +353,7 @@ impl AlarmEngine {
                 .filter(|o| o.status == OccurrenceStatus::Active)
                 .map(|o| o.id.clone())
                 .collect();
-            ids.extend(self.recovered_unacked.lock().unwrap().keys().cloned());
+            ids.extend(self.recovered_unacked.lock_recover().keys().cloned());
             ids
         };
         let mut n = 0;
@@ -367,7 +368,7 @@ impl AlarmEngine {
     // ---- Queries ----
 
     pub fn active_occurrences(&self) -> Vec<AlarmOccurrence> {
-        let mut v: Vec<AlarmOccurrence> = self.active.lock().unwrap().values().cloned().collect();
+        let mut v: Vec<AlarmOccurrence> = self.active.lock_recover().values().cloned().collect();
         v.sort_by(|a, b| b.triggered_at.cmp(&a.triggered_at));
         v
     }
@@ -391,12 +392,12 @@ impl AlarmEngine {
             .values()
             .filter(|o| o.status == OccurrenceStatus::Active)
             .count()
-            + self.recovered_unacked.lock().unwrap().len()
+            + self.recovered_unacked.lock_recover().len()
     }
 
     pub fn highest_severity(&self) -> Option<crate::types::Severity> {
         let mut sev = None;
-        for occ in self.active.lock().unwrap().values() {
+        for occ in self.active.lock_recover().values() {
             match occ.severity {
                 crate::types::Severity::Critical => return Some(crate::types::Severity::Critical),
                 crate::types::Severity::Major => sev = Some(crate::types::Severity::Major),
@@ -444,7 +445,7 @@ impl AlarmEngine {
     }
 
     fn update_candidate(&self, rule: &AlarmRule, n: f64, now: u64) {
-        let mut confirm = self.confirm.lock().unwrap();
+        let mut confirm = self.confirm.lock_recover();
         match confirm.get_mut(&rule.id) {
             Some(c) => {
                 c.last_value = Value::Number(
@@ -466,7 +467,7 @@ impl AlarmEngine {
     }
 
     fn clear_candidate(&self, rule_id: &str) {
-        self.confirm.lock().unwrap().remove(rule_id);
+        self.confirm.lock_recover().remove(rule_id);
     }
 
     fn trigger(&self, rule: &AlarmRule, pv: &PointValue, now: u64) {
@@ -497,7 +498,7 @@ impl AlarmEngine {
             acknowledged_at: None,
             acknowledged_by: String::new(),
         };
-        self.active.lock().unwrap().insert(id.clone(), occ.clone());
+        self.active.lock_recover().insert(id.clone(), occ.clone());
         let event = self.stream_event(
             &occ,
             StreamEventType::Trigger,
@@ -560,7 +561,7 @@ impl AlarmEngine {
 
     fn recover(&self, occurrence_id: &str, now: u64, reason: &str) {
         let mut occ = {
-            let mut active = self.active.lock().unwrap();
+            let mut active = self.active.lock_recover();
             match active.remove(occurrence_id) {
                 Some(o) => o,
                 None => return,
@@ -746,7 +747,7 @@ mod tests {
         assert!(eng.active_occurrences().is_empty());
         // Simulate time passing by forcing the candidate's start back.
         {
-            let mut confirm = eng.confirm.lock().unwrap();
+            let mut confirm = eng.confirm.lock_recover();
             if let Some(c) = confirm.get_mut("r1") {
                 c.since_ms = now_ms() - 2000;
             }
@@ -892,7 +893,7 @@ mod tests {
         eng.on_point(&pv("P1", 120.0, "good", 1));
         eng.on_point(&pv("P1", 50.0, "good", 2));
         {
-            let confirm = eng.confirm.lock().unwrap();
+            let confirm = eng.confirm.lock_recover();
             assert!(confirm.is_empty());
         }
     }

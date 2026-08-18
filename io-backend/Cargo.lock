@@ -1043,6 +1043,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
+ "sync-util",
  "tokio",
 ]
 
@@ -1083,6 +1084,7 @@ dependencies = [
  "log",
  "serde_json",
  "serde_yaml",
+ "sync-util",
  "tokio",
 ]
 
@@ -1094,6 +1096,7 @@ dependencies = [
  "hmi-io-point",
  "log",
  "serde_json",
+ "sync-util",
  "tokio",
 ]
 
@@ -1130,6 +1133,7 @@ dependencies = [
  "hmi-io-point",
  "serde",
  "serde_json",
+ "sync-util",
 ]
 
 [[package]]
@@ -1143,6 +1147,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
+ "sync-util",
  "tokio",
  "wasmtime",
  "wasmtime-wasi",
@@ -1159,6 +1164,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sync-util",
  "tokio",
 ]
 
@@ -1189,6 +1195,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
+ "sync-util",
  "tokio",
  "tokio-tungstenite 0.24.0",
 ]
@@ -1213,6 +1220,7 @@ dependencies = [
  "rust_xlsxwriter",
  "serde",
  "serde_json",
+ "sync-util",
  "tokio",
  "tower",
  "tower-http",
@@ -1437,6 +1445,7 @@ dependencies = [
  "iec104-core",
  "serde",
  "serde_json",
+ "sync-util",
  "wit-bindgen 0.58.0",
 ]
 
@@ -1657,15 +1666,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 
 [[package]]
-name = "lock_api"
-version = "0.4.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "224399e74b87b5f3557511d98dff8b14089b3dadafcab6bb93eab67d3aace965"
-dependencies = [
- "scopeguard",
-]
-
-[[package]]
 name = "log"
 version = "0.4.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1758,6 +1758,7 @@ version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
+ "sync-util",
  "wit-bindgen 0.58.0",
 ]
 
@@ -1842,6 +1843,7 @@ version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
+ "sync-util",
  "ua-core",
  "wit-bindgen 0.58.0",
 ]
@@ -1851,29 +1853,6 @@ name = "opcua-server"
 version = "0.1.0"
 dependencies = [
  "ua-core",
-]
-
-[[package]]
-name = "parking_lot"
-version = "0.12.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93857453250e3077bd71ff98b6a65ea6621a19bb0f559a85248955ac12c45a1a"
-dependencies = [
- "lock_api",
- "parking_lot_core",
-]
-
-[[package]]
-name = "parking_lot_core"
-version = "0.9.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2621685985a2ebf1c516881c026032ac7deafcda1a2c9b7850dc81e3dfcb64c1"
-dependencies = [
- "cfg-if",
- "libc",
- "redox_syscall",
- "smallvec",
- "windows-link",
 ]
 
 [[package]]
@@ -2146,15 +2125,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "redox_syscall"
-version = "0.5.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d"
-dependencies = [
- "bitflags 2.13.1",
-]
-
-[[package]]
 name = "redox_users"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2324,12 +2294,6 @@ name = "ryu"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
-
-[[package]]
-name = "scopeguard"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "semver"
@@ -2551,6 +2515,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "sync-util"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "tokio",
+]
+
+[[package]]
 name = "sync_wrapper"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2687,7 +2659,6 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
- "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2",

@@ -8,6 +8,7 @@ use hmi_io_alarm::engine::AlarmEngine;
 use hmi_io_point::manager::PointManager;
 use hmi_io_point::types::{PointValue, WsDataMessage};
 use std::sync::{Arc, Mutex};
+use sync_util::MutexExt;
 use tokio::sync::{broadcast, mpsc};
 
 pub struct Bridge {
@@ -39,7 +40,7 @@ impl Bridge {
     pub async fn run(mut self) {
         log::info!(
             "Bridge started, managing {} points (batch every {}ms)",
-            self.point_manager.lock().unwrap().count(),
+            self.point_manager.lock_recover().count(),
             self.batch_interval_ms
         );
         let mut batch: Vec<PointValue> = Vec::new();
@@ -49,7 +50,7 @@ impl Bridge {
         loop {
             tokio::select! {
                 Some(raw_point) = self.point_rx.recv() => {
-                    if let Some(pv) = self.point_manager.lock().unwrap().update(raw_point) {
+                    if let Some(pv) = self.point_manager.lock_recover().update(raw_point) {
                         if let Some(eng) = &self.alarm_engine {
                             eng.on_point(&pv);
                         }

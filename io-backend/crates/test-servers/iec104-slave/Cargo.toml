@@ -3,5 +3,8 @@ name = "iec104-slave"
 version = "0.1.0"
 edition.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 iec104-core.workspace = true

@@ -3,6 +3,9 @@ name = "iec104-plugin"
 version = "0.3.0"
 edition.workspace = true
 
+[lints]
+workspace = true
+
 [lib]
 crate-type = ["cdylib"]
 
@@ -11,3 +14,4 @@ wit-bindgen.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 iec104-core.workspace = true
+sync-util = { workspace = true, default-features = false }

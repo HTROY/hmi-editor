@@ -11,9 +11,9 @@
 | 1    | **F20** 构建脚本子进程失败判断统一（`build.ps1`）                     | P3     | ★ 易        | ☑ 已完成 |
 | 2    | **F16** 格式化门禁 + CI 骨架（prettier / cargo fmt / BOM / workflow） | P3     | ★ 易        | ☑ 已完成 |
 | 3    | **F14** 开启 noUnused 并清理未使用代码，收窄 `any`                    | P2     | ★★ 中等偏易 | ☑ 已完成 |
-| 4    | **F19** Cargo 依赖特性瘦身（tokio "full" 等按 crate 收敛）            | P3     | ★★ 中等     | ☐        |
-| 5    | **F07**（部分）`plugin/registry.rs` 收尾拆分                          | P2     | ★★ 中等     | ☐        |
-| 6    | **F15** Mutex 中毒恢复（约 198 处 `lock().unwrap()`）                 | P2     | ★★ 中等     | ☐        |
+| 4    | **F19** Cargo 依赖特性瘦身（tokio "full" 等按 crate 收敛）            | P3     | ★★ 中等     | ☑ 已完成 |
+| 5    | **F07**（部分）`plugin/registry.rs` 收尾拆分                          | P2     | ★★ 中等     | ☑ 已完成 |
+| 6    | **F15** Mutex 中毒恢复（约 198 处 `lock().unwrap()`）                 | P2     | ★★ 中等     | ☑ 已完成 |
 | 7    | **F21**（部分）E2E 测试基建（test-servers + 临时 SQLite）             | P3     | ★★★ 偏难    | ☐        |
 | 8    | **F12** AlarmManager 仓储化拆分（前后端共享夹具）                     | P2     | ★★★ 难      | ☐        |
 | 9    | **F18** 提取 plugin-kit（三个 wasm guest 去重）                       | P3     | ★★★ 难      | ☐        |

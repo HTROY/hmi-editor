@@ -4,6 +4,7 @@ use hmi_io_config::NodeRole;
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
+use sync_util::MutexExt;
 
 pub const MAX_EVENTS: usize = 100;
 pub const MAX_RTT_HISTORY: usize = 60;
@@ -188,23 +189,23 @@ impl RedundancyState {
     }
 
     pub fn enabled(&self) -> bool {
-        self.inner.lock().unwrap().enabled
+        self.inner.lock_recover().enabled
     }
 
     pub fn role(&self) -> NodeRole {
-        self.inner.lock().unwrap().role
+        self.inner.lock_recover().role
     }
 
     pub fn node_id(&self) -> String {
-        self.inner.lock().unwrap().node_id.clone()
+        self.inner.lock_recover().node_id.clone()
     }
 
     pub fn state(&self) -> NodeState {
-        self.inner.lock().unwrap().state
+        self.inner.lock_recover().state
     }
 
     pub fn set_state(&self, state: NodeState) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         inner.state = state;
         if state == NodeState::Active {
             inner.heartbeat_failures = 0;
@@ -214,19 +215,19 @@ impl RedundancyState {
     }
 
     pub fn config_version(&self) -> u64 {
-        self.inner.lock().unwrap().config_version
+        self.inner.lock_recover().config_version
     }
 
     pub fn set_config_version(&self, v: u64) {
-        self.inner.lock().unwrap().config_version = v;
+        self.inner.lock_recover().config_version = v;
     }
 
     pub fn heartbeat_failures(&self) -> u32 {
-        self.inner.lock().unwrap().heartbeat_failures
+        self.inner.lock_recover().heartbeat_failures
     }
 
     pub fn record_heartbeat_failure(&self) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         if inner.heartbeat_failures == 0 {
             inner.events.push_back(RedundancyEvent {
                 time_ms: now_ms(),
@@ -240,7 +241,7 @@ impl RedundancyState {
     }
 
     pub fn record_heartbeat_ok(&self, rtt_ms: u64, peer: HeartbeatInfo) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         if inner.heartbeat_failures > 0 {
             inner.events.push_back(RedundancyEvent {
                 time_ms: now_ms(),
@@ -271,15 +272,15 @@ impl RedundancyState {
     }
 
     pub fn stable_heartbeats(&self) -> u32 {
-        self.inner.lock().unwrap().stable_heartbeats
+        self.inner.lock_recover().stable_heartbeats
     }
 
     pub fn reset_stable_heartbeats(&self) {
-        self.inner.lock().unwrap().stable_heartbeats = 0;
+        self.inner.lock_recover().stable_heartbeats = 0;
     }
 
     pub fn record_peer_seen(&self, rtt_ms: u64) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         if !inner.peer_reported_reachable {
             inner.events.push_back(RedundancyEvent {
                 time_ms: now_ms(),
@@ -297,7 +298,7 @@ impl RedundancyState {
     }
 
     pub fn mark_peer_stale(&self) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         if inner.peer_reported_reachable {
             inner.events.push_back(RedundancyEvent {
                 time_ms: now_ms(),
@@ -311,7 +312,7 @@ impl RedundancyState {
     }
 
     pub fn apply_synced(&self, points: Vec<PointValue>) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         for pv in points {
             inner.sync.points_received += 1;
             inner.synced_points.insert(pv.id.clone(), pv);
@@ -320,13 +321,13 @@ impl RedundancyState {
     }
 
     pub fn update_sync_pushed(&self, count: usize) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         inner.sync.points_pushed += count as u64;
         inner.sync.last_sync_ms = now_ms();
     }
 
     pub fn set_split_brain(&self, on: bool) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         if inner.split_brain != on {
             inner.split_brain = on;
             inner.events.push_back(RedundancyEvent {
@@ -343,7 +344,7 @@ impl RedundancyState {
     }
 
     pub fn record_event(&self, kind: &str, message: impl Into<String>) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         inner.events.push_back(RedundancyEvent {
             time_ms: now_ms(),
             kind: kind.to_string(),
@@ -353,29 +354,29 @@ impl RedundancyState {
     }
 
     pub fn increment_failover_count(&self) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         inner.failover_count += 1;
         inner.last_promotion_ms = now_ms();
     }
 
     pub fn record_unhealthy_report(&self) {
-        self.inner.lock().unwrap().unhealthy_reports += 1;
+        self.inner.lock_recover().unhealthy_reports += 1;
     }
 
     pub fn reset_unhealthy_reports(&self) {
-        self.inner.lock().unwrap().unhealthy_reports = 0;
+        self.inner.lock_recover().unhealthy_reports = 0;
     }
 
     pub fn unhealthy_reports(&self) -> u32 {
-        self.inner.lock().unwrap().unhealthy_reports
+        self.inner.lock_recover().unhealthy_reports
     }
 
     pub fn last_promotion_ms(&self) -> u64 {
-        self.inner.lock().unwrap().last_promotion_ms
+        self.inner.lock_recover().last_promotion_ms
     }
 
     pub fn get_status(&self) -> RedundancyStatus {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock_recover();
         RedundancyStatus {
             enabled: inner.enabled,
             node_id: inner.node_id.clone(),

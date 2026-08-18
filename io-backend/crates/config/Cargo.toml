@@ -3,6 +3,9 @@ name = "hmi-io-config"
 version.workspace = true
 edition.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 hmi-io-db.workspace = true
 serde.workspace = true
@@ -12,4 +15,4 @@ anyhow.workspace = true
 log.workspace = true
 
 [dev-dependencies]
-tokio.workspace = true
+tokio = { workspace = true, features = ["macros", "rt"] }

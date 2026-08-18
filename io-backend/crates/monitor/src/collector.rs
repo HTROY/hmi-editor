@@ -5,6 +5,7 @@ use hmi_io_point::types::PointValue;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+use sync_util::MutexExt;
 
 const MAX_PACKETS_PER_PLUGIN: usize = 500;
 /// Rolling history kept for trend charts (~15 min at 1 Hz)
@@ -48,7 +49,7 @@ impl MonitorCollector {
         wasm_file: &str,
         points: &[(String, String, String, String, f64, f64, String)],
     ) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         let now_ms = inner.server_start.elapsed().as_millis() as u64;
         let mut point_map = HashMap::new();
         let mut config_map = HashMap::new();
@@ -110,7 +111,7 @@ impl MonitorCollector {
     }
 
     pub fn set_connection_state(self: &Arc<Self>, plugin_name: &str, state: i32) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         if let Some(p) = inner.plugins.get_mut(plugin_name) {
             p.status.connection_state = state;
             p.status.connection_label = match state {
@@ -124,7 +125,7 @@ impl MonitorCollector {
     }
 
     pub fn record_scan(self: &Arc<Self>, plugin_name: &str) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         let now_ms = inner.server_start.elapsed().as_millis() as u64;
         if let Some(p) = inner.plugins.get_mut(plugin_name) {
             p.status.scan_count += 1;
@@ -134,7 +135,7 @@ impl MonitorCollector {
     }
 
     pub fn record_error(self: &Arc<Self>, plugin_name: &str, error: &str) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         let now_ms = inner.server_start.elapsed().as_millis() as u64;
         if let Some(p) = inner.plugins.get_mut(plugin_name) {
             p.status.error_count += 1;
@@ -152,7 +153,7 @@ impl MonitorCollector {
     }
 
     pub fn update_point_value(self: &Arc<Self>, plugin_name: &str, pv: &PointValue) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         let now_epoch = Self::now_epoch_ms();
         if let Some(p) = inner.plugins.get_mut(plugin_name) {
             // Resolve point identity: try variable_id first, then address reverse lookup
@@ -217,7 +218,7 @@ impl MonitorCollector {
         hex_dump: &str,
         summary: &str,
     ) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         let now_ms = inner.server_start.elapsed().as_millis() as u64;
         if let Some(p) = inner.plugins.get_mut(plugin_name) {
             let byte_count = if hex_dump.is_empty() {
@@ -242,17 +243,17 @@ impl MonitorCollector {
     }
 
     pub fn ws_client_connected(self: &Arc<Self>) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         inner.ws_client_count += 1;
     }
 
     pub fn ws_client_disconnected(self: &Arc<Self>) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         inner.ws_client_count = inner.ws_client_count.saturating_sub(1);
     }
 
     pub fn get_snapshot(self: &Arc<Self>) -> MonitorSnapshot {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock_recover();
         let now_ms = inner.server_start.elapsed().as_millis() as u64;
         let mut plugins: Vec<PluginStatus> = inner
             .plugins
@@ -275,7 +276,7 @@ impl MonitorCollector {
     }
 
     pub fn get_plugin_status(self: &Arc<Self>, plugin_name: &str) -> Option<PluginStatus> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock_recover();
         let now_ms = inner.server_start.elapsed().as_millis() as u64;
         inner.plugins.get(plugin_name).map(|p| {
             let mut s = p.status.clone();
@@ -285,7 +286,7 @@ impl MonitorCollector {
     }
 
     pub fn get_live_points(self: &Arc<Self>, plugin_name: &str) -> Vec<LivePointInfo> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock_recover();
         let now_ms = inner.server_start.elapsed().as_millis() as u64;
         if let Some(p) = inner.plugins.get(plugin_name) {
             let mut points: Vec<LivePointInfo> = p
@@ -305,7 +306,7 @@ impl MonitorCollector {
     }
 
     pub fn get_packets(self: &Arc<Self>, plugin_name: &str, limit: usize) -> Vec<PacketLogEntry> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock_recover();
         if let Some(p) = inner.plugins.get(plugin_name) {
             let start = if p.packets.len() > limit {
                 p.packets.len() - limit
@@ -322,7 +323,7 @@ impl MonitorCollector {
     /// Called periodically by the web server sampler task so trends stay continuous
     /// even while no UI client is polling.
     pub fn sample(self: &Arc<Self>) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_recover();
         let mut per_plugin: Vec<PluginHistorySample> = inner
             .plugins
             .values()
@@ -347,7 +348,7 @@ impl MonitorCollector {
 
     /// Newest-first history samples, at most `limit` entries.
     pub fn get_history(self: &Arc<Self>, limit: usize, scan_interval_ms: u64) -> MonitorHistory {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock_recover();
         let skip = inner.history.len().saturating_sub(limit.max(1));
         let samples: Vec<HistorySample> = inner.history.iter().skip(skip).rev().cloned().collect();
         MonitorHistory {

@@ -3,6 +3,9 @@ name = "hmi-io-auth"
 version.workspace = true
 edition.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 hmi-io-db.workspace = true
 argon2 = "0.5"
@@ -17,4 +20,4 @@ log.workspace = true
 [dev-dependencies]
 tower = "0.5"
 http-body-util = "0.1"
-tokio.workspace = true
+tokio = { workspace = true, features = ["macros", "rt"] }

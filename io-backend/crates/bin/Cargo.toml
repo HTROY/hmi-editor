@@ -3,6 +3,9 @@ name = "hmi-io-backend"
 version.workspace = true
 edition.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 hmi-io-alarm.workspace = true
 hmi-io-auth.workspace = true
@@ -14,7 +17,8 @@ hmi-io-plugin.workspace = true
 hmi-io-point.workspace = true
 hmi-io-server.workspace = true
 hmi-io-web.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
+sync-util.workspace = true
 anyhow.workspace = true
 env_logger.workspace = true
 log.workspace = true
