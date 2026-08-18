@@ -472,26 +472,23 @@ mod tests {
         s.record_heartbeat_failure();
         assert_eq!(s.heartbeat_failures(), 2);
         let status = s.get_status();
-        assert!(status
-            .events
-            .iter()
-            .any(|e| e.kind == "heartbeat_lost"));
-        s.record_heartbeat_ok(10, HeartbeatInfo {
-            node_id: "node-b".into(),
-            role: "backup".into(),
-            state: "active".into(),
-            config_version: 1,
-            uptime_ms: 1000,
-            data_healthy: true,
-            plugins_total: 1,
-            plugins_connected: 1,
-        });
+        assert!(status.events.iter().any(|e| e.kind == "heartbeat_lost"));
+        s.record_heartbeat_ok(
+            10,
+            HeartbeatInfo {
+                node_id: "node-b".into(),
+                role: "backup".into(),
+                state: "active".into(),
+                config_version: 1,
+                uptime_ms: 1000,
+                data_healthy: true,
+                plugins_total: 1,
+                plugins_connected: 1,
+            },
+        );
         assert_eq!(s.heartbeat_failures(), 0);
         let status = s.get_status();
-        assert!(status
-            .events
-            .iter()
-            .any(|e| e.kind == "heartbeat_restored"));
+        assert!(status.events.iter().any(|e| e.kind == "heartbeat_restored"));
     }
 
     #[test]
@@ -525,16 +522,52 @@ mod tests {
     #[test]
     fn failback_requires_primary_role_peer_active_and_stable_beats() {
         // 主节点、对端活跃、稳定心跳 30 拍（30s/1s）→ 回切
-        assert!(should_attempt_failback(NodeRole::Primary, true, 30, 30_000, 1_000));
+        assert!(should_attempt_failback(
+            NodeRole::Primary,
+            true,
+            30,
+            30_000,
+            1_000
+        ));
         // 备节点不主动回切
-        assert!(!should_attempt_failback(NodeRole::Backup, true, 30, 30_000, 1_000));
+        assert!(!should_attempt_failback(
+            NodeRole::Backup,
+            true,
+            30,
+            30_000,
+            1_000
+        ));
         // 对端非活跃不回切
-        assert!(!should_attempt_failback(NodeRole::Primary, false, 30, 30_000, 1_000));
+        assert!(!should_attempt_failback(
+            NodeRole::Primary,
+            false,
+            30,
+            30_000,
+            1_000
+        ));
         // 稳定心跳不足不回切
-        assert!(!should_attempt_failback(NodeRole::Primary, true, 29, 30_000, 1_000));
+        assert!(!should_attempt_failback(
+            NodeRole::Primary,
+            true,
+            29,
+            30_000,
+            1_000
+        ));
         // 回切周期向上取整：10s 延迟 / 3s 心跳 → 4 拍
-        assert!(should_attempt_failback(NodeRole::Primary, true, 4, 10_000, 3_000));
-        assert!(!should_attempt_failback(NodeRole::Primary, true, 3, 10_000, 3_000));
+        assert!(should_attempt_failback(
+            NodeRole::Primary,
+            true,
+            4,
+            10_000,
+            3_000
+        ));
+        assert!(!should_attempt_failback(
+            NodeRole::Primary,
+            true,
+            3,
+            10_000,
+            3_000
+        ));
     }
 
     #[test]

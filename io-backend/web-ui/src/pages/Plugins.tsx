@@ -77,10 +77,10 @@ export default function Plugins() {
   const status = usePolling(
     () => api.monitorOverview().then((s) => s.plugins),
     2000,
-    [],
+    []
   );
   const statusMap = new Map(
-    (status.data ?? []).map((p: PluginStatus) => [p.name, p]),
+    (status.data ?? []).map((p: PluginStatus) => [p.name, p])
   );
 
   const toggleEnabled = async (p: PluginRow, enabled: boolean) => {

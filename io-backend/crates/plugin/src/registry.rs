@@ -224,11 +224,8 @@ impl PluginRegistry {
 
     pub fn instance_groups_status(&self) -> Vec<InstanceGroupStatus> {
         let snap = self.monitor.get_snapshot();
-        let statuses: HashMap<&str, &hmi_io_monitor::types::PluginStatus> = snap
-            .plugins
-            .iter()
-            .map(|p| (p.name.as_str(), p))
-            .collect();
+        let statuses: HashMap<&str, &hmi_io_monitor::types::PluginStatus> =
+            snap.plugins.iter().map(|p| (p.name.as_str(), p)).collect();
         let groups = self.groups.lock().unwrap();
         let mut out = Vec::new();
         for g in groups.values() {
@@ -286,11 +283,8 @@ impl PluginRegistry {
         };
         let settings = self.instance_redundancy.lock().unwrap().clone();
         let snap = self.monitor.get_snapshot();
-        let statuses: HashMap<&str, &hmi_io_monitor::types::PluginStatus> = snap
-            .plugins
-            .iter()
-            .map(|p| (p.name.as_str(), p))
-            .collect();
+        let statuses: HashMap<&str, &hmi_io_monitor::types::PluginStatus> =
+            snap.plugins.iter().map(|p| (p.name.as_str(), p)).collect();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
@@ -325,11 +319,9 @@ impl PluginRegistry {
                 match evaluate_group(&health, now, threshold, cooldown) {
                     SupervisionDecision::Healthy => g.failures = 0,
                     SupervisionDecision::KeepCounting => g.failures += 1,
-                    SupervisionDecision::Switch { next } => switch_ops.push((
-                        g.group.clone(),
-                        next,
-                        "active instance unhealthy".into(),
-                    )),
+                    SupervisionDecision::Switch { next } => {
+                        switch_ops.push((g.group.clone(), next, "active instance unhealthy".into()))
+                    }
                 }
             }
         }
@@ -605,10 +597,10 @@ impl PluginRegistry {
         });
         let _ = handle;
 
-        self.plugins.lock().unwrap().insert(
-            plugin_name,
-            PluginHandle { cmd_tx },
-        );
+        self.plugins
+            .lock()
+            .unwrap()
+            .insert(plugin_name, PluginHandle { cmd_tx });
         Ok(())
     }
 
@@ -937,8 +929,16 @@ mod tests {
             GroupStateInner {
                 group: "mb-link".into(),
                 members: vec![
-                    MemberRef { name: "mb2".into(), role: "primary".into(), priority: 0 },
-                    MemberRef { name: "mb1b".into(), role: "backup".into(), priority: 1 },
+                    MemberRef {
+                        name: "mb2".into(),
+                        role: "primary".into(),
+                        priority: 0,
+                    },
+                    MemberRef {
+                        name: "mb1b".into(),
+                        role: "backup".into(),
+                        priority: 1,
+                    },
                 ],
                 active: "mb2".into(),
                 failures: 0,

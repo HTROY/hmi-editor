@@ -56,18 +56,18 @@ export default function Monitor() {
   const points = usePolling(
     () => (selected ? api.monitorPluginPoints(selected) : Promise.resolve([])),
     1000,
-    [selected],
+    [selected]
   );
   const packets = usePolling(
     () =>
       selected ? api.monitorPluginPackets(selected, 200) : Promise.resolve([]),
     1000,
-    [selected],
+    [selected]
   );
 
   const plugin = useMemo(
     () => snap?.plugins.find((p) => p.name === selected) ?? null,
-    [snap, selected],
+    [snap, selected]
   );
 
   const pointColumns: ColumnsType<LivePointInfo> = [
@@ -174,14 +174,14 @@ export default function Monitor() {
       (packets.data ?? []).filter(
         (p) =>
           (dirFilter === "all" || p.direction === dirFilter) &&
-          (protoFilter === "all" || p.protocol === protoFilter),
+          (protoFilter === "all" || p.protocol === protoFilter)
       ),
-    [packets.data, dirFilter, protoFilter],
+    [packets.data, dirFilter, protoFilter]
   );
 
   const protos = useMemo(
     () => [...new Set((packets.data ?? []).map((p) => p.protocol))],
-    [packets.data],
+    [packets.data]
   );
 
   return (

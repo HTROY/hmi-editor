@@ -191,7 +191,12 @@ plugins:
       wasm_file: iec104.wasm
       config: { host: "127.0.0.1", port: 2404, common_address: 1 }
       points:
-        - { id: "STA1_211_IA", address: "1003", data_type: "float32", var_type: "AI" }
+        - {
+            id: "STA1_211_IA",
+            address: "1003",
+            data_type: "float32",
+            var_type: "AI",
+          }
     - name: opc_ua_backup
       redundancy_group: dual-link
       redundancy_role: backup
@@ -199,7 +204,11 @@ plugins:
       wasm_file: opc_ua.wasm
       config: { endpoint: "opc.tcp://127.0.0.1:4840" }
       points:
-        - { id: "STA1_211_IA", address: "ns=2;s=Temperature.Zone1", var_type: "AI" }
+        - {
+            id: "STA1_211_IA",
+            address: "ns=2;s=Temperature.Zone1",
+            var_type: "AI",
+          }
 ```
 
 校验要求：组内 primary 唯一；backup 必须填 `priority` 且组内唯一；主备实例 `variable_id` 集合完全一致。
@@ -208,23 +217,27 @@ plugins:
 
 地址：`ws://<host>:8080/iscs/data`（生产端口以 `ws_port` 配置为准）。
 
-| 方向 | type | 说明 |
-| --- | --- | --- |
-| 服务端 → 客户端 | `snapshot` | 连接后全量点值快照 |
-| 服务端 → 客户端 | `data` | 批量点值变化（`data: [{id, value, quality, timestamp}]`） |
-| 服务端 → 客户端 | `config_change` | 点位在管理端变更，前端刷新变量定义 |
-| 服务端 → 客户端 | `alarm_rules` / `alarm_snapshot` | 报警规则与活跃报警初始态（规则先发） |
-| 服务端 → 客户端 | `alarm_update` | 报警触发/确认/恢复事件 |
-| 服务端 → 客户端 | `soe` | SOE 增量 |
-| 服务端 → 客户端 | `alarm_rules_changed` | 规则变化通知 |
-| 服务端 → 客户端 | `role` | 冗余降级广播（`{"type":"role","state":"standby"}`），随后断开全部客户端 |
-| 客户端 → 服务端 | `subscribe` | 按变量 ID 过滤（空列表 = 接收全部） |
-| 客户端 → 服务端 | `control` | 控制写点 |
+| 方向            | type                             | 说明                                                                    |
+| --------------- | -------------------------------- | ----------------------------------------------------------------------- |
+| 服务端 → 客户端 | `snapshot`                       | 连接后全量点值快照                                                      |
+| 服务端 → 客户端 | `data`                           | 批量点值变化（`data: [{id, value, quality, timestamp}]`）               |
+| 服务端 → 客户端 | `config_change`                  | 点位在管理端变更，前端刷新变量定义                                      |
+| 服务端 → 客户端 | `alarm_rules` / `alarm_snapshot` | 报警规则与活跃报警初始态（规则先发）                                    |
+| 服务端 → 客户端 | `alarm_update`                   | 报警触发/确认/恢复事件                                                  |
+| 服务端 → 客户端 | `soe`                            | SOE 增量                                                                |
+| 服务端 → 客户端 | `alarm_rules_changed`            | 规则变化通知                                                            |
+| 服务端 → 客户端 | `role`                           | 冗余降级广播（`{"type":"role","state":"standby"}`），随后断开全部客户端 |
+| 客户端 → 服务端 | `subscribe`                      | 按变量 ID 过滤（空列表 = 接收全部）                                     |
+| 客户端 → 服务端 | `control`                        | 控制写点                                                                |
 
 控制写点示例：
 
 ```json
-{ "command": "control", "variableId": "modbus_tcp:STA1_211_ACB_CTRL", "value": 1 }
+{
+  "command": "control",
+  "variableId": "modbus_tcp:STA1_211_ACB_CTRL",
+  "value": 1
+}
 ```
 
 订阅示例：
@@ -237,17 +250,17 @@ plugins:
 
 基础地址 `http://localhost:8081`：
 
-| 分组 | 路由 |
-| --- | --- |
-| 插件 | `GET/POST /api/plugins`、`GET/PUT/DELETE /api/plugins/{id}` |
-| 点位 | `GET/POST /api/points`（`?include_backup=true` 返回实例级备份点位）、`PUT/DELETE /api/points/{id}` |
-| Excel | `POST /api/plugins/{plugin_id}/import`、`GET /api/plugins/{plugin_id}/export` |
-| 配置导出 | `GET /api/config/export` |
-| 监控 | `GET /api/monitor/overview`、`/api/monitor/plugins/{name}/status`、`/points`、`/packets`、`/api/monitor/history` |
-| 报警/SOE | `/api/alarm/rules` CRUD、`/api/alarm/active`、`/api/alarm/history`、`/api/alarm/occurrences/{id}/events`、`/api/alarm/ack`、`/api/alarm/ack-all`、`/api/alarm/config`、`/api/soe` |
-| 冗余 | `GET/PUT /api/redundancy/config`、`POST /api/redundancy/config/push`、`GET /api/redundancy/heartbeat`、`POST /api/redundancy/sync`、`GET /api/redundancy/snapshot`、`POST /api/redundancy/claim`、`GET /api/redundancy/status`、`GET /api/redundancy/instance-groups` |
-| 认证 | `POST /api/auth/login`、`POST /api/auth/refresh`、`POST /api/auth/change-password` |
-| 工程 | `GET /api/projects`、`GET/PUT/DELETE /api/projects/{id}`（JWT + 角色权限） |
+| 分组     | 路由                                                                                                                                                                                                                                                                  |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 插件     | `GET/POST /api/plugins`、`GET/PUT/DELETE /api/plugins/{id}`                                                                                                                                                                                                           |
+| 点位     | `GET/POST /api/points`（`?include_backup=true` 返回实例级备份点位）、`PUT/DELETE /api/points/{id}`                                                                                                                                                                    |
+| Excel    | `POST /api/plugins/{plugin_id}/import`、`GET /api/plugins/{plugin_id}/export`                                                                                                                                                                                         |
+| 配置导出 | `GET /api/config/export`                                                                                                                                                                                                                                              |
+| 监控     | `GET /api/monitor/overview`、`/api/monitor/plugins/{name}/status`、`/points`、`/packets`、`/api/monitor/history`                                                                                                                                                      |
+| 报警/SOE | `/api/alarm/rules` CRUD、`/api/alarm/active`、`/api/alarm/history`、`/api/alarm/occurrences/{id}/events`、`/api/alarm/ack`、`/api/alarm/ack-all`、`/api/alarm/config`、`/api/soe`                                                                                     |
+| 冗余     | `GET/PUT /api/redundancy/config`、`POST /api/redundancy/config/push`、`GET /api/redundancy/heartbeat`、`POST /api/redundancy/sync`、`GET /api/redundancy/snapshot`、`POST /api/redundancy/claim`、`GET /api/redundancy/status`、`GET /api/redundancy/instance-groups` |
+| 认证     | `POST /api/auth/login`、`POST /api/auth/refresh`、`POST /api/auth/change-password`                                                                                                                                                                                    |
+| 工程     | `GET /api/projects`、`GET/PUT/DELETE /api/projects/{id}`（JWT + 角色权限）                                                                                                                                                                                            |
 
 工程推送使用 `PUT /api/projects/{id}?version=<n>` 乐观锁，版本过期返回 409；包体为 `.hmi.zip`（上限 100MB）。
 

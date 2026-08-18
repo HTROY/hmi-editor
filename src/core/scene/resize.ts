@@ -1,8 +1,5 @@
 import { capabilityOf } from "../shapes/capability";
-import {
-  applyBoxResize,
-  normalizeOptions,
-} from "../shapes/resizeCore";
+import { applyBoxResize, normalizeOptions } from "../shapes/resizeCore";
 import type { ResizeHandle, ResizeOptions } from "../shapes/resizeCore";
 import type { ShapeBase } from "../shapes/ShapeBase";
 import type { Point } from "../types";

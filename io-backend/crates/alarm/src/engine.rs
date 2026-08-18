@@ -152,8 +152,7 @@ impl AlarmEngine {
         active: Vec<AlarmOccurrence>,
         recovered_unacked: Vec<AlarmOccurrence>,
     ) {
-        *self.active.lock().unwrap() =
-            active.into_iter().map(|o| (o.id.clone(), o)).collect();
+        *self.active.lock().unwrap() = active.into_iter().map(|o| (o.id.clone(), o)).collect();
         *self.recovered_unacked.lock().unwrap() = recovered_unacked
             .into_iter()
             .map(|o| (o.id.clone(), o))
@@ -166,10 +165,7 @@ impl AlarmEngine {
         let now = now_ms();
         let mut last = self.last_values.lock().unwrap();
         let prev = last.get(&pv.id).cloned();
-        let value_changed = prev
-            .as_ref()
-            .map(|p| p.value != pv.value)
-            .unwrap_or(true);
+        let value_changed = prev.as_ref().map(|p| p.value != pv.value).unwrap_or(true);
         let quality_changed = prev
             .as_ref()
             .map(|p| p.quality != pv.quality)
@@ -371,8 +367,7 @@ impl AlarmEngine {
     // ---- Queries ----
 
     pub fn active_occurrences(&self) -> Vec<AlarmOccurrence> {
-        let mut v: Vec<AlarmOccurrence> =
-            self.active.lock().unwrap().values().cloned().collect();
+        let mut v: Vec<AlarmOccurrence> = self.active.lock().unwrap().values().cloned().collect();
         v.sort_by(|a, b| b.triggered_at.cmp(&a.triggered_at));
         v
     }
@@ -462,8 +457,7 @@ impl AlarmEngine {
                     ConfirmCandidate {
                         since_ms: now,
                         last_value: Value::Number(
-                            serde_json::Number::from_f64(n)
-                                .unwrap_or(serde_json::Number::from(0)),
+                            serde_json::Number::from_f64(n).unwrap_or(serde_json::Number::from(0)),
                         ),
                     },
                 );
@@ -660,12 +654,7 @@ mod tests {
         (AlarmEngine::new(tx), rx)
     }
 
-    fn rule(
-        id: &str,
-        var: &str,
-        condition: Condition,
-        threshold: f64,
-    ) -> AlarmRule {
+    fn rule(id: &str, var: &str, condition: Condition, threshold: f64) -> AlarmRule {
         AlarmRule {
             id: id.into(),
             variable_id: var.into(),
@@ -686,9 +675,7 @@ mod tests {
     }
 
     /// Skip SOE events and return the next occurrence update.
-    fn next_occ(
-        rx: &mut mpsc::UnboundedReceiver<OutEvent>,
-    ) -> (AlarmOccurrence, AlarmStreamEvent) {
+    fn next_occ(rx: &mut mpsc::UnboundedReceiver<OutEvent>) -> (AlarmOccurrence, AlarmStreamEvent) {
         loop {
             match rx.try_recv().unwrap() {
                 OutEvent::Occurrence { occurrence, event } => return (occurrence, event),

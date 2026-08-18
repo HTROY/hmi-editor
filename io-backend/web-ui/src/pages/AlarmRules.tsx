@@ -186,10 +186,7 @@ export default function AlarmRules() {
     <Card
       title="报警规则"
       extra={
-        <Button
-          type="primary"
-          onClick={() => modal.openCreate(emptyUpsert)}
-        >
+        <Button type="primary" onClick={() => modal.openCreate(emptyUpsert)}>
           + 新建规则
         </Button>
       }
@@ -247,10 +244,12 @@ export default function AlarmRules() {
           <Space size="large" style={{ display: "flex" }} wrap>
             <Form.Item name="condition" label="条件" style={{ width: 180 }}>
               <Select
-                options={Object.entries(CONDITION_LABEL).map(([value, label]) => ({
-                  value,
-                  label,
-                }))}
+                options={Object.entries(CONDITION_LABEL).map(
+                  ([value, label]) => ({
+                    value,
+                    label,
+                  })
+                )}
               />
             </Form.Item>
             <Form.Item name="threshold" label="阈值" style={{ width: 140 }}>

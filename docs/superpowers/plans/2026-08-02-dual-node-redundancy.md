@@ -38,6 +38,7 @@
 ## Task 1: 配置层增加 RedundancyConfig
 
 **Files:**
+
 - Modify: `io-backend/crates/config/src/lib.rs`
 - Test: `io-backend/crates/config/src/lib.rs`（同文件 `#[cfg(test)]`）
 
@@ -238,6 +239,7 @@ git commit -m "feat(config): add redundancy config block"
 ## Task 2: PointManager 增加同步与角色门控接口
 
 **Files:**
+
 - Modify: `io-backend/crates/point/src/manager.rs`
 
 - [ ] **Step 1: 写失败测试**
@@ -336,6 +338,7 @@ git commit -m "feat(point): add apply_sync and role gating to PointManager"
 ## Task 3: redundancy 状态类型与决策函数
 
 **Files:**
+
 - Create: `io-backend/crates/point/src/redundancy/mod.rs`
 - Create: `io-backend/crates/point/src/redundancy/state.rs`
 - Modify: `io-backend/crates/point/src/lib.rs`
@@ -859,6 +862,7 @@ git commit -m "feat(point): add redundancy state types and decision helpers"
 ## Task 4: RedundancyEngine（心跳/同步/回切）
 
 **Files:**
+
 - Modify: `io-backend/crates/point/src/redundancy/engine.rs`
 - Modify: `io-backend/crates/point/src/redundancy/mod.rs`
 - Modify: `io-backend/crates/point/Cargo.toml`
@@ -1463,6 +1467,7 @@ git commit -m "feat(point): add redundancy engine with heartbeat and value sync"
 ## Task 5: DB 配置快照与应用
 
 **Files:**
+
 - Modify: `io-backend/crates/db/src/repo.rs`
 
 - [ ] **Step 1: 写失败测试**
@@ -1623,6 +1628,7 @@ git commit -m "feat(db): add config snapshot apply for standby nodes"
 ## Task 6: PluginRegistry 拆分 prepare / start_instances
 
 **Files:**
+
 - Modify: `io-backend/crates/plugin/src/registry.rs`
 
 - [ ] **Step 1: 重构实现**
@@ -1692,6 +1698,7 @@ git commit -m "feat(plugin): split registry prepare and start for standby nodes"
 ## Task 7: web API 冗余端点与配置推送接线
 
 **Files:**
+
 - Modify: `io-backend/crates/web/Cargo.toml`
 - Modify: `io-backend/crates/web/src/api.rs`
 - Modify: `io-backend/crates/web/src/server.rs`
@@ -1956,6 +1963,7 @@ git commit -m "feat(web): add redundancy API endpoints and config push"
 ## Task 8: WS 服务在 Standby 拒绝连接、降级时断开
 
 **Files:**
+
 - Modify: `io-backend/crates/server/src/ws.rs`
 
 - [ ] **Step 1: 实现**
@@ -2001,6 +2009,7 @@ git commit -m "feat(server): reject ws clients on standby and close on demote"
 ## Task 9: bin 装配冗余引擎
 
 **Files:**
+
 - Modify: `io-backend/crates/bin/src/main.rs`
 
 - [ ] **Step 1: 实现**
@@ -2127,6 +2136,7 @@ Expected: 启动日志出现 `Redundancy disabled, engine idle`，现有插件�
 ## Task 11: web-ui API 客户端与类型
 
 **Files:**
+
 - Modify: `io-backend/web-ui/src/api/types.ts`
 - Modify: `io-backend/web-ui/src/api/client.ts`
 
@@ -2223,6 +2233,7 @@ git commit -m "feat(web-ui): add redundancy api client"
 ## Task 12: 冗余配置页
 
 **Files:**
+
 - Create: `io-backend/web-ui/src/pages/RedundancyConfig.tsx`
 
 - [ ] **Step 1: 创建页面**
@@ -2260,7 +2271,9 @@ export default function RedundancyConfig() {
   const { message } = AntdApp.useApp();
   const [form] = Form.useForm<FormValues>();
   const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<Awaited<ReturnType<typeof api.getRedundancyStatus>> | null>(null);
+  const [status, setStatus] = useState<Awaited<
+    ReturnType<typeof api.getRedundancyStatus>
+  > | null>(null);
   const [cfg, setCfg] = useState<RedundancyConfigT | null>(null);
 
   useEffect(() => {
@@ -2278,7 +2291,10 @@ export default function RedundancyConfig() {
       });
     });
     const t = window.setInterval(() => {
-      api.getRedundancyStatus().then(setStatus).catch(() => {});
+      api
+        .getRedundancyStatus()
+        .then(setStatus)
+        .catch(() => {});
     }, 2000);
     return () => window.clearInterval(t);
   }, [form]);
@@ -2312,9 +2328,7 @@ export default function RedundancyConfig() {
           </span>
           <span>
             运行态:{" "}
-            <Tag
-              color={status?.state === "active" ? "green" : "default"}
-            >
+            <Tag color={status?.state === "active" ? "green" : "default"}>
               {status?.state ?? "-"}
             </Tag>
           </span>
@@ -2348,7 +2362,11 @@ export default function RedundancyConfig() {
 
       <Card size="small" title="冗余配置">
         <Form form={form} layout="vertical" style={{ maxWidth: 720 }}>
-          <Form.Item name="enabled" label="启用主备冗余" valuePropName="checked">
+          <Form.Item
+            name="enabled"
+            label="启用主备冗余"
+            valuePropName="checked"
+          >
             <Switch checkedChildren="开" unCheckedChildren="关" />
           </Form.Item>
           <Space style={{ display: "flex" }} size={12} align="start">
@@ -2377,13 +2395,25 @@ export default function RedundancyConfig() {
             <Input placeholder="http://192.168.1.2:8081" />
           </Form.Item>
           <Space style={{ display: "flex" }} size={12} align="start">
-            <Form.Item name="heartbeat_interval_ms" label="心跳间隔 (ms)" style={{ flex: 1 }}>
+            <Form.Item
+              name="heartbeat_interval_ms"
+              label="心跳间隔 (ms)"
+              style={{ flex: 1 }}
+            >
               <InputNumber style={{ width: "100%" }} min={200} step={100} />
             </Form.Item>
-            <Form.Item name="failover_threshold" label="失联阈值 (次)" style={{ flex: 1 }}>
+            <Form.Item
+              name="failover_threshold"
+              label="失联阈值 (次)"
+              style={{ flex: 1 }}
+            >
               <InputNumber style={{ width: "100%" }} min={1} max={20} />
             </Form.Item>
-            <Form.Item name="failback_delay_ms" label="回切稳定期 (ms)" style={{ flex: 1 }}>
+            <Form.Item
+              name="failback_delay_ms"
+              label="回切稳定期 (ms)"
+              style={{ flex: 1 }}
+            >
               <InputNumber style={{ width: "100%" }} min={1000} step={1000} />
             </Form.Item>
           </Space>
@@ -2417,18 +2447,25 @@ git commit -m "feat(web-ui): add redundancy config page"
 ## Task 13: 冗余监控页
 
 **Files:**
+
 - Create: `io-backend/web-ui/src/pages/RedundancyMonitor.tsx`
 
 - [ ] **Step 1: 创建页面**
 
 ```tsx
 import { useMemo } from "react";
+import { ApiOutlined, SwapOutlined, WarningOutlined } from "@ant-design/icons";
 import {
-  ApiOutlined,
-  SwapOutlined,
-  WarningOutlined,
-} from "@ant-design/icons";
-import { Alert, Card, Col, Empty, Row, Space, Table, Tag, Typography } from "antd";
+  Alert,
+  Card,
+  Col,
+  Empty,
+  Row,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { EChartsOption } from "echarts";
 import { api } from "../api/client";
@@ -2436,7 +2473,12 @@ import type { RedundancyEvent, RedundancyPoint } from "../api/types";
 import StatCard from "../components/StatCard";
 import { useEChart } from "../hooks/useEChart";
 import { usePolling } from "../hooks/usePolling";
-import { formatAge, formatNumber, formatTimeMs, formatUptime } from "../utils/format";
+import {
+  formatAge,
+  formatNumber,
+  formatTimeMs,
+  formatUptime,
+} from "../utils/format";
 
 export default function RedundancyMonitor() {
   const status = usePolling(() => api.getRedundancyStatus(), 1000);
@@ -2449,7 +2491,11 @@ export default function RedundancyMonitor() {
       animation: false,
       tooltip: { trigger: "axis" },
       grid: { left: 48, right: 16, top: 20, bottom: 24 },
-      xAxis: { type: "category", data: rtt.map((_, i) => String(i + 1)), boundaryGap: false },
+      xAxis: {
+        type: "category",
+        data: rtt.map((_, i) => String(i + 1)),
+        boundaryGap: false,
+      },
       yAxis: { type: "value", name: "ms", min: 0 },
       series: [
         {
@@ -2501,7 +2547,11 @@ export default function RedundancyMonitor() {
   ];
 
   const pointColumns: ColumnsType<RedundancyPoint> = [
-    { title: "点位 ID", dataIndex: "id", render: (v: string) => <span className="mono">{v}</span> },
+    {
+      title: "点位 ID",
+      dataIndex: "id",
+      render: (v: string) => <span className="mono">{v}</span>,
+    },
     {
       title: "值",
       dataIndex: "value",
@@ -2517,7 +2567,9 @@ export default function RedundancyMonitor() {
       dataIndex: "quality",
       width: 90,
       render: (v: string) => (
-        <Tag color={v === "good" ? "green" : v === "bad" ? "red" : "default"}>{v}</Tag>
+        <Tag color={v === "good" ? "green" : v === "bad" ? "red" : "default"}>
+          {v}
+        </Tag>
       ),
     },
     {
@@ -2533,7 +2585,10 @@ export default function RedundancyMonitor() {
       render: (_, pt) => {
         const age = Date.now() - pt.timestamp;
         return (
-          <span className="mono" style={{ color: age > 5000 ? "#f59e0b" : "inherit" }}>
+          <span
+            className="mono"
+            style={{ color: age > 5000 ? "#f59e0b" : "inherit" }}
+          >
             {formatAge(age)}
           </span>
         );
@@ -2542,17 +2597,31 @@ export default function RedundancyMonitor() {
   ];
 
   const sortedPoints = useMemo(
-    () => [...(snap?.synced_points ?? [])].sort((a, b) => a.timestamp - b.timestamp),
-    [snap],
+    () =>
+      [...(snap?.synced_points ?? [])].sort(
+        (a, b) => a.timestamp - b.timestamp
+      ),
+    [snap]
   );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {snap?.split_brain && (
-        <Alert type="error" showIcon icon={<WarningOutlined />} message="双主分裂告警" description="两个节点均处于 Active，请立即检查网络与节点状态" />
+        <Alert
+          type="error"
+          showIcon
+          icon={<WarningOutlined />}
+          message="双主分裂告警"
+          description="两个节点均处于 Active，请立即检查网络与节点状态"
+        />
       )}
       {!snap?.enabled && (
-        <Alert type="warning" showIcon message="冗余未启用" description="请在“冗余配置”页开启主备冗余" />
+        <Alert
+          type="warning"
+          showIcon
+          message="冗余未启用"
+          description="请在“冗余配置”页开启主备冗余"
+        />
       )}
 
       <Row gutter={[12, 12]}>
@@ -2618,11 +2687,21 @@ export default function RedundancyMonitor() {
 
       <Row gutter={[12, 12]}>
         <Col xs={24} lg={10}>
-          <Card size="small" title="心跳 RTT 趋势" extra={<Tag color="blue">最近 {snap?.rtt_history.length ?? 0} 次</Tag>}>
+          <Card
+            size="small"
+            title="心跳 RTT 趋势"
+            extra={
+              <Tag color="blue">最近 {snap?.rtt_history.length ?? 0} 次</Tag>
+            }
+          >
             {chartOption ? (
               <div ref={chartRef} style={{ height: 220 }} />
             ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无心跳采样" style={{ padding: "40px 0" }} />
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="暂无心跳采样"
+                style={{ padding: "40px 0" }}
+              />
             )}
           </Card>
         </Col>
@@ -2678,6 +2757,7 @@ git commit -m "feat(web-ui): add redundancy monitor page"
 ## Task 14: 菜单与路由
 
 **Files:**
+
 - Modify: `io-backend/web-ui/src/App.tsx`
 
 - [ ] **Step 1: 实现**
@@ -2727,6 +2807,7 @@ git commit -m "feat(web-ui): add redundancy menu and routes"
 ## Task 15: HMI 前端 WebSocketClient 多地址
 
 **Files:**
+
 - Modify: `src/core/io/types.ts`
 - Modify: `src/core/io/WebSocketClient.ts`
 
@@ -2825,6 +2906,7 @@ git commit -m "feat(io): support primary/backup ws urls with failover"
 ## Task 16: 编辑器存储与连接面板双地址
 
 **Files:**
+
 - Modify: `src/store/editorStore.ts`
 - Modify: `src/core/io/DataBridge.ts`
 - Modify: `src/editor/panels/ConnectionPanel.tsx`
@@ -2868,7 +2950,9 @@ setBackupApiBaseUrl(url: string): void {
 `fetchVariablesFromBackend` 的 `fetch(url)` 改为顺序尝试：
 
 ```ts
-const fallback = this.backupApiBaseUrl ? `${this.backupApiBaseUrl}/api/points` : null;
+const fallback = this.backupApiBaseUrl
+  ? `${this.backupApiBaseUrl}/api/points`
+  : null;
 let resp: Response | null = null;
 try {
   resp = await fetch(url);
@@ -2895,7 +2979,7 @@ if (!resp.ok) {
 
 ```tsx
 const [ioBackendBackupUrl, setIoBackendBackupUrl] = useState(
-  wsConfig?.backupUrl ?? "",
+  wsConfig?.backupUrl ?? ""
 );
 const [ioBackendBackupApiUrl, setIoBackendBackupApiUrl] = useState("");
 ```
@@ -2981,6 +3065,7 @@ Expected: 通过。
 ## Task 18: 双进程 E2E 验证
 
 **Files:**
+
 - Create: `io-backend/config-node-a.yaml`（临时，验证后可删除）
 - Create: `io-backend/config-node-b.yaml`（临时，验证后可删除）
 
@@ -3105,6 +3190,7 @@ Expected: A 日志 `Promoted to ACTIVE`/`initial state: active`；B 日志 `init
 ## Task 19: DB 插件冗余字段迁移
 
 **Files:**
+
 - Modify: `io-backend/crates/db/src/schema.rs`
 - Modify: `io-backend/crates/db/src/repo.rs`
 
@@ -3322,6 +3408,7 @@ git commit -m "feat(db): add plugin redundancy group fields and migration"
 ## Task 20: 配置层实例组字段与校验
 
 **Files:**
+
 - Modify: `io-backend/crates/config/src/lib.rs`
 
 - [ ] **Step 1: 写失败测试**
@@ -3568,6 +3655,7 @@ git commit -m "feat(config): add instance redundancy groups and validation"
 ## Task 21: PointManager 组逻辑映射
 
 **Files:**
+
 - Modify: `io-backend/crates/point/src/manager.rs`
 
 - [ ] **Step 1: 写失败测试**
@@ -3762,6 +3850,7 @@ git commit -m "feat(point): map instance groups to stable logical ids"
 ## Task 22: redundancy 状态增加不健康计数与决策函数
 
 **Files:**
+
 - Modify: `io-backend/crates/point/src/redundancy/state.rs`
 - Modify: `io-backend/crates/point/src/redundancy/mod.rs`
 
@@ -3870,6 +3959,7 @@ git commit -m "feat(point): track unhealthy reports and promotion cooldown"
 ## Task 23: 引擎采集健康触发与 claim 角色规则
 
 **Files:**
+
 - Modify: `io-backend/crates/point/src/redundancy/engine.rs`
 
 - [ ] **Step 1: 更新测试**
@@ -4113,6 +4203,7 @@ git commit -m "feat(point): add plugin-health promotion trigger and claim rules"
 ## Task 24: Registry 实例组监督器
 
 **Files:**
+
 - Modify: `io-backend/crates/plugin/src/registry.rs`
 
 - [ ] **Step 1: 写失败测试**
@@ -4726,6 +4817,7 @@ git commit -m "feat(plugin): add per-instance group supervisor with failover"
 ## Task 25: web API 增量（插件字段、include_backup、实例组端点）
 
 **Files:**
+
 - Modify: `io-backend/crates/web/src/api.rs`
 - Modify: `io-backend/crates/web/src/server.rs`
 
@@ -4940,6 +5032,7 @@ git commit -m "feat(web): plugin group fields, include_backup points, instance-g
 ## Task 26: bin 接线（健康提供者、实例监督器、迁移）
 
 **Files:**
+
 - Modify: `io-backend/crates/bin/src/main.rs`
 
 - [ ] **Step 1: 实现**
@@ -5006,6 +5099,7 @@ git commit -m "feat(bin): wire health provider and instance supervisor"
 ## Task 27: web-ui 类型/客户端与插件、点位页
 
 **Files:**
+
 - Modify: `io-backend/web-ui/src/api/types.ts`
 - Modify: `io-backend/web-ui/src/api/client.ts`
 - Modify: `io-backend/web-ui/src/pages/Plugins.tsx`
@@ -5153,6 +5247,7 @@ git commit -m "feat(web-ui): plugin group fields and backup point views"
 ## Task 28: web-ui 冗余配置/监控页增量
 
 **Files:**
+
 - Modify: `io-backend/web-ui/src/pages/RedundancyConfig.tsx`
 - Modify: `io-backend/web-ui/src/pages/RedundancyMonitor.tsx`
 
@@ -5215,14 +5310,23 @@ const groups = usePolling(() => api.getInstanceGroups(), 1000);
 
 ```tsx
 const groupColumns: ColumnsType<InstanceGroupStatus> = [
-  { title: "组名", dataIndex: "group", render: (v: string) => <Typography.Text strong>{v}</Typography.Text> },
+  {
+    title: "组名",
+    dataIndex: "group",
+    render: (v: string) => <Typography.Text strong>{v}</Typography.Text>,
+  },
   {
     title: "成员",
     dataIndex: "members",
     render: (members: InstanceMemberStatus[]) => (
       <Space size={4} wrap>
         {members.map((m) => (
-          <Tag key={m.name} color={m.is_active ? "green" : m.role === "primary" ? "blue" : "default"}>
+          <Tag
+            key={m.name}
+            color={
+              m.is_active ? "green" : m.role === "primary" ? "blue" : "default"
+            }
+          >
             {m.name}（{m.role === "primary" ? "主" : `备${m.priority}`}）
             {m.is_active ? " ●" : ""}
           </Tag>
@@ -5230,10 +5334,25 @@ const groupColumns: ColumnsType<InstanceGroupStatus> = [
       </Space>
     ),
   },
-  { title: "活跃实例", dataIndex: "active_instance", width: 140, render: (v: string) => <span className="mono">{v}</span> },
-  { title: "连续失败", dataIndex: "consecutive_failures", width: 90, render: (v: number) => (v > 0 ? <Tag color="red">{v}</Tag> : <span>{v}</span>) },
+  {
+    title: "活跃实例",
+    dataIndex: "active_instance",
+    width: 140,
+    render: (v: string) => <span className="mono">{v}</span>,
+  },
+  {
+    title: "连续失败",
+    dataIndex: "consecutive_failures",
+    width: 90,
+    render: (v: number) =>
+      v > 0 ? <Tag color="red">{v}</Tag> : <span>{v}</span>,
+  },
   { title: "切换次数", dataIndex: "switch_count", width: 90 },
-  { title: "上次切换", dataIndex: "last_switch_reason", ellipsis: { showTitle: true } },
+  {
+    title: "上次切换",
+    dataIndex: "last_switch_reason",
+    ellipsis: { showTitle: true },
+  },
 ];
 ```
 
@@ -5292,8 +5411,18 @@ plugins:
       wasm_file: iec104.wasm
       config: { host: "127.0.0.1", port: 2404, common_address: 1 }
       points:
-        - { id: "STA1_211_IA", address: "1003", data_type: "float32", var_type: "AI" }
-        - { id: "STA1_BUS_VOLTAGE", address: "1005", data_type: "float32", var_type: "AI" }
+        - {
+            id: "STA1_211_IA",
+            address: "1003",
+            data_type: "float32",
+            var_type: "AI",
+          }
+        - {
+            id: "STA1_BUS_VOLTAGE",
+            address: "1005",
+            data_type: "float32",
+            var_type: "AI",
+          }
     - name: opc_ua_backup
       redundancy_group: dual-link
       redundancy_role: backup
@@ -5301,8 +5430,16 @@ plugins:
       wasm_file: opc_ua.wasm
       config: { endpoint: "opc.tcp://127.0.0.1:4840" }
       points:
-        - { id: "STA1_211_IA", address: "ns=2;s=Temperature.Zone1", var_type: "AI" }
-        - { id: "STA1_BUS_VOLTAGE", address: "ns=2;s=Temperature.Zone2", var_type: "AI" }
+        - {
+            id: "STA1_211_IA",
+            address: "ns=2;s=Temperature.Zone1",
+            var_type: "AI",
+          }
+        - {
+            id: "STA1_BUS_VOLTAGE",
+            address: "ns=2;s=Temperature.Zone2",
+            var_type: "AI",
+          }
 redundancy:
   enabled: false
   instance_failover_threshold: 3
@@ -5314,6 +5451,7 @@ redundancy:
 启动两个测试服务（`cargo run -p iec104-slave`、`cargo run -p opcua-server`）与后端 `cargo run -- config-instance.yaml`。
 
 Expected：
+
 - 初始 `GET /api/redundancy/instance-groups`：活跃 = `iec104`，HMI 变量 `dual-link:STA1_211_IA` 有值；
 - 停止 iec104-slave → 约 3 次扫描后切到 `opc_ua_backup`，变量 ID 仍为 `dual-link:STA1_211_IA`，值来自 OPC UA；
 - 重启 iec104-slave → 约 10s 后回切 `iec104`；

@@ -88,9 +88,7 @@ describe("Selection 撤销/重做结果应用", () => {
 
   it("keepSelection 不动选中（同一实例）", () => {
     const sel = new Selection().select("s1");
-    expect(
-      sel.applyUndoRedo(result({ keepSelection: true }))
-    ).toBe(sel);
+    expect(sel.applyUndoRedo(result({ keepSelection: true }))).toBe(sel);
   });
 
   it("selected 为 null 时清空选中", () => {

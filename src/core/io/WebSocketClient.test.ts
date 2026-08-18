@@ -72,7 +72,9 @@ describe("WebSocketClient 扁平 WS 协议", () => {
   it("subscribeVariable 发送 variableIds 数组而非嵌套包络", async () => {
     const { client, fake } = await connectedClient();
     client.subscribeVariable("a:b");
-    expect(fake.sent).toEqual(['{"command":"subscribe","variableIds":["a:b"]}']);
+    expect(fake.sent).toEqual([
+      '{"command":"subscribe","variableIds":["a:b"]}',
+    ]);
   });
 
   it("subscribeVariables 批量订阅与空数组清空过滤", async () => {

@@ -2,11 +2,11 @@
 
 轨道交通 ISCS（综合监控系统）人机界面组态与采集一体化工具。仓库由三个相互协作的组件组成：
 
-| 组件 | 目录 | 技术栈 | 职责 |
-| --- | --- | --- | --- |
-| 组态编辑器 | `src/` | React 19 · TypeScript 5.7 · Vite 6 · Zustand 5 · HTML5 Canvas | 画面组态、变量/绑定/动画、报警/趋势/权限/脚本/报表、工程管理 |
-| I/O 采集后端 | `io-backend/` | Rust · wasmtime 47 · axum · SQLite | WASM 协议插件托管、点位采集与缩放、报警/SOE、主备冗余、管理 API |
-| 管理 Web UI | `io-backend/web-ui/` | React 18 · Ant Design 5 · ECharts | 插件/点位/监控/报警/冗余的集中配置与监视 |
+| 组件         | 目录                 | 技术栈                                                        | 职责                                                            |
+| ------------ | -------------------- | ------------------------------------------------------------- | --------------------------------------------------------------- |
+| 组态编辑器   | `src/`               | React 19 · TypeScript 5.7 · Vite 6 · Zustand 5 · HTML5 Canvas | 画面组态、变量/绑定/动画、报警/趋势/权限/脚本/报表、工程管理    |
+| I/O 采集后端 | `io-backend/`        | Rust · wasmtime 47 · axum · SQLite                            | WASM 协议插件托管、点位采集与缩放、报警/SOE、主备冗余、管理 API |
+| 管理 Web UI  | `io-backend/web-ui/` | React 18 · Ant Design 5 · ECharts                             | 插件/点位/监控/报警/冗余的集中配置与监视                        |
 
 ## 功能特性
 

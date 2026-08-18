@@ -1,4 +1,4 @@
-﻿//! Project storage metadata and audit log.
+//! Project storage metadata and audit log.
 
 use super::{db_err, AuditLogRow, ProjectPushResult, ProjectRow, Repo};
 use rusqlite::{params, OptionalExtension};

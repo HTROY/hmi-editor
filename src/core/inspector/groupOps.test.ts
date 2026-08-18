@@ -155,7 +155,7 @@ describe("unwrapGroup", () => {
     });
     const [polyline, polygon] = unwrapGroup(group) as [
       PolylineShape,
-      PolygonShape
+      PolygonShape,
     ];
     expect(polyline.points).toEqual([
       { x: 110, y: 60 },

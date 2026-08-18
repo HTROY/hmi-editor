@@ -83,7 +83,9 @@ export default function Points() {
 
   const table = useCrudTable<PointRow>({
     fetcher: () =>
-      pluginId === null ? Promise.resolve([]) : api.listPoints(pluginId, includeBackup),
+      pluginId === null
+        ? Promise.resolve([])
+        : api.listPoints(pluginId, includeBackup),
     errorPrefix: "加载点位失败",
     clearOnError: true,
   });
@@ -116,7 +118,7 @@ export default function Points() {
       (p) =>
         p.variable_id.toLowerCase().includes(kw) ||
         p.address.toLowerCase().includes(kw) ||
-        p.description.toLowerCase().includes(kw),
+        p.description.toLowerCase().includes(kw)
     );
   }, [table.items, keyword]);
 
@@ -257,7 +259,7 @@ export default function Points() {
             onConfirm={() =>
               table.remove(
                 () => api.deletePoint(pt.id),
-                `已删除点位 ${pt.variable_id}`,
+                `已删除点位 ${pt.variable_id}`
               )
             }
           >
@@ -364,7 +366,9 @@ export default function Points() {
       </Card>
 
       <Modal
-        title={modal.editing ? `编辑点位：${modal.editing.variable_id}` : "添加点位"}
+        title={
+          modal.editing ? `编辑点位：${modal.editing.variable_id}` : "添加点位"
+        }
         open={modal.open}
         onOk={modal.save}
         onCancel={modal.close}

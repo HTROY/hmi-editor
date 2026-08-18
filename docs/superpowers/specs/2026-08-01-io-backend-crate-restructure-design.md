@@ -66,17 +66,17 @@ io-backend/
 
 沿用现有模块划分，`crate::` 引用改为跨 crate 引用；跨 crate 使用的类型保持 `pub`，每个 crate 在 `lib.rs` 做必要的 `pub mod` / 再导出。
 
-| crate（目录） | 内容 | 内部路径依赖 |
-|---|---|---|
-| `hmi-io-db`（crates/db） | Repo、schema | — |
-| `hmi-io-config`（crates/config） | AppConfig、ServerConfig、PointMapping、配置迁移 | hmi-io-db |
-| `hmi-io-point`（crates/point） | PointManager、PointValue、WsDataMessage、WsConfigChangeMessage | hmi-io-config |
-| `hmi-io-monitor`（crates/monitor） | MonitorCollector、监控类型 | hmi-io-point |
-| `hmi-io-plugin`（crates/plugin） | host、interface、registry（WASM 宿主） | hmi-io-config、hmi-io-monitor、hmi-io-point |
-| `hmi-io-bridge`（crates/bridge） | Bridge（插件回调 → 点位聚合/广播） | hmi-io-point |
-| `hmi-io-server`（crates/server） | WebSocket 服务 | hmi-io-config、hmi-io-monitor、hmi-io-plugin、hmi-io-point |
-| `hmi-io-web`（crates/web） | Axum API、管理 UI 托管、Excel 导入导出 | hmi-io-db、hmi-io-monitor、hmi-io-plugin、hmi-io-point |
-| `hmi-io-backend`（crates/bin） | main.rs 组装与启动 | 以上全部主机 crate |
+| crate（目录）                      | 内容                                                           | 内部路径依赖                                               |
+| ---------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------- |
+| `hmi-io-db`（crates/db）           | Repo、schema                                                   | —                                                          |
+| `hmi-io-config`（crates/config）   | AppConfig、ServerConfig、PointMapping、配置迁移                | hmi-io-db                                                  |
+| `hmi-io-point`（crates/point）     | PointManager、PointValue、WsDataMessage、WsConfigChangeMessage | hmi-io-config                                              |
+| `hmi-io-monitor`（crates/monitor） | MonitorCollector、监控类型                                     | hmi-io-point                                               |
+| `hmi-io-plugin`（crates/plugin）   | host、interface、registry（WASM 宿主）                         | hmi-io-config、hmi-io-monitor、hmi-io-point                |
+| `hmi-io-bridge`（crates/bridge）   | Bridge（插件回调 → 点位聚合/广播）                             | hmi-io-point                                               |
+| `hmi-io-server`（crates/server）   | WebSocket 服务                                                 | hmi-io-config、hmi-io-monitor、hmi-io-plugin、hmi-io-point |
+| `hmi-io-web`（crates/web）         | Axum API、管理 UI 托管、Excel 导入导出                         | hmi-io-db、hmi-io-monitor、hmi-io-plugin、hmi-io-point     |
+| `hmi-io-backend`（crates/bin）     | main.rs 组装与启动                                             | 以上全部主机 crate                                         |
 
 依赖图（内部路径依赖，无环）：
 

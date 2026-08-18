@@ -13,6 +13,7 @@
 ## Task 1: Add `point_key` helper
 
 **Files:**
+
 - Modify: `io-backend/crates/point/src/types.rs` (add function + test module at end)
 - Modify: `io-backend/crates/point/src/lib.rs` (add re-export)
 
@@ -89,6 +90,7 @@ git commit -m "feat: add point_key helper for plugin-scoped HMI variables"
 ## Task 2: Key `PointManager` by composite point key
 
 **Files:**
+
 - Modify: `io-backend/crates/point/src/manager.rs`
 
 - [ ] **Step 1: Write the failing tests**
@@ -204,6 +206,7 @@ git commit -m "fix: key PointManager by plugin instance and variable name"
 ## Task 3: Tag plugin point values with the composite id
 
 **Files:**
+
 - Modify: `io-backend/crates/plugin/src/host.rs`
 
 - [ ] **Step 1: Write the failing test**
@@ -299,6 +302,7 @@ git commit -m "fix: tag plugin point values with composite hmi id"
 ## Task 4: Route control writes to the exact plugin instance
 
 **Files:**
+
 - Modify: `io-backend/crates/plugin/src/registry.rs`
 
 - [ ] **Step 1: Write the failing tests**
@@ -460,6 +464,7 @@ git commit -m "fix: route control writes to exact plugin instance"
 ## Task 5: Reject duplicate plugin instance names at startup
 
 **Files:**
+
 - Modify: `io-backend/crates/config/src/lib.rs`
 - Modify: `io-backend/crates/bin/src/main.rs`
 
@@ -612,6 +617,7 @@ git commit -m "fix: reject duplicate plugin instance names on startup"
 ## Task 6: Include plugin name in point rows
 
 **Files:**
+
 - Modify: `io-backend/crates/db/src/repo.rs`
 
 - [ ] **Step 1: Write the failing test**
@@ -726,6 +732,7 @@ git commit -m "feat: include plugin name in point rows"
 ## Task 7: Expose `hmi_id` and filter by composite key in the points API
 
 **Files:**
+
 - Modify: `io-backend/crates/web/Cargo.toml` (dev-dependency)
 - Modify: `io-backend/crates/web/src/api.rs`
 
@@ -940,6 +947,7 @@ git commit -m "feat: expose hmi_id in points api"
 ## Task 8: Import per-instance variables in the HMI without dedup
 
 **Files:**
+
 - Modify: `src/core/io/DataBridge.ts`
 
 Note: the repo has no frontend test runner (see AGENTS.md); verification for this task is `npm run build` plus the manual E2E in Task 9.

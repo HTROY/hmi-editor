@@ -112,6 +112,7 @@ Expected: `Finished` with no errors. If this fails, stop and fix the baseline fi
 This task keeps everything outside the host compilable on its own (each moved crate still has its own workspace/lockfile); the root workspace conversion happens in Task 3.
 
 **Files:**
+
 - Move: `io-backend/plugins-src/shared/{iec104-core,ua-core}` → `io-backend/crates/shared/`
 - Move: `io-backend/plugins-src/{modbus-tcp,opc-ua,iec104}` → `io-backend/crates/plugins/`
 - Move: `io-backend/plugins-src/config.yaml` → `io-backend/crates/plugins/config.yaml`
@@ -254,6 +255,7 @@ This is the core task. Complete all steps before running the final build; the tr
 ### 3.1 Create `hmi-io-db`
 
 **Files:**
+
 - Move: `io-backend/src/db` → `io-backend/crates/db`
 - Add: `io-backend/crates/db/Cargo.toml`
 
@@ -286,6 +288,7 @@ anyhow.workspace = true
 ### 3.2 Create `hmi-io-config`
 
 **Files:**
+
 - Move: `io-backend/src/config.rs` → `io-backend/crates/config/src/lib.rs`
 - Add: `io-backend/crates/config/Cargo.toml`
 
@@ -330,6 +333,7 @@ log.workspace = true
 ### 3.3 Create `hmi-io-point`
 
 **Files:**
+
 - Move: `io-backend/src/point` → `io-backend/crates/point`
 - Add: `io-backend/crates/point/Cargo.toml`
 
@@ -375,6 +379,7 @@ log.workspace = true
 ### 3.4 Create `hmi-io-monitor`
 
 **Files:**
+
 - Move: `io-backend/src/monitor` → `io-backend/crates/monitor`
 - Add: `io-backend/crates/monitor/Cargo.toml`
 
@@ -419,6 +424,7 @@ serde_json.workspace = true
 ### 3.5 Create `hmi-io-plugin`
 
 **Files:**
+
 - Move: `io-backend/src/plugin` → `io-backend/crates/plugin`
 - Add: `io-backend/crates/plugin/Cargo.toml`
 
@@ -502,6 +508,7 @@ serde_json.workspace = true
 ### 3.6 Create `hmi-io-bridge`
 
 **Files:**
+
 - Move: `io-backend/src/bridge` → `io-backend/crates/bridge`
 - Add: `io-backend/crates/bridge/Cargo.toml`
 
@@ -547,6 +554,7 @@ log.workspace = true
 ### 3.7 Create `hmi-io-server`
 
 **Files:**
+
 - Move: `io-backend/src/server` → `io-backend/crates/server`
 - Add: `io-backend/crates/server/Cargo.toml`
 
@@ -604,6 +612,7 @@ serde_json.workspace = true
 ### 3.8 Create `hmi-io-web`
 
 **Files:**
+
 - Move: `io-backend/src/web` → `io-backend/crates/web`
 - Add: `io-backend/crates/web/Cargo.toml`
 
@@ -684,6 +693,7 @@ log.workspace = true
 ### 3.9 Create `hmi-io-backend` (binary)
 
 **Files:**
+
 - Move: `io-backend/src/main.rs` → `io-backend/crates/bin/src/main.rs`
 - Add: `io-backend/crates/bin/Cargo.toml`
 
@@ -1056,6 +1066,7 @@ git commit -m "refactor: split backend into domain crates under a unified worksp
 ## Task 4: Update build scripts
 
 **Files:**
+
 - Modify: `scripts/build.ps1`
 - Verify: `scripts/dev.ps1` (no change expected)
 
@@ -1172,6 +1183,7 @@ git commit -m "build: build wasm plugins from unified workspace in build.ps1"
 ## Task 5: Update documentation
 
 **Files:**
+
 - Modify: `io-backend/README.md`
 - Modify: `AGENTS.md`
 
@@ -1255,63 +1267,63 @@ to:
 Replace the block from `├── Cargo.toml               # 后端依赖` through the end of the `plugins-src/` listing:
 
 ```markdown
-├── Cargo.toml               # 后端依赖
-├── src/                     # Rust 后端源码
-│   ├── main.rs
-│   ├── config.rs
-│   ├── plugin/              # WASM 插件宿主（wasmtime component）
-│   │   ├── host.rs          # wasmtime 引擎 + events 导入实现
-│   │   ├── interface.rs     # bindgen! 契约生成
-│   │   └── registry.rs      # 插件生命周期管理
-│   ├── point/               # 点位管理
-│   │   ├── types.rs
-│   │   └── manager.rs
-│   ├── monitor/             # 监控 API（:8081）
-│   ├── bridge/              # 桥接层
-│   │   └── bridge.rs
-│   └── server/              # WebSocket 服务
-│       └── ws.rs
-├── plugins/                 # .wasm 编译产物
-│   ├── modbus_tcp.wasm
-│   ├── opc_ua.wasm
-│   └── iec104.wasm
-└── plugins-src/             # 插件源码
-    ├── modbus-tcp/
-    ├── opc-ua/
-    └── iec104/
+├── Cargo.toml # 后端依赖
+├── src/ # Rust 后端源码
+│ ├── main.rs
+│ ├── config.rs
+│ ├── plugin/ # WASM 插件宿主（wasmtime component）
+│ │ ├── host.rs # wasmtime 引擎 + events 导入实现
+│ │ ├── interface.rs # bindgen! 契约生成
+│ │ └── registry.rs # 插件生命周期管理
+│ ├── point/ # 点位管理
+│ │ ├── types.rs
+│ │ └── manager.rs
+│ ├── monitor/ # 监控 API（:8081）
+│ ├── bridge/ # 桥接层
+│ │ └── bridge.rs
+│ └── server/ # WebSocket 服务
+│ └── ws.rs
+├── plugins/ # .wasm 编译产物
+│ ├── modbus_tcp.wasm
+│ ├── opc_ua.wasm
+│ └── iec104.wasm
+└── plugins-src/ # 插件源码
+├── modbus-tcp/
+├── opc-ua/
+└── iec104/
 ```
 
 with:
 
 ```markdown
-├── Cargo.toml               # Cargo workspace 根
-├── crates/                  # 全部 Rust crate
-│   ├── bin/                 # hmi-io-backend（可执行文件）
-│   ├── config/              # hmi-io-config
-│   ├── db/                  # hmi-io-db
-│   ├── point/               # hmi-io-point
-│   ├── monitor/             # hmi-io-monitor
-│   ├── plugin/              # hmi-io-plugin（WASM 插件宿主）
-│   │   ├── host.rs          # wasmtime 引擎 + events 导入实现
-│   │   ├── interface.rs     # bindgen! 契约生成
-│   │   └── registry.rs      # 插件生命周期管理
-│   ├── bridge/              # hmi-io-bridge
-│   ├── server/              # hmi-io-server（WebSocket 服务）
-│   ├── web/                 # hmi-io-web（管理 API + UI 托管）
-│   ├── plugins/             # 插件源码（WASM 组件）
-│   │   ├── modbus-tcp/
-│   │   ├── opc-ua/
-│   │   └── iec104/
-│   ├── shared/              # 共享协议 codec
-│   │   ├── iec104-core/
-│   │   └── ua-core/
-│   └── test-servers/        # 本地测试服务器
-│       ├── iec104-slave/
-│       └── opcua-server/
-├── plugins/                 # .wasm 编译产物
-│   ├── modbus_tcp.wasm
-│   ├── opc_ua.wasm
-│   └── iec104.wasm
+├── Cargo.toml # Cargo workspace 根
+├── crates/ # 全部 Rust crate
+│ ├── bin/ # hmi-io-backend（可执行文件）
+│ ├── config/ # hmi-io-config
+│ ├── db/ # hmi-io-db
+│ ├── point/ # hmi-io-point
+│ ├── monitor/ # hmi-io-monitor
+│ ├── plugin/ # hmi-io-plugin（WASM 插件宿主）
+│ │ ├── host.rs # wasmtime 引擎 + events 导入实现
+│ │ ├── interface.rs # bindgen! 契约生成
+│ │ └── registry.rs # 插件生命周期管理
+│ ├── bridge/ # hmi-io-bridge
+│ ├── server/ # hmi-io-server（WebSocket 服务）
+│ ├── web/ # hmi-io-web（管理 API + UI 托管）
+│ ├── plugins/ # 插件源码（WASM 组件）
+│ │ ├── modbus-tcp/
+│ │ ├── opc-ua/
+│ │ └── iec104/
+│ ├── shared/ # 共享协议 codec
+│ │ ├── iec104-core/
+│ │ └── ua-core/
+│ └── test-servers/ # 本地测试服务器
+│ ├── iec104-slave/
+│ └── opcua-server/
+├── plugins/ # .wasm 编译产物
+│ ├── modbus_tcp.wasm
+│ ├── opc_ua.wasm
+│ └── iec104.wasm
 ```
 
 - [ ] **Step 4: Update `AGENTS.md` — project structure paragraph**

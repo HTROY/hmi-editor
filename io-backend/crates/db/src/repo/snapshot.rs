@@ -1,4 +1,4 @@
-﻿//! Config snapshot application (redundancy peer sync).
+//! Config snapshot application (redundancy peer sync).
 
 use super::{db_err, ConfigSnapshot, Repo};
 use rusqlite::params;

@@ -152,11 +152,6 @@ Backend (from repo root unless noted):
 - Redundancy uses `redundancy:` block: `enabled / node_id / role / peer_url / peer_ws_port / heartbeat_interval_ms / failover_threshold / failback_delay_ms / full_snapshot_interval_ms / plugin_unhealthy_threshold / plugin_promotion_cooldown_ms / instance_failover_threshold / instance_failback_enabled / instance_failback_delay_ms / instance_switch_cooldown_ms`；`server.web_port` 控制管理端口。
 - Never commit `hmi_io.db` (local SQLite). Load `.wasm` plugins only from `plugins/`; treat plugin binaries as untrusted code.
 
-## Codex 多代理操作
-
-调用code_review skills时不启动子代理
-
-
 ## Agent skills
 
 ### Issue tracker

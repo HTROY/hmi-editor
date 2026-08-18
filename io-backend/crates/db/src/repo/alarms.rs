@@ -1,4 +1,4 @@
-﻿//! Alarm / SOE persistence.
+//! Alarm / SOE persistence.
 
 use super::{db_err, AlarmOccurrenceRow, AlarmRuleRow, AlarmStreamEventRow, Repo, SoeRow};
 use rusqlite::params;

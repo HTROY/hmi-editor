@@ -65,7 +65,10 @@ export default function RedundancyConfig() {
       });
     });
     const t = window.setInterval(() => {
-      api.getRedundancyStatus().then(setStatus).catch(() => {});
+      api
+        .getRedundancyStatus()
+        .then(setStatus)
+        .catch(() => {});
     }, 2000);
     return () => window.clearInterval(t);
   }, [form]);
@@ -133,7 +136,11 @@ export default function RedundancyConfig() {
 
       <Card size="small" title="冗余配置">
         <Form form={form} layout="vertical" style={{ maxWidth: 720 }}>
-          <Form.Item name="enabled" label="启用主备冗余" valuePropName="checked">
+          <Form.Item
+            name="enabled"
+            label="启用主备冗余"
+            valuePropName="checked"
+          >
             <Switch checkedChildren="开" unCheckedChildren="关" />
           </Form.Item>
           <Space style={{ display: "flex" }} size={12} align="start">
@@ -187,10 +194,7 @@ export default function RedundancyConfig() {
               <InputNumber style={{ width: "100%" }} min={1000} step={1000} />
             </Form.Item>
           </Space>
-          <Form.Item
-            name="full_snapshot_interval_ms"
-            label="全量快照间隔 (ms)"
-          >
+          <Form.Item name="full_snapshot_interval_ms" label="全量快照间隔 (ms)">
             <InputNumber style={{ width: "100%" }} min={1000} step={1000} />
           </Form.Item>
           <Form.Item

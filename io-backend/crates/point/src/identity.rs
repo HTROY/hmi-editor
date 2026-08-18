@@ -56,9 +56,10 @@ impl GroupRouting {
                 continue;
             }
             for pt in &inst.points {
-                routing
-                    .instance_to_logical
-                    .insert(point_key(&inst.name, &pt.id), logical_key(group, &inst.name, &pt.id));
+                routing.instance_to_logical.insert(
+                    point_key(&inst.name, &pt.id),
+                    logical_key(group, &inst.name, &pt.id),
+                );
             }
             if inst.redundancy_role == "primary" {
                 routing
@@ -126,12 +127,7 @@ mod tests {
         }
     }
 
-    fn instance(
-        name: &str,
-        group: &str,
-        role: &str,
-        priority: u32,
-    ) -> PluginInstanceConfig {
+    fn instance(name: &str, group: &str, role: &str, priority: u32) -> PluginInstanceConfig {
         PluginInstanceConfig {
             name: name.into(),
             wasm_file: "modbus.wasm".into(),
@@ -145,19 +141,13 @@ mod tests {
 
     #[test]
     fn logical_key_uses_group_prefix_for_grouped_points() {
-        assert_eq!(
-            logical_key("mb-link", "mb1", "P1"),
-            "mb-link:P1"
-        );
+        assert_eq!(logical_key("mb-link", "mb1", "P1"), "mb-link:P1");
         assert_eq!(logical_key("", "mb1", "P1"), "mb1:P1");
     }
 
     #[test]
     fn logical_key_trims_group_whitespace() {
-        assert_eq!(
-            logical_key("  mb-link  ", "mb1", "P1"),
-            "mb-link:P1"
-        );
+        assert_eq!(logical_key("  mb-link  ", "mb1", "P1"), "mb-link:P1");
         assert_eq!(logical_key("   ", "mb1", "P1"), "mb1:P1");
     }
 

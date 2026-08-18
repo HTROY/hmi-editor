@@ -1,4 +1,4 @@
-﻿use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 /// Runtime value of an I/O point — mirrors the frontend VariableValue
 #[derive(Debug, Clone, Serialize, Deserialize)]

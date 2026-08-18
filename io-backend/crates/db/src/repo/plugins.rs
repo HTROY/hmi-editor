@@ -1,4 +1,4 @@
-﻿//! Plugin CRUD.
+//! Plugin CRUD.
 
 use super::{db_err, PluginRow, Repo};
 use rusqlite::params;

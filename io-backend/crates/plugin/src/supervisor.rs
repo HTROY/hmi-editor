@@ -119,7 +119,11 @@ mod tests {
 
     #[test]
     fn next_member_follows_order_and_wraps() {
-        let members = vec![member("p", "primary", 0), member("b1", "backup", 1), member("b2", "backup", 2)];
+        let members = vec![
+            member("p", "primary", 0),
+            member("b1", "backup", 1),
+            member("b2", "backup", 2),
+        ];
         assert_eq!(next_member(&members, "p"), Some("b1".to_string()));
         assert_eq!(next_member(&members, "b1"), Some("b2".to_string()));
         assert_eq!(next_member(&members, "b2"), Some("p".to_string()));

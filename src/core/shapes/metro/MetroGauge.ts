@@ -133,7 +133,7 @@ export class MetroGauge extends ShapeBase {
         ctx.fillText(
           String(tickVal),
           Math.cos(angle) * labelR,
-          Math.sin(angle) * labelR,
+          Math.sin(angle) * labelR
         );
       }
     }

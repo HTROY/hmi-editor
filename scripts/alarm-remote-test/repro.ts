@@ -11,7 +11,10 @@ interface MockWs {
   }) => () => void;
 }
 
-function makeMockWs(): { ws: MockWs; emit: (m: { type: string; data?: any }) => void } {
+function makeMockWs(): {
+  ws: MockWs;
+  emit: (m: { type: string; data?: any }) => void;
+} {
   const handlers = new Set<(m: { type: string; data?: any }) => void>();
   const ws: MockWs = {
     onAlarmMessage: (h) => {

@@ -69,8 +69,14 @@ describe("图元能力表（切片 1 骨架）", () => {
       endPoint: { x: 3, y: 4 },
     });
     const lp = shapeCapabilities.line.points!;
-    expect(lp.get(line)).toEqual([{ x: 1, y: 2 }, { x: 3, y: 4 }]);
-    lp.set(line, [{ x: 5, y: 6 }, { x: 7, y: 8 }]);
+    expect(lp.get(line)).toEqual([
+      { x: 1, y: 2 },
+      { x: 3, y: 4 },
+    ]);
+    lp.set(line, [
+      { x: 5, y: 6 },
+      { x: 7, y: 8 },
+    ]);
     const ll = line as unknown as { startPoint: { x: number; y: number } };
     expect(ll.startPoint).toEqual({ x: 5, y: 6 });
   });
@@ -79,7 +85,17 @@ describe("图元能力表（切片 1 骨架）", () => {
     for (const t of ALL_TYPES) {
       const bp = shapeCapabilities[t].bindableProps;
       expect(bp).toBeDefined();
-      for (const base of ["x", "y", "width", "height", "rotation", "opacity", "visible", "stroke", "strokeWidth"]) {
+      for (const base of [
+        "x",
+        "y",
+        "width",
+        "height",
+        "rotation",
+        "opacity",
+        "visible",
+        "stroke",
+        "strokeWidth",
+      ]) {
         expect(bp![base]).toBeDefined();
       }
     }
@@ -92,11 +108,17 @@ describe("图元能力表（切片 1 骨架）", () => {
       expect(shapeCapabilities[t].bindableProps!.fill).toBeUndefined();
     }
     // 逐类型附加
-    expect(shapeCapabilities.rect.bindableProps!.cornerRadius.kind).toBe("number");
+    expect(shapeCapabilities.rect.bindableProps!.cornerRadius.kind).toBe(
+      "number"
+    );
     expect(shapeCapabilities.text.bindableProps!.text.kind).toBe("string");
     expect(shapeCapabilities.text.bindableProps!.fontSize.kind).toBe("number");
-    expect(shapeCapabilities["metro-gauge"].bindableProps!.value.kind).toBe("number");
-    expect(shapeCapabilities["metro-fan"].bindableProps!.speedPercent.kind).toBe("number");
+    expect(shapeCapabilities["metro-gauge"].bindableProps!.value.kind).toBe(
+      "number"
+    );
+    expect(
+      shapeCapabilities["metro-fan"].bindableProps!.speedPercent.kind
+    ).toBe("number");
     // 类型化读写往返
     const rect = createShape("rect", { x: 1, y: 2 });
     const xp = shapeCapabilities.rect.bindableProps!.x;
@@ -106,13 +128,19 @@ describe("图元能力表（切片 1 骨架）", () => {
   });
 
   it("逐类型动画推进（切片 5）", () => {
-    expect(shapeCapabilities["metro-fan"].advanceAnimation).toBeTypeOf("function");
+    expect(shapeCapabilities["metro-fan"].advanceAnimation).toBeTypeOf(
+      "function"
+    );
     expect(shapeCapabilities.rect.advanceAnimation).toBeUndefined();
     // 运行中的风机推进一帧返回 true；停止的风机返回 false（不触发重绘）
     const fan = createShape("metro-fan", { running: true, speedPercent: 50 });
-    expect(shapeCapabilities["metro-fan"].advanceAnimation!(fan, 16)).toBe(true);
+    expect(shapeCapabilities["metro-fan"].advanceAnimation!(fan, 16)).toBe(
+      true
+    );
     const stopped = createShape("metro-fan", { running: false });
-    expect(shapeCapabilities["metro-fan"].advanceAnimation!(stopped, 16)).toBe(false);
+    expect(shapeCapabilities["metro-fan"].advanceAnimation!(stopped, 16)).toBe(
+      false
+    );
   });
 
   it("检查器编辑描述按类型登记（切片 6）", () => {
@@ -125,17 +153,35 @@ describe("图元能力表（切片 1 骨架）", () => {
     expect(keysOf("image")).toEqual(["src"]);
     expect(keysOf("metro-breaker")).toEqual(["breakerStatus", "showLabel"]);
     expect(keysOf("metro-busbar")).toEqual(["voltageLevel", "energized"]);
-    expect(keysOf("metro-fan")).toEqual(["running", "speedPercent", "bladeColor"]);
-    expect(keysOf("metro-signal")).toEqual(["signalColor", "blinking", "label", "labelPosition"]);
+    expect(keysOf("metro-fan")).toEqual([
+      "running",
+      "speedPercent",
+      "bladeColor",
+    ]);
+    expect(keysOf("metro-signal")).toEqual([
+      "signalColor",
+      "blinking",
+      "label",
+      "labelPosition",
+    ]);
     expect(keysOf("metro-gauge")).toEqual(["value", "min", "max", "unit"]);
-    expect(keysOf("metro-transformer")).toEqual(["primaryVoltage", "secondaryVoltage", "ratedPower", "energized"]);
+    expect(keysOf("metro-transformer")).toEqual([
+      "primaryVoltage",
+      "secondaryVoltage",
+      "ratedPower",
+      "energized",
+    ]);
     for (const t of ["line", "polyline", "polygon", "circle"] as ShapeType[]) {
       expect(shapeCapabilities[t].editor).toBeUndefined();
     }
     // 风机联动规则住在条目里
-    const fanRunning = shapeCapabilities["metro-fan"].editor!.find((d) => d.key === "running")!;
+    const fanRunning = shapeCapabilities["metro-fan"].editor!.find(
+      (d) => d.key === "running"
+    )!;
     const written: Record<string, unknown> = {};
-    fanRunning.sideEffects!(createShape("metro-fan", {}), false, (k, v) => { written[k] = v; });
+    fanRunning.sideEffects!(createShape("metro-fan", {}), false, (k, v) => {
+      written[k] = v;
+    });
     expect(written.speedPercent).toBe(0);
   });
 
@@ -147,8 +193,6 @@ describe("图元能力表（切片 1 骨架）", () => {
   });
 
   it("未知类型运行时抛错（防御 as 强转的脏数据）", () => {
-    expect(() => capabilityOf("warp-drive" as ShapeType)).toThrow(
-      /能力条目/
-    );
+    expect(() => capabilityOf("warp-drive" as ShapeType)).toThrow(/能力条目/);
   });
 });

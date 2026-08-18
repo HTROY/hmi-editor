@@ -19,7 +19,7 @@ export function formatTime(epochMs: number): string {
   if (!epochMs) return "-";
   const d = new Date(epochMs);
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(
-    d.getSeconds(),
+    d.getSeconds()
   ).padStart(2, "0")}`;
 }
 

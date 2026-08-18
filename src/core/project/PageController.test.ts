@@ -248,10 +248,19 @@ describe("PageController 页面加载路径", () => {
   });
 
   it("importShapes：整体替换活动页场景、重置历史、重建索引并适配视口", () => {
-    const { controller, projectManager, scene, sceneEditor, bindingEngine, events } =
-      make();
+    const {
+      controller,
+      projectManager,
+      scene,
+      sceneEditor,
+      bindingEngine,
+      events,
+    } = make();
     const p = projectManager.createPage("P").meta;
-    controller.loadProject({ ...projectData(), pages: [{ meta: p, shapes: [] }] });
+    controller.loadProject({
+      ...projectData(),
+      pages: [{ meta: p, shapes: [] }],
+    });
     // 先有内容 + 历史
     sceneEditor.addShape({ type: "rect", id: "old" });
     expect(scene.count).toBe(1);

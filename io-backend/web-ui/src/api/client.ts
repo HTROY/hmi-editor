@@ -21,7 +21,7 @@ import type {
 export class ApiError extends Error {
   constructor(
     message: string,
-    public status: number,
+    public status: number
   ) {
     super(message);
   }
@@ -30,7 +30,7 @@ export class ApiError extends Error {
 async function request<T>(
   method: string,
   path: string,
-  body?: unknown,
+  body?: unknown
 ): Promise<T> {
   const opts: RequestInit = { method, headers: {} };
   if (body !== undefined) {
@@ -77,7 +77,7 @@ export const api = {
       redundancy_group: string;
       redundancy_role: string;
       priority: number;
-    },
+    }
   ) => request<void>("PUT", `/api/plugins/${id}`, p),
   deletePlugin: (id: number) => request<void>("DELETE", `/api/plugins/${id}`),
 
@@ -85,7 +85,7 @@ export const api = {
   listPoints: (pluginId: number, includeBackup = false) =>
     request<PointRow[]>(
       "GET",
-      `/api/points?plugin_id=${pluginId}&include_backup=${includeBackup}`,
+      `/api/points?plugin_id=${pluginId}&include_backup=${includeBackup}`
     ),
   listAllPoints: (includeBackup = true) =>
     request<PointRow[]>("GET", `/api/points?include_backup=${includeBackup}`),
@@ -101,12 +101,12 @@ export const api = {
   monitorPluginPoints: (name: string) =>
     request<LivePointInfo[]>(
       "GET",
-      `/api/monitor/plugins/${encodeURIComponent(name)}/points`,
+      `/api/monitor/plugins/${encodeURIComponent(name)}/points`
     ),
   monitorPluginPackets: (name: string, limit = 100) =>
     request<PacketLogEntry[]>(
       "GET",
-      `/api/monitor/plugins/${encodeURIComponent(name)}/packets?limit=${limit}`,
+      `/api/monitor/plugins/${encodeURIComponent(name)}/packets?limit=${limit}`
     ),
   monitorHistory: (limit = 300) =>
     request<MonitorHistory>("GET", `/api/monitor/history?limit=${limit}`),
@@ -130,11 +130,7 @@ export const api = {
   createAlarmRule: (r: AlarmRuleUpsert) =>
     request<AlarmRule>("POST", "/api/alarm/rules", r),
   updateAlarmRule: (id: string, r: AlarmRuleUpsert) =>
-    request<AlarmRule>(
-      "PUT",
-      `/api/alarm/rules/${encodeURIComponent(id)}`,
-      r,
-    ),
+    request<AlarmRule>("PUT", `/api/alarm/rules/${encodeURIComponent(id)}`, r),
   deleteAlarmRule: (id: string) =>
     request<void>("DELETE", `/api/alarm/rules/${encodeURIComponent(id)}`),
 
@@ -151,7 +147,7 @@ export const api = {
   alarmOccurrenceEvents: (id: string) =>
     request<AlarmStreamEvent[]>(
       "GET",
-      `/api/alarm/occurrences/${encodeURIComponent(id)}/events`,
+      `/api/alarm/occurrences/${encodeURIComponent(id)}/events`
     ),
   soeQuery: (params: {
     page?: number;

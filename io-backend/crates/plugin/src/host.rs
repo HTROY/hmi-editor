@@ -103,9 +103,9 @@ impl events::HostWithStore<HostState> for HostState {
                 let qs = if quality.is_empty() { "good" } else { &quality };
                 let raw = PointValue::new(&name, value, qs, timestamp);
                 s.monitor.update_point_value(&s.plugin_name, &raw);
-                let _ = s
-                    .point_tx
-                    .send(outgoing_point(&s.plugin_name, &name, value, qs, timestamp));
+                let _ =
+                    s.point_tx
+                        .send(outgoing_point(&s.plugin_name, &name, value, qs, timestamp));
             });
         }
     }

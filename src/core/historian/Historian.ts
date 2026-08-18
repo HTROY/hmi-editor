@@ -1,4 +1,4 @@
-﻿import { VariableManager } from "../variables/VariableManager";
+import { VariableManager } from "../variables/VariableManager";
 import type { HistoryPoint, TrendConfig } from "./types";
 
 // ============================================================
@@ -84,11 +84,11 @@ export class Historian {
     variableId: string,
     from: number,
     to: number,
-    maxPoints = 500,
+    maxPoints = 500
   ): HistoryPoint[] {
     let points = this.data.filter(
       (p) =>
-        p.variableId === variableId && p.timestamp >= from && p.timestamp <= to,
+        p.variableId === variableId && p.timestamp >= from && p.timestamp <= to
     );
     // 降采样
     if (points.length > maxPoints) {

@@ -1,6 +1,6 @@
-use hmi_io_config::{AppConfig, PointMapping};
 use crate::identity::{logical_key, GroupRouting};
 use crate::types::PointValue;
+use hmi_io_config::{AppConfig, PointMapping};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -131,8 +131,8 @@ fn apply_scaling(raw: PointValue, scale: f64, offset: f64) -> PointValue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hmi_io_config::PluginInstance as PluginInstanceConfig;
     use crate::types::point_key;
+    use hmi_io_config::PluginInstance as PluginInstanceConfig;
 
     fn make_mapping(id: &str) -> PointMapping {
         PointMapping {

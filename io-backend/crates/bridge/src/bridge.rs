@@ -4,11 +4,11 @@
 //! Receives PointValues from plugins, filters them via PointManager,
 //! and publishes changed values to all connected WebSocket clients.
 
+use hmi_io_alarm::engine::AlarmEngine;
 use hmi_io_point::manager::PointManager;
 use hmi_io_point::types::{PointValue, WsDataMessage};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{broadcast, mpsc};
-use hmi_io_alarm::engine::AlarmEngine;
 
 pub struct Bridge {
     point_rx: mpsc::UnboundedReceiver<PointValue>,

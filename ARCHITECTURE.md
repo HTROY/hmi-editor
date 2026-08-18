@@ -103,10 +103,10 @@ io-backend/                       # Rust/WASM I/O 后端（Cargo workspace）
 
 所有图元继承 `ShapeBase`，实现 `render(ctx)`、`hitTest(point)`、`clone()`/`fromJSON()`/`toJSON()`。工厂 `createShape(type, props)` 按类型创建实例，当前支持 15 种：
 
-| 类别 | 类型 |
-| --- | --- |
-| 基础图元 | rect、circle、line、text、polyline、polygon、path |
-| 容器/资源 | group、image |
+| 类别         | 类型                                                                                 |
+| ------------ | ------------------------------------------------------------------------------------ |
+| 基础图元     | rect、circle、line、text、polyline、polygon、path                                    |
+| 容器/资源    | group、image                                                                         |
 | 轨道交通专用 | metro-breaker、metro-busbar、metro-fan、metro-signal、metro-gauge、metro-transformer |
 
 关键机制：
@@ -132,13 +132,13 @@ io-backend/                       # Rust/WASM I/O 后端（Cargo workspace）
 
 **绑定引擎**：订阅所有变量变化 → 反向索引（`variableId → [{shapeId, binding}]`）→ 值映射 → 写图元属性 → 触发重绘。映射策略：
 
-| 映射 | 行为 |
-| --- | --- |
-| `direct` | 原值直传 |
-| `enum` | 值 → 字符串查表 |
-| `range` | 线性插值（如 0–2000A → 0–360°） |
-| `stateColor` | 数值 → 颜色 |
-| `bitmask` | 按位解析多状态 |
+| 映射         | 行为                            |
+| ------------ | ------------------------------- |
+| `direct`     | 原值直传                        |
+| `enum`       | 值 → 字符串查表                 |
+| `range`      | 线性插值（如 0–2000A → 0–360°） |
+| `stateColor` | 数值 → 颜色                     |
+| `bitmask`    | 按位解析多状态                  |
 
 数值型绑定属性支持平滑过渡（默认 300ms ease-out）。
 
@@ -154,17 +154,17 @@ io-backend/                       # Rust/WASM I/O 后端（Cargo workspace）
 
 WebSocket 消息协议（与后端对齐）：
 
-| 方向 | type | 说明 |
-| --- | --- | --- |
-| 服务端 → 客户端 | `snapshot` | 连接后全量点值 |
-| 服务端 → 客户端 | `data` | 批量点值变化（默认 100ms 一批） |
-| 服务端 → 客户端 | `config_change` | 点表在管理端变更，前端刷新变量列表 |
-| 服务端 → 客户端 | `alarm_rules` / `alarm_snapshot` | 报警规则与活跃报警初始态 |
-| 服务端 → 客户端 | `alarm_update` / `soe` | 报警事件与 SOE 增量 |
-| 服务端 → 客户端 | `alarm_rules_changed` | 规则变化通知 |
-| 服务端 → 客户端 | `role` | 冗余降级广播（standby）后服务端断开全部 WS |
-| 客户端 → 服务端 | `subscribe` | 按变量 ID 订阅过滤 |
-| 客户端 → 服务端 | `control` | 控制写点 `{variableId, value}` |
+| 方向            | type                             | 说明                                       |
+| --------------- | -------------------------------- | ------------------------------------------ |
+| 服务端 → 客户端 | `snapshot`                       | 连接后全量点值                             |
+| 服务端 → 客户端 | `data`                           | 批量点值变化（默认 100ms 一批）            |
+| 服务端 → 客户端 | `config_change`                  | 点表在管理端变更，前端刷新变量列表         |
+| 服务端 → 客户端 | `alarm_rules` / `alarm_snapshot` | 报警规则与活跃报警初始态                   |
+| 服务端 → 客户端 | `alarm_update` / `soe`           | 报警事件与 SOE 增量                        |
+| 服务端 → 客户端 | `alarm_rules_changed`            | 规则变化通知                               |
+| 服务端 → 客户端 | `role`                           | 冗余降级广播（standby）后服务端断开全部 WS |
+| 客户端 → 服务端 | `subscribe`                      | 按变量 ID 订阅过滤                         |
+| 客户端 → 服务端 | `control`                        | 控制写点 `{variableId, value}`             |
 
 `DataBridge` 维护内部变量 ID ↔ 后端点 ID 的映射，并把最近收到的点值缓存用于导入点表后重放，避免快照早于变量定义到达导致丢值。
 
@@ -196,23 +196,23 @@ WebSocket 消息协议（与后端对齐）：
 
 ### 4.1 Crate 职责
 
-| Crate | 职责 |
-| --- | --- |
-| `bin` | 装配层：读配置/迁移 DB、构造全部组件、启动 WS/Web 服务与后台任务 |
-| `config` | 配置模型（server/plugins/alarm/redundancy）与校验 |
-| `db` | SQLite schema、幂等迁移、Repo 数据访问 |
-| `point` | PointManager（点位缓存/缩放/组门控）+ 节点级冗余引擎 |
-| `plugin` | wasmtime 组件宿主（host.rs）、契约生成（interface.rs）、插件注册表与实例监督器（registry.rs） |
-| `bridge` | 插件点流 → PointManager → 批量 WS 广播 + 报警引擎喂入 |
-| `monitor` | 插件状态、点值、报文追踪与 1s 趋势采样 |
-| `server` | WebSocket 服务（快照/订阅/过滤/控制/降级断开） |
-| `web` | REST API、认证路由、工程路由、SPA 托管 |
-| `alarm` | 报警/SOE 状态机、规则管理、持久化广播任务 |
-| `auth` | JWT、Argon2id、角色权限矩阵 |
-| `project` | `.hmi.zip` 磁盘存储、版本乐观锁、审计 |
-| `plugins/*` | Modbus TCP / OPC UA / IEC 104 插件 guest |
-| `shared/*` | 共享协议编解码（iec104-core、ua-core） |
-| `test-servers/*` | IEC 104 从站与 OPC UA 服务器（E2E 用） |
+| Crate            | 职责                                                                                          |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| `bin`            | 装配层：读配置/迁移 DB、构造全部组件、启动 WS/Web 服务与后台任务                              |
+| `config`         | 配置模型（server/plugins/alarm/redundancy）与校验                                             |
+| `db`             | SQLite schema、幂等迁移、Repo 数据访问                                                        |
+| `point`          | PointManager（点位缓存/缩放/组门控）+ 节点级冗余引擎                                          |
+| `plugin`         | wasmtime 组件宿主（host.rs）、契约生成（interface.rs）、插件注册表与实例监督器（registry.rs） |
+| `bridge`         | 插件点流 → PointManager → 批量 WS 广播 + 报警引擎喂入                                         |
+| `monitor`        | 插件状态、点值、报文追踪与 1s 趋势采样                                                        |
+| `server`         | WebSocket 服务（快照/订阅/过滤/控制/降级断开）                                                |
+| `web`            | REST API、认证路由、工程路由、SPA 托管                                                        |
+| `alarm`          | 报警/SOE 状态机、规则管理、持久化广播任务                                                     |
+| `auth`           | JWT、Argon2id、角色权限矩阵                                                                   |
+| `project`        | `.hmi.zip` 磁盘存储、版本乐观锁、审计                                                         |
+| `plugins/*`      | Modbus TCP / OPC UA / IEC 104 插件 guest                                                      |
+| `shared/*`       | 共享协议编解码（iec104-core、ua-core）                                                        |
+| `test-servers/*` | IEC 104 从站与 OPC UA 服务器（E2E 用）                                                        |
 
 ### 4.2 启动流程
 
@@ -242,11 +242,11 @@ WebSocket 消息协议（与后端对齐）：
 
 三个协议插件：
 
-| 插件 | 实现 |
-| --- | --- |
-| modbus-tcp | 基于 `modbus` crate v1.1，bool 走线圈、16 位单寄存器、32 位连续双寄存器按 `byte_order` 组字；解码后应用 `scale`/`offset` |
-| opc-ua | 自建 UA TCP 栈（复用 `ua-core`）：HEL/ACK → OPN → CreateSession → ActivateSession（匿名或用户/密码）；每扫描批量 ReadRequest 直到 ReadResponse；控制走 WriteRequest；断开时 CloseSession + CloseSecureChannel |
-| iec104 | 自建 104 栈（复用 `iec104-core`）：connect 发 STARTDT 等 STARTDT_CON（其间回 TESTFR），然后总召唤；`scan-points` 排空缓冲帧并按批回 S 帧，每 120 次重对时 + 总召唤，35s 空闲发 TESTFR，70s 超时断开；命令跟踪 ACT_CON 且 30s 未确认作废 |
+| 插件       | 实现                                                                                                                                                                                                                                    |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| modbus-tcp | 基于 `modbus` crate v1.1，bool 走线圈、16 位单寄存器、32 位连续双寄存器按 `byte_order` 组字；解码后应用 `scale`/`offset`                                                                                                                |
+| opc-ua     | 自建 UA TCP 栈（复用 `ua-core`）：HEL/ACK → OPN → CreateSession → ActivateSession（匿名或用户/密码）；每扫描批量 ReadRequest 直到 ReadResponse；控制走 WriteRequest；断开时 CloseSession + CloseSecureChannel                           |
+| iec104     | 自建 104 栈（复用 `iec104-core`）：connect 发 STARTDT 等 STARTDT_CON（其间回 TESTFR），然后总召唤；`scan-points` 排空缓冲帧并按批回 S 帧，每 120 次重对时 + 总召唤，35s 空闲发 TESTFR，70s 超时断开；命令跟踪 ACT_CON 且 30s 未确认作废 |
 
 ### 4.4 点位数据路径
 
@@ -317,13 +317,13 @@ stateDiagram-v2
 
 SQLite（`hmi_io.db`），主要表：
 
-| 表 | 内容 |
-| --- | --- |
-| `server_config` | 键值配置（端口、目录、保留天数、jwt_secret、config_version 等） |
-| `plugins` / `points` | 插件实例与点位映射（含实例级冗余列） |
-| `alarm_rules` / `alarm_occurrences` / `alarm_stream_events` / `soe_events` | 报警与 SOE |
-| `projects` / `project_audit_log` | 工程元数据与审计 |
-| `users` | 用户（Argon2id 哈希、角色、token_version） |
+| 表                                                                         | 内容                                                            |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `server_config`                                                            | 键值配置（端口、目录、保留天数、jwt_secret、config_version 等） |
+| `plugins` / `points`                                                       | 插件实例与点位映射（含实例级冗余列）                            |
+| `alarm_rules` / `alarm_occurrences` / `alarm_stream_events` / `soe_events` | 报警与 SOE                                                      |
+| `projects` / `project_audit_log`                                           | 工程元数据与审计                                                |
+| `users`                                                                    | 用户（Argon2id 哈希、角色、token_version）                      |
 
 迁移全部幂等（`CREATE TABLE IF NOT EXISTS` + 按 `pragma_table_info` 补列）。
 
@@ -331,15 +331,15 @@ SQLite（`hmi_io.db`），主要表：
 
 后端在 :8081 提供 REST API，并按 SPA fallback 托管 `web-ui/dist`：
 
-| 分组 | 路由 |
-| --- | --- |
-| 插件 | `GET/POST /api/plugins`、`GET/PUT/DELETE /api/plugins/{id}` |
-| 点位 | `GET/POST /api/points`、`PUT/DELETE /api/points/{id}`、Excel 导入导出 `/api/plugins/{id}/import|export`、`GET /api/config/export` |
-| 监控 | `GET /api/monitor/overview`、`/api/monitor/plugins/{name}/status|points|packets`、`/api/monitor/history` |
+| 分组     | 路由                                                                                                                                                                              |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 插件     | `GET/POST /api/plugins`、`GET/PUT/DELETE /api/plugins/{id}`                                                                                                                       |
+| 点位     | `GET/POST /api/points`、`PUT/DELETE /api/points/{id}`、Excel 导入导出 `/api/plugins/{id}/import                                                                                   | export`、`GET /api/config/export` |
+| 监控     | `GET /api/monitor/overview`、`/api/monitor/plugins/{name}/status                                                                                                                  | points                            | packets`、`/api/monitor/history` |
 | 报警/SOE | `/api/alarm/rules` CRUD、`/api/alarm/active`、`/api/alarm/history`、`/api/alarm/occurrences/{id}/events`、`/api/alarm/ack`、`/api/alarm/ack-all`、`/api/alarm/config`、`/api/soe` |
-| 冗余 | `/api/redundancy/config` GET/PUT、`/config/push`、`/heartbeat`、`/sync`、`/snapshot`、`/claim`、`/status`、`/instance-groups` |
-| 认证 | `POST /api/auth/login`、`POST /api/auth/refresh`、`POST /api/auth/change-password` |
-| 工程 | `GET /api/projects`、`GET/PUT/DELETE /api/projects/{id}`（JWT + 角色权限） |
+| 冗余     | `/api/redundancy/config` GET/PUT、`/config/push`、`/heartbeat`、`/sync`、`/snapshot`、`/claim`、`/status`、`/instance-groups`                                                     |
+| 认证     | `POST /api/auth/login`、`POST /api/auth/refresh`、`POST /api/auth/change-password`                                                                                                |
+| 工程     | `GET /api/projects`、`GET/PUT/DELETE /api/projects/{id}`（JWT + 角色权限）                                                                                                        |
 
 管理 UI 页面：运行总览、协议插件、点位配置、实时监控、报警监控、报警规则、冗余配置、冗余监控；开发模式在 :5174 启动并把 `/api` 代理到 :8081。报警规则编辑只存在于管理端（HMI 编辑器仅在仿真模式提供简化本地版本）。
 
@@ -350,17 +350,17 @@ SQLite（`hmi_io.db`），主要表：
 
 ## 5. 关键设计决策
 
-| 决策 | 内容 | 依据 |
-| --- | --- | --- |
-| 报警/SOE 后端权威 | 只有 Active 节点计算与持久化，前端只展示/确认；仿真模式本地降级并标注"模拟" | ADR-0001 |
-| 规则唯一写入口 | 报警规则编辑收敛到管理 UI；编辑器连接后端时不展示规则界面 | ADR-0002 |
-| 工程本地优先 + 后端同步 | IndexedDB 自动保存保证离线编辑；`.hmi.zip` 整包 + 版本乐观锁用于跨设备同步 | ADR-0003 |
-| 工程 API 用 JWT | 独立 SPA 跨源访问，Bearer 干净；用户与角色由后端统一管理 | ADR-0004 |
-| 图元库工程级 + 副本语义 | 放置即深拷贝，之后与库项无关；覆盖更新/重新同步为显式操作 | ADR-0005 |
-| 统一检查器 | 右栏 = 图元树 + 属性/绑定/动画；组内子图元仅树选编辑，画布保持组级原子变换 | ADR-0006 |
-| 图元编辑事务 | `SceneEditor` 统一图元编辑的「变更→记录命令→重建绑定索引→重绘」收尾，撤销/重做与正向编辑共用语义；每页独立撤销历史 | — |
-| WASM 插件契约 | `hmi-plugin.wit` 单一来源，宿主/guest 共享生成代码 | — |
-| 双机热备 | 静态角色 + 心跳 + 数据健康 + 回切前数据就绪探测，避免脑裂与抖动 | — |
+| 决策                    | 内容                                                                                                               | 依据     |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------ | -------- |
+| 报警/SOE 后端权威       | 只有 Active 节点计算与持久化，前端只展示/确认；仿真模式本地降级并标注"模拟"                                        | ADR-0001 |
+| 规则唯一写入口          | 报警规则编辑收敛到管理 UI；编辑器连接后端时不展示规则界面                                                          | ADR-0002 |
+| 工程本地优先 + 后端同步 | IndexedDB 自动保存保证离线编辑；`.hmi.zip` 整包 + 版本乐观锁用于跨设备同步                                         | ADR-0003 |
+| 工程 API 用 JWT         | 独立 SPA 跨源访问，Bearer 干净；用户与角色由后端统一管理                                                           | ADR-0004 |
+| 图元库工程级 + 副本语义 | 放置即深拷贝，之后与库项无关；覆盖更新/重新同步为显式操作                                                          | ADR-0005 |
+| 统一检查器              | 右栏 = 图元树 + 属性/绑定/动画；组内子图元仅树选编辑，画布保持组级原子变换                                         | ADR-0006 |
+| 图元编辑事务            | `SceneEditor` 统一图元编辑的「变更→记录命令→重建绑定索引→重绘」收尾，撤销/重做与正向编辑共用语义；每页独立撤销历史 | —        |
+| WASM 插件契约           | `hmi-plugin.wit` 单一来源，宿主/guest 共享生成代码                                                                 | —        |
+| 双机热备                | 静态角色 + 心跳 + 数据健康 + 回切前数据就绪探测，避免脑裂与抖动                                                    | —        |
 
 ## 6. 构建、运行与测试
 

@@ -1,4 +1,4 @@
-﻿//! Point CRUD (join with plugin rows for display metadata).
+//! Point CRUD (join with plugin rows for display metadata).
 
 use super::{db_err, PluginWithPoints, PointRow, Repo};
 use rusqlite::params;

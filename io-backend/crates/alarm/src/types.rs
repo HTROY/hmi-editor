@@ -1,8 +1,6 @@
 //! Shared domain types for alarm rules, occurrences, stream events and SOE.
 
-use hmi_io_db::repo::{
-    AlarmOccurrenceRow, AlarmRuleRow, AlarmStreamEventRow, SoeRow,
-};
+use hmi_io_db::repo::{AlarmOccurrenceRow, AlarmRuleRow, AlarmStreamEventRow, SoeRow};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // 变量 (点) 定义 — 对应轨道交通 ISCS 中的 AI/DI/AO/DO
 // ============================================================
 
@@ -30,5 +30,5 @@ export interface VariableValue {
 /** 变量变化事件回调 */
 export type VariableChangeCallback = (
   variableId: string,
-  newValue: VariableValue,
+  newValue: VariableValue
 ) => void;

@@ -137,8 +137,7 @@ export const shapeCapabilities: Record<ShapeType, ShapeCapability> = {
 export function capabilityOf(
   shapeOrType: ShapeBase | ShapeType
 ): ShapeCapability {
-  const type =
-    typeof shapeOrType === "string" ? shapeOrType : shapeOrType.type;
+  const type = typeof shapeOrType === "string" ? shapeOrType : shapeOrType.type;
   const cap = shapeCapabilities[type];
   if (!cap) {
     throw new Error("图元类型缺少能力条目: " + String(type));

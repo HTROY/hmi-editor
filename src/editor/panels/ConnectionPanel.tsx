@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import type { ActiveSource } from "../../core/io";
 import type { VariableDef } from "../../core/variables/types";

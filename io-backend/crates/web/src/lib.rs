@@ -1,4 +1,4 @@
-﻿pub mod api;
+pub mod api;
 pub mod auth;
 pub mod projects;
 pub mod server;

@@ -1,4 +1,4 @@
-﻿//! User account CRUD.
+//! User account CRUD.
 
 use super::{db_err, Repo, UserRow};
 use rusqlite::params;

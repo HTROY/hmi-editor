@@ -1,4 +1,4 @@
-﻿export { MetroBreaker } from "./MetroBreaker";
+export { MetroBreaker } from "./MetroBreaker";
 export type { MetroBreakerProps } from "./MetroBreaker";
 export { MetroBusBar } from "./MetroBusBar";
 export type { MetroBusBarProps } from "./MetroBusBar";

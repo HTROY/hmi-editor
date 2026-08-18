@@ -1,4 +1,4 @@
-﻿export { BindingEngine } from "./BindingEngine";
+export { BindingEngine } from "./BindingEngine";
 export { AnimationEngine } from "./AnimationEngine";
 export {
   ANIMATION_TYPES,

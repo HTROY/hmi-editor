@@ -16,19 +16,19 @@ whose values are either values or callbacks that receive the live ShapeBase inst
 instance-derived geometry) or pure ShapeProps transforms (for the flat-JSON sites like
 library.ts / SvgImporter / store.addShape that never materialize an instance).
 
-  // src/core/shapes/behaviour.ts  (the deepened module: interface + registry + helper fns)
-  import type { ShapeType, ShapeProps, Point, BoundingBox, ResizeOptions } from "../types";
+// src/core/shapes/behaviour.ts (the deepened module: interface + registry + helper fns)
+import type { ShapeType, ShapeProps, Point, BoundingBox, ResizeOptions } from "../types";
 
-  /** A handle-indexed resize gesture in world coordinates (options pre-normalized). */
-  export interface ResizeGesture {
-    handle: "nw"|"n"|"ne"|"e"|"se"|"s"|"sw"|"w";
-    pointer: Point;                 // world coords; module applies snap/min/clamp internally
-    options: ResizeOptions;         // proportional, snap, gridSize, minSize (already normalized)
-  }
+/** A handle-indexed resize gesture in world coordinates (options pre-normalized). */
+export interface ResizeGesture {
+handle: "nw"|"n"|"ne"|"e"|"se"|"s"|"sw"|"w";
+pointer: Point; // world coords; module applies snap/min/clamp internally
+options: ResizeOptions; // proportional, snap, gridSize, minSize (already normalized)
+}
 
-  /** One descriptor = ONE place per shape type. Every method optional; defaults fall back. */
-  export interface ShapeBehaviour {
-    type: ShapeType;                                          // registry key
+/** One descriptor = ONE place per shape type. Every method optional; defaults fall back. */
+export interface ShapeBehaviour {
+type: ShapeType; // registry key
 
     // ---- instance-level behaviour (receive the created ShapeBase) ----
     resize?(shape: ShapeBase, g: ResizeGesture): BoundingBox | null;   // null => run default box path
@@ -45,19 +45,20 @@ library.ts / SvgImporter / store.addShape that never materialize an instance).
     offset?(props: ShapeProps, dx: number, dy: number): ShapeProps;    // pure, never mutates arg
     boundsFromProps?(props: ShapeProps): BoundingBox | null;           // pure own-bounds
     editorDescriptor?(): EditorDescriptor | null; // optional inspector SEM section fields
-  }
 
-  // ---- registry + zero-effort helpers callers use instead of dispatch ----
-  export function registerBehaviour(b: ShapeBehaviour): void;
-  export function behaviourFor(shape: ShapeBase): ResolvedBehaviour;        // instance callers
-  export function behaviourForType(type: string): ResolvedBehaviour;        // flat-JSON callers
+}
 
+// ---- registry + zero-effort helpers callers use instead of dispatch ----
+export function registerBehaviour(b: ShapeBehaviour): void;
+export function behaviourFor(shape: ShapeBase): ResolvedBehaviour; // instance callers
+export function behaviourForType(type: string): ResolvedBehaviour; // flat-JSON callers
 
 ResolvedBehaviour is a non-optional, fully-defaulted view: every method has a builtin fallback that
 mirrors today's applyBoxResize / base boundingBox / base defaults, so callers only call
 behaviourFor(shape).resize(...) and never branch on type.
 
 Invariants / ordering / error modes:
+
 - Registration is module-load-time, idempotent per type (a later duplicate replaces - enables
   plugin/test overrides). A descriptor without a type key throws at register.
 - behaviourFor never throws: an unknown instance type falls back to a frozen shared default. So a
@@ -76,68 +77,67 @@ Invariants / ordering / error modes:
   props, so user props always win (constructors already merge ??-defaults; semantics preserved).
 - The descriptor is documented (in the friction doc rewrite) as THE single extension point.
 
-
 ## 2. Usage - three real call-site conversions
 
 resize.ts - delete the three private functions and the six inline branches:
-    // BEFORE (applyResize :488-504 plus applyBoxResize :314-376, getRotatedAABB :85-123,
-    //          METRO_TYPES :55)
-    export function applyResize(shape, handle, pointer, options = {}) {
-      const o = normalizeOptions(options);
-      if (shape.type === "line")  { applyLineResize(shape as LineShape, handle, pointer, o); return; }
-      if (shape.type === "group") { applyGroupResize(shape as GroupShape, handle, pointer, o); return; }
-      applyBoxResize(shape, handle, pointer, o);
-    }
-    // AFTER
-    export function applyResize(shape, handle, pointer, options = {}) {
-      const g = { handle, pointer, options: normalizeOptions(options) };
-      return behaviourFor(shape).resize(shape, g)          // one seam
-          ?? defaultBoxResize(shape, g);                   // shared fallback
-    }
-    // getRotatedAABB:  rotation===0 || aabbKind()==="endpoints" -> local box;
-    //   else pivot = aabbKind()==="origin" ? {x,y} : center.
-    //   The METRO_TYPES set and the text/path/polyline resize branches move into descriptors.
+// BEFORE (applyResize :488-504 plus applyBoxResize :314-376, getRotatedAABB :85-123,
+// METRO_TYPES :55)
+export function applyResize(shape, handle, pointer, options = {}) {
+const o = normalizeOptions(options);
+if (shape.type === "line") { applyLineResize(shape as LineShape, handle, pointer, o); return; }
+if (shape.type === "group") { applyGroupResize(shape as GroupShape, handle, pointer, o); return; }
+applyBoxResize(shape, handle, pointer, o);
+}
+// AFTER
+export function applyResize(shape, handle, pointer, options = {}) {
+const g = { handle, pointer, options: normalizeOptions(options) };
+return behaviourFor(shape).resize(shape, g) // one seam
+?? defaultBoxResize(shape, g); // shared fallback
+}
+// getRotatedAABB: rotation===0 || aabbKind()==="endpoints" -> local box;
+// else pivot = aabbKind()==="origin" ? {x,y} : center.
+// The METRO_TYPES set and the text/path/polyline resize branches move into descriptors.
 
 PropertyPanel.tsx - the 11x instanceof isX flags (:298-308) and the per-type JSX blocks
 (:455-750) become a data-driven section:
-    // BEFORE
-    const isRect = shape instanceof RectShape; const isText = shape instanceof TextShape; // ... 11 flags
-    {isRect && <div className="prop-row">... cornerRadius ...</div>}
-    {isBreaker && (<>... 状态 / 标签 ...</>)}
-    // AFTER
-    const desc = behaviourFor(shape).editorDescriptor();       // [{prop:"cornerRadius",...}, ...]
-    {Array.isArray(desc?.fields) && desc.fields.map(f => <EditorField key={f.prop} field={f} ... />)}
-    // NUMERIC_PROPS / BINDABLE_PROPS move into per-type descriptor sets; the multi-select branch
-    // keeps a shared constant set built by unioning all descriptors at module load.
+// BEFORE
+const isRect = shape instanceof RectShape; const isText = shape instanceof TextShape; // ... 11 flags
+{isRect && <div className="prop-row">... cornerRadius ...</div>}
+{isBreaker && (<>... 状态 / 标签 ...</>)}
+// AFTER
+const desc = behaviourFor(shape).editorDescriptor(); // [{prop:"cornerRadius",...}, ...]
+{Array.isArray(desc?.fields) && desc.fields.map(f => <EditorField key={f.prop} field={f} ... />)}
+// NUMERIC_PROPS / BINDABLE_PROPS move into per-type descriptor sets; the multi-select branch
+// keeps a shared constant set built by unioning all descriptors at module load.
 
 store.addShape (:526-583) - the 40-line flat ternary bag collapses to two lines:
-    // BEFORE
-    addShape: (type, x, y) => sceneEditor.addShape({
-      type, x: x ?? 200, y: y ?? 200,
-      width: type === "circle" ? 80 : 120, height: type === "circle" ? 80 : 80,
-      fill: type === "text" ? "#000000" : "#4A90D9", stroke: "#333333", strokeWidth: 2,
-      text: type === "text" ? "双击编辑" : undefined, fontSize: type === "text" ? 24 : undefined,
-      d: type === "path" ? "M15 10 ..." : undefined,
-      children: type === "group" ? [...] : undefined, src: type === "image" ? "" : undefined,
-      breakerStatus: "open", signalColor: type === "metro-signal" ? "gray" : undefined,
-      running: false, speedPercent: 0, value: 0, min: 0, max: 100, unit: "A",
-      primaryVoltage: "35kV", secondaryVoltage: "400V", voltageLevel: "400V",
-      energized: true, label: "", labelPosition: "bottom",
-    })
-    // AFTER
-    addShape: (type, x, y) => sceneEditor.addShape({
-      type, x: x ?? 200, y: y ?? 200,
-      ...behaviourForType(type).defaults(),     // every type-specific seed lives beside its class
-      label: "", labelPosition: "bottom",       // shared metro scaffold (optional common default)
-    })
-    The metro-only fields (breakerStatus, speedPercent, value, ...) stop leaking onto rect/circle;
-    their redundancy dies with the constructors that already own defaults. For every produced shape
-    the merge (user prop wins) is byte-identical to the old per-type ternary (constraint 4).
-
+// BEFORE
+addShape: (type, x, y) => sceneEditor.addShape({
+type, x: x ?? 200, y: y ?? 200,
+width: type === "circle" ? 80 : 120, height: type === "circle" ? 80 : 80,
+fill: type === "text" ? "#000000" : "#4A90D9", stroke: "#333333", strokeWidth: 2,
+text: type === "text" ? "双击编辑" : undefined, fontSize: type === "text" ? 24 : undefined,
+d: type === "path" ? "M15 10 ..." : undefined,
+children: type === "group" ? [...] : undefined, src: type === "image" ? "" : undefined,
+breakerStatus: "open", signalColor: type === "metro-signal" ? "gray" : undefined,
+running: false, speedPercent: 0, value: 0, min: 0, max: 100, unit: "A",
+primaryVoltage: "35kV", secondaryVoltage: "400V", voltageLevel: "400V",
+energized: true, label: "", labelPosition: "bottom",
+})
+// AFTER
+addShape: (type, x, y) => sceneEditor.addShape({
+type, x: x ?? 200, y: y ?? 200,
+...behaviourForType(type).defaults(), // every type-specific seed lives beside its class
+label: "", labelPosition: "bottom", // shared metro scaffold (optional common default)
+})
+The metro-only fields (breakerStatus, speedPercent, value, ...) stop leaking onto rect/circle;
+their redundancy dies with the constructors that already own defaults. For every produced shape
+the merge (user prop wins) is byte-identical to the old per-type ternary (constraint 4).
 
 ## 3. What the implementation hides
 
 Behind the seam (a deepened module over descriptor fan-out + shared fallbacks):
+
 - per-type resize-handle reaction: line endpoint projection, group origin-scaling of children, box
   uniform / rotated-solve for the rest, text font linkage, path transformPathData, polyline/polygon
   uniform point-rescale, metro always-uniform. The whole applyLineResize / applyGroupResize /
@@ -152,7 +152,6 @@ Behind the seam (a deepened module over descriptor fan-out + shared fallbacks):
 - inspector editor descriptors: per-type SEM property sections (optional).
 - metro fan animation advance: the instanceof MetroFan in AnimationEngine becomes
   behaviourFor(shape).advanceAnimation?.(shape, deltaMs).
-
 
 ## 4. Dependency strategy (in-process)
 
@@ -171,7 +170,6 @@ surface (constraint 3).
   - invariance tests: a corpus of types x the 8 resize handles must reproduce pre-refactor golden
     AABB snapshots (fixtures captured from current behaviour before the refactor).
 
-
 ## 5. Trade-offs
 
 - Leverage high: one descriptor per type repays across all 6+ dispatch sites plus the store branch.
@@ -189,7 +187,6 @@ surface (constraint 3).
   fully absorb nested scaling; acceptable since it is already local.
 - No byte-change risk: descriptors only relocate existing semantics; the refactor is add-registry
   then enumerate-and-delete per site, so no slice can drift from current output.
-
 
 ## 6. Migration sketch (slice order)
 

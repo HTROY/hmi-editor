@@ -73,7 +73,7 @@ export class VariableManager {
   setValue(
     id: string,
     value: number | boolean,
-    quality: VariableValue["quality"] = "good",
+    quality: VariableValue["quality"] = "good"
   ): void {
     const def = this.defs.get(id);
     if (!def) return;
@@ -102,7 +102,7 @@ export class VariableManager {
       id: string;
       value: number | boolean;
       quality?: VariableValue["quality"];
-    }[],
+    }[]
   ): void {
     const notified = new Set<string>();
     for (const u of updates) {
@@ -174,7 +174,7 @@ export class VariableManager {
           const delta = (Math.random() - 0.5) * (def.max - def.min) * 0.1;
           const newVal = Math.max(
             def.min,
-            Math.min(def.max, (current as number) + delta),
+            Math.min(def.max, (current as number) + delta)
           );
           updates.push({ id: def.id, value: Math.round(newVal * 100) / 100 });
         }

@@ -10,6 +10,6 @@ pub mod types;
 
 pub use engine::AlarmEngine;
 pub use types::{
-    AlarmOccurrence, AlarmRule, AlarmStreamEvent, Condition, OccurrenceStatus, OutEvent,
-    Severity, SoeRecord, StreamEventType,
+    AlarmOccurrence, AlarmRule, AlarmStreamEvent, Condition, OccurrenceStatus, OutEvent, Severity,
+    SoeRecord, StreamEventType,
 };

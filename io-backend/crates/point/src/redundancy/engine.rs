@@ -1,7 +1,7 @@
 use crate::manager::PointManager;
 use crate::redundancy::state::{
-    decide_initial_state, is_peer_stale, should_attempt_failback,
-    should_promote_on_heartbeat_loss, should_promote_unhealthy, NodeState, RedundancyState,
+    decide_initial_state, is_peer_stale, should_attempt_failback, should_promote_on_heartbeat_loss,
+    should_promote_unhealthy, NodeState, RedundancyState,
 };
 use crate::types::{PointValue, WsDataMessage};
 use hmi_io_config::{NodeRole, RedundancyConfig};
@@ -214,7 +214,8 @@ impl RedundancyEngine {
                         } else if !hb.data_healthy {
                             // 节点级采集健康触发：对端整机取不到数据
                             self.state.record_unhealthy_report();
-                            let cooldown_ok = now_ms().saturating_sub(self.state.last_promotion_ms())
+                            let cooldown_ok = now_ms()
+                                .saturating_sub(self.state.last_promotion_ms())
                                 >= self.config.plugin_promotion_cooldown_ms;
                             if should_promote_unhealthy(
                                 self.state.unhealthy_reports(),
@@ -281,7 +282,8 @@ impl RedundancyEngine {
     fn promote(&self) {
         self.state.set_state(NodeState::Active);
         self.state.increment_failover_count();
-        self.state.record_event("promoted", "standby promoted to active");
+        self.state
+            .record_event("promoted", "standby promoted to active");
         self.point_manager.lock().unwrap().set_active(true);
         if let Some(tx) = self.role_tx.lock().unwrap().as_ref() {
             let _ = tx.send(RoleCommand::Promote);
@@ -299,10 +301,7 @@ impl RedundancyEngine {
             return false;
         };
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
-        if tx
-            .send(RoleCommand::ProbeData { reply: reply_tx })
-            .is_err()
-        {
+        if tx.send(RoleCommand::ProbeData { reply: reply_tx }).is_err() {
             return false;
         }
         match tokio::time::timeout(Duration::from_secs(10), reply_rx).await {
@@ -348,7 +347,8 @@ impl RedundancyEngine {
         {
             Ok(r) if r.status().is_success() => match r.json::<ClaimResult>().await {
                 Ok(res) if res.accepted => {
-                    self.state.record_event("claim", "failback claim accepted by peer");
+                    self.state
+                        .record_event("claim", "failback claim accepted by peer");
                     self.promote();
                 }
                 _ => {
@@ -477,7 +477,8 @@ impl RedundancyEngine {
             }
             _ => {
                 log::warn!("Redundancy: config push to peer failed");
-                self.state.record_event("error", "config push to peer failed");
+                self.state
+                    .record_event("error", "config push to peer failed");
                 false
             }
         }
@@ -601,7 +602,9 @@ mod tests {
         let (e, pm) = engine(true, NodeRole::Primary);
         e.state().set_state(NodeState::Standby);
         e.state().set_config_version(5);
-        pm.lock().unwrap().insert_test_point("mb1:P1", make_mapping());
+        pm.lock()
+            .unwrap()
+            .insert_test_point("mb1:P1", make_mapping());
         let body = SyncBody {
             node_id: "node-b".into(),
             config_version: 6,
@@ -618,7 +621,9 @@ mod tests {
         let (e, pm) = engine(true, NodeRole::Primary);
         e.state().set_state(NodeState::Standby);
         e.state().set_config_version(9);
-        pm.lock().unwrap().insert_test_point("mb1:P1", make_mapping());
+        pm.lock()
+            .unwrap()
+            .insert_test_point("mb1:P1", make_mapping());
         let body = SyncBody {
             node_id: "node-b".into(),
             config_version: 8,

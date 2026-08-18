@@ -86,11 +86,11 @@ interface LibraryItem {
 
 （dev 服务器实机截图，浅色主题为系统默认）
 
-| 截图 | 内容 |
-| --- | --- |
-| [01-initial-empty.png](./assets/2026-08-09/01-initial-empty.png) | 初始状态：图元库工具条 + 属性面板空状态 |
-| [02-property-geo-sty.png](./assets/2026-08-09/02-property-geo-sty.png) | 单选矩形：GEO/STY/SEM 分区、类型芯片、绑定端子 |
-| [03-property-io-bound.png](./assets/2026-08-09/03-property-io-bound.png) | 快速绑定后：填充端子点亮 + IO 摘要行 |
-| [04-binding-wiring.png](./assets/2026-08-09/04-binding-wiring.png) | 绑定面板接线行（展开） |
-| [05-library-custom.png](./assets/2026-08-09/05-library-custom.png) | 保存选中入库：自定义卡片、缩略图、悬停管理 |
-| [06-dark-theme.png](./assets/2026-08-09/06-dark-theme.png) | 深色主题下的同一面板 |
+| 截图                                                                     | 内容                                           |
+| ------------------------------------------------------------------------ | ---------------------------------------------- |
+| [01-initial-empty.png](./assets/2026-08-09/01-initial-empty.png)         | 初始状态：图元库工具条 + 属性面板空状态        |
+| [02-property-geo-sty.png](./assets/2026-08-09/02-property-geo-sty.png)   | 单选矩形：GEO/STY/SEM 分区、类型芯片、绑定端子 |
+| [03-property-io-bound.png](./assets/2026-08-09/03-property-io-bound.png) | 快速绑定后：填充端子点亮 + IO 摘要行           |
+| [04-binding-wiring.png](./assets/2026-08-09/04-binding-wiring.png)       | 绑定面板接线行（展开）                         |
+| [05-library-custom.png](./assets/2026-08-09/05-library-custom.png)       | 保存选中入库：自定义卡片、缩略图、悬停管理     |
+| [06-dark-theme.png](./assets/2026-08-09/06-dark-theme.png)               | 深色主题下的同一面板                           |

@@ -104,7 +104,11 @@ export class LibraryController {
   // ---- 库项 ----
 
   /** 新增库项（保存选中图元 / SVG 导入入库） */
-  addItem(shapes: ShapeBase[], name: string, groupId?: string): LibraryItem | null {
+  addItem(
+    shapes: ShapeBase[],
+    name: string,
+    groupId?: string
+  ): LibraryItem | null {
     if (shapes.length === 0) return null;
     const item = createLibraryItem(shapes, name, groupId);
     const items = [...this.pm.getLibrary(), item];
@@ -201,10 +205,7 @@ export class LibraryController {
     const grouping = this.currentGrouping();
     const state = toggleCollapsed(grouping, key);
     if (state.collapsed === grouping.collapsed) return;
-    this.commit(
-      { collapsed: state.collapsed },
-      !isBuiltinSectionKey(key)
-    );
+    this.commit({ collapsed: state.collapsed }, !isBuiltinSectionKey(key));
   }
 
   // ---- 内部 ----

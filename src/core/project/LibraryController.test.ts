@@ -96,7 +96,11 @@ describe("LibraryController 库项", () => {
     h.controller.addGroup("供电");
     const group = h.pm.getLibraryGroups()[0];
     const item = h.controller.addItem([rect("s1")], "断路器", group.id)!;
-    const before = { id: item.id, createdAt: item.createdAt, groupId: group.id };
+    const before = {
+      id: item.id,
+      createdAt: item.createdAt,
+      groupId: group.id,
+    };
     h.controller.overwriteItem(item.id, [
       createShape("rect", { id: "s2", x: 42, y: 0 }),
     ]);
@@ -125,7 +129,9 @@ describe("LibraryController 分组与折叠", () => {
 
   it("renameGroup 重命名并返回布尔；未知 id 失败", () => {
     h.controller.addGroup("供电");
-    expect(h.controller.renameGroup(h.pm.getLibraryGroups()[0].id, "BAS")).toBe(true);
+    expect(h.controller.renameGroup(h.pm.getLibraryGroups()[0].id, "BAS")).toBe(
+      true
+    );
     expect(h.pm.getLibraryGroups()[0].name).toBe("BAS");
     expect(h.controller.renameGroup("missing", "x")).toBe(false);
   });

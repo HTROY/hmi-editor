@@ -115,16 +115,16 @@
 
 新增冗余 API 复用 web 端口 8081，JSON over HTTP：
 
-| 方法 | 路径 | 用途 |
-| --- | --- | --- |
-| GET | `/api/redundancy/heartbeat` | 对端探测：`node_id / role / state / config_version / uptime_ms / data_healthy / plugins_total / plugins_connected` |
-| POST | `/api/redundancy/sync` | Active → Standby 推值：`{node_id, config_version, points}` |
-| GET | `/api/redundancy/snapshot` | 全量点值快照 |
-| POST | `/api/redundancy/config/push` | Active → Standby 推送完整配置快照 |
-| POST | `/api/redundancy/claim` | 接管/回切握手：`{node_id, role}`，返回 `{accepted}` |
-| GET | `/api/redundancy/status` | 节点级状态（本机/对端/心跳/同步/事件/同步点位） |
-| GET | `/api/redundancy/instance-groups` | 实例级组状态（成员、角色、priority、活跃、连接、切换历史） |
-| GET | `/api/redundancy/config`、PUT | 读取/保存冗余配置 |
+| 方法 | 路径                              | 用途                                                                                                               |
+| ---- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| GET  | `/api/redundancy/heartbeat`       | 对端探测：`node_id / role / state / config_version / uptime_ms / data_healthy / plugins_total / plugins_connected` |
+| POST | `/api/redundancy/sync`            | Active → Standby 推值：`{node_id, config_version, points}`                                                         |
+| GET  | `/api/redundancy/snapshot`        | 全量点值快照                                                                                                       |
+| POST | `/api/redundancy/config/push`     | Active → Standby 推送完整配置快照                                                                                  |
+| POST | `/api/redundancy/claim`           | 接管/回切握手：`{node_id, role}`，返回 `{accepted}`                                                                |
+| GET  | `/api/redundancy/status`          | 节点级状态（本机/对端/心跳/同步/事件/同步点位）                                                                    |
+| GET  | `/api/redundancy/instance-groups` | 实例级组状态（成员、角色、priority、活跃、连接、切换历史）                                                         |
+| GET  | `/api/redundancy/config`、PUT     | 读取/保存冗余配置                                                                                                  |
 
 值同步与配置同步：
 
@@ -136,23 +136,23 @@
 
 - `config.yaml` 顶层 `redundancy:` 块（全部字段 `#[serde(default)]`）：
 
-| 字段 | 默认值 | 说明 |
-| --- | --- | --- |
-| `enabled` | false | 节点级双机开关 |
-| `node_id` | "" | 节点 ID |
-| `role` | primary | 节点静态角色 |
-| `peer_url` | "" | 对端 web 地址 |
-| `peer_ws_port` | 8080 | 对端 WS 端口（双通道 TCP 探测用） |
-| `heartbeat_interval_ms` | 1000 | 心跳间隔 |
-| `failover_threshold` | 3 | 心跳丢失升主阈值 |
-| `failback_delay_ms` | 30000 | 回切稳定期 |
-| `full_snapshot_interval_ms` | 5000 | 全量快照间隔 |
-| `plugin_unhealthy_threshold` | 3 | 采集不健康升主阈值（连续上报次数） |
-| `plugin_promotion_cooldown_ms` | 60000 | 健康触发升主冷却 |
-| `instance_failover_threshold` | 3 | 实例级切换阈值（连续失败） |
-| `instance_failback_enabled` | true | 实例级自动回切 |
-| `instance_failback_delay_ms` | 30000 | 实例级回切探测间隔 |
-| `instance_switch_cooldown_ms` | 60000 | 实例级切换冷却 |
+| 字段                           | 默认值  | 说明                               |
+| ------------------------------ | ------- | ---------------------------------- |
+| `enabled`                      | false   | 节点级双机开关                     |
+| `node_id`                      | ""      | 节点 ID                            |
+| `role`                         | primary | 节点静态角色                       |
+| `peer_url`                     | ""      | 对端 web 地址                      |
+| `peer_ws_port`                 | 8080    | 对端 WS 端口（双通道 TCP 探测用）  |
+| `heartbeat_interval_ms`        | 1000    | 心跳间隔                           |
+| `failover_threshold`           | 3       | 心跳丢失升主阈值                   |
+| `failback_delay_ms`            | 30000   | 回切稳定期                         |
+| `full_snapshot_interval_ms`    | 5000    | 全量快照间隔                       |
+| `plugin_unhealthy_threshold`   | 3       | 采集不健康升主阈值（连续上报次数） |
+| `plugin_promotion_cooldown_ms` | 60000   | 健康触发升主冷却                   |
+| `instance_failover_threshold`  | 3       | 实例级切换阈值（连续失败）         |
+| `instance_failback_enabled`    | true    | 实例级自动回切                     |
+| `instance_failback_delay_ms`   | 30000   | 实例级回切探测间隔                 |
+| `instance_switch_cooldown_ms`  | 60000   | 实例级切换冷却                     |
 
 - 插件实例增加 `redundancy_group`、`redundancy_role`、`priority`；DB `plugins` 表迁移新增三列（`redundancy_group TEXT NOT NULL DEFAULT ''`、`redundancy_role TEXT NOT NULL DEFAULT ''`、`priority INTEGER NOT NULL DEFAULT 0`）。
 - 运行时配置存 DB `server_config`（`redundancy_config` JSON + `config_version`），`AppConfig::from_repo_sync` 读回。
